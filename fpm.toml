@@ -1,0 +1,18 @@
+name = "vdist-solver-fortran"
+version = "0.1.0"
+license = "license"
+author = "Nkzono99"
+maintainer = "210x218x@stu.kobe-u.ac.jp"
+copyright = "Copyright 2024, Nkzono99"
+[build]
+auto-executables = true
+auto-tests = true
+auto-examples = true
+module-naming = false
+[install]
+library = false
+[fortran]
+implicit-typing = false
+implicit-external = false
+source-form = "free"
+
