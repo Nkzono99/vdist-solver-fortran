@@ -15,6 +15,7 @@ module-naming = false
 library = true
 
 [dependencies]
+futils = { git = "https://github.com/Nkzono99/futils" }
 finbound = { git = "https://github.com/Nkzono99/finbound" }
 
 [fortran]
