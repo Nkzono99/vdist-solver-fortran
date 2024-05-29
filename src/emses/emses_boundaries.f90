@@ -162,7 +162,7 @@ contains
                 integer :: iboundary
 
                 do iboundary = 1, boundaries%nboundaries
-                    boundaries%boundaries(iboundary)%material%tag = tag
+                    boundaries%boundaries(iboundary)%ref%material%tag = tag
                 end do
             end block
         end if
