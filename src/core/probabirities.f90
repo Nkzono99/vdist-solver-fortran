@@ -32,7 +32,7 @@ module m_Probabirities
     end type
 
     type, extends(t_Probabirity) :: tp_Probabirity
-        class(t_Probabirity), allocatable :: ref
+        class(t_Probabirity), pointer :: ref
     contains
         procedure :: at => p_Probabirity_at
     end type
@@ -74,7 +74,7 @@ contains
         double precision, intent(in) :: sigma
         double precision :: ret
 
-        ret = 1/sqrt(2*pi*sigma*sigma)*exp((x - mu)*(x - mu)/2*sigma*sigma)
+        ret = 1/sqrt(2*pi*sigma*sigma)*exp(-(x - mu)*(x - mu)/(2*sigma*sigma))
     end function
 
     function maxwellianProbabirity_at(self, position, velocity) result(ret)
