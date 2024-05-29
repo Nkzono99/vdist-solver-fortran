@@ -13,8 +13,7 @@ module m_simulator
         integer :: nz
         double precision :: q_m
         integer :: boundary_conditions(3)
-        class(t_VectorField), pointer :: ef
-        class(t_VectorField), pointer :: bf
+        class(t_VectorField), pointer :: eb
         type(t_BoundaryList) :: boundaries
         type(tp_Probabirity), allocatable :: probabirity_functions(:)
 
@@ -29,7 +28,7 @@ contains
     function new_ESSimulator(nx, ny, nz, &
                              q_m, &
                              boundary_conditions, &
-                             ef, bf, &
+                             eb, &
                              boundaries, &
                              probabirity_functions) result(obj)
         integer, intent(in) :: nx
@@ -37,22 +36,30 @@ contains
         integer, intent(in) :: nz
         double precision, intent(in) :: q_m
         integer, intent(in) :: boundary_conditions(3)
-        class(t_VectorField), pointer, intent(in) :: ef
-        class(t_VectorField), pointer, intent(in) :: bf
+        class(t_VectorField), pointer, intent(in) :: eb
         type(t_BoundaryList), intent(in) :: boundaries
         type(tp_Probabirity), intent(in) :: probabirity_functions(:)
 
         type(t_ESSimulator) :: obj
+
+        integer :: ib
 
         obj%nx = nx
         obj%ny = ny
         obj%nz = nz
         obj%q_m = q_m
         obj%boundary_conditions(:) = boundary_conditions(:)
-        obj%ef => ef
-        obj%bf => bf
+        obj%eb => eb
         obj%boundaries = boundaries
-        obj%probabirity_functions(:) = probabirity_functions(:)
+
+        allocate (obj%probabirity_functions(size(probabirity_functions)))
+
+        block
+            integer :: i
+            do i = 1, size(probabirity_functions)
+                obj%probabirity_functions(i)%ref => probabirity_functions(i)%ref
+            end do
+        end block
     end function
 
     function esSimulator_calculate_probabirity(self, particle, dt, max_step) result(ret)
@@ -82,9 +89,9 @@ contains
 
                 ! if detected => return prob
                 if (record%is_collided) then
-                    r = (record%t - particle%t)/dt
-                    pcl_new%position = particle%position*(1d0 - r) + pcl_new%position*r
-                    pcl_new%velocity = particle%velocity*(1d0 - r) + pcl_new%velocity*r
+                    r = record%t
+                    pcl_new%position = pcl%position*(1d0 - r) + pcl_new%position*r
+                    pcl_new%velocity = pcl%velocity*(1d0 - r) + pcl_new%velocity*r
                     pcl_new%t = record%t
 
                     ret%is_valid = .true.
@@ -138,6 +145,7 @@ contains
 
         block
             double precision :: dt2
+            double precision :: eb(6)
             double precision :: ef(3)
             double precision :: bf(3)
             double precision :: s(3)
@@ -145,10 +153,11 @@ contains
             double precision :: upm(3)
             double precision :: upa(3)
             double precision :: upp(3)
-            dt2 = 0.5d0*dt
+            dt2 = -0.5d0*dt
 
-            ef = self%ef%at(particle%position)
-            bf = self%bf%at(particle%position)
+            eb = self%eb%at(particle%position)
+            ef(:) = eb(1:3)
+            bf(:) = eb(4:6)
 
             t = bf*self%q_m*dt2
             s = 2*t/(1 + t*t)
