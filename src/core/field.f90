@@ -33,14 +33,14 @@ module m_field
         integer, intent(in) :: nx
         integer, intent(in) :: ny
         integer, intent(in) :: nz
-        double precision, intent(in) :: values(n_elements, nx+1, ny+1, nz+1)
+        double precision, intent(in) :: values(n_elements, 0:nx, 0:ny, 0:nz)
         type(t_VectorFieldGrid) :: obj
 
         obj%n_elements = n_elements
-        obj%nx = obj%nx
-        obj%ny = obj%ny
-        obj%nz = obj%nz
-        allocate(obj%values(n_elements, nx+1, ny+1, nz+1))
+        obj%nx = nx
+        obj%ny = ny
+        obj%nz = nz
+        allocate(obj%values(n_elements, 0:nx, 0:ny, 0:nz))
         obj%values(:, :, :, :) = values(:, :, :, :)
     end function
 
