@@ -26,7 +26,7 @@ module m_field
         procedure :: at => vectorFieldGrid_at
     end type
 
-    contains
+contains
 
     function new_VectorFieldGrid(n_elements, nx, ny, nz, values) result(obj)
         integer, intent(in) :: n_elements
@@ -48,6 +48,33 @@ module m_field
         class(t_VectorFieldGrid), intent(in) :: self
         double precision, intent(in) :: position(3)
         double precision :: ret(self%n_elements)
+
+        double precision :: p(3)
+        integer :: ip(3), ip1(3)
+        double precision :: rp(3), rp1(3)
+        double precision :: u00(6), u01(6), u10(6), u11(6), u0(6), u1(6)
+
+        ! Linear interpolation
+        p(:) = position(:)
+        ip(:) = int(p(:))
+        ip1(:) = ip(:) + 1
+
+        rp(:) = p(:) - ip(:)
+        rp1(:) = 1 - rp(:)
+
+        u00 = rp(1)*self%values(:, ip1(1), ip(2), ip(3)) &
+              + rp1(1)*self%values(:, ip(1), ip(2), ip(3))
+        u01 = rp(1)*self%values(:, ip1(1), ip1(2), ip(3)) &
+              + rp1(1)*self%values(:, ip(1), ip1(2), ip(3))
+        u10 = rp(1)*self%values(:, ip1(1), ip(2), ip1(3)) &
+              + rp1(1)*self%values(:, ip(1), ip(2), ip1(3))
+        u11 = rp(1)*self%values(:, ip1(1), ip1(2), ip1(3)) &
+              + rp1(1)*self%values(:, ip(1), ip1(2), ip1(3))
+
+        u0 = rp(2)*u01 + rp1(2)*u00
+        u1 = rp(2)*u11 + rp1(2)*u10
+
+        ret(:) = rp(3)*u1 + rp1(3)*u0
     end function
 
-    end module
+end module
