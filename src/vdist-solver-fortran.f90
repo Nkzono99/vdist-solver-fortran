@@ -1,10 +1,7 @@
 module vdist_solver_fortran
+  use m_emses_solver
   implicit none
-  private
 
-  public :: say_hello
 contains
-  subroutine say_hello
-    print *, "Hello, vdist-solver-fortran!"
-  end subroutine say_hello
+
 end module vdist_solver_fortran
