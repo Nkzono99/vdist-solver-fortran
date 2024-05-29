@@ -14,6 +14,7 @@ module m_namelist
     !
     !-------------------- common declaration of namelist
     use allcom
+    implicit none
 
     namelist /esorem/ emflag
 
@@ -25,9 +26,9 @@ module m_namelist
 
     namelist /intp/ qm, path, peth, vdri, vdthz, vdthxy
 
-    namelist /ptcond/ zssurf, &
+    namelist /ptcond/ boundary_type, boundary_types, &
+        zssurf, &
         xlrechole, ylrechole, zlrechole, xurechole, yurechole, zurechole, &
-        boundary_type, boundary_types, &
         cylinder_origin, cylinder_radius, cylinder_height, rcurv, &
         rectangle_shape, &
         sphere_origin, sphere_radius, &
@@ -43,54 +44,51 @@ module m_namelist
 contains
 
     subroutine read_namelist(inppath)
-        character(1, c_char), intent(In) :: inppath(:)
+        character(len=*), intent(In) :: inppath
         integer :: iostat
+
+        character(:), allocatable :: s
         integer :: i
 
-        block ! Convert the array of characters to string.
-            character(size(inppath)) :: s
-            do i = 1, size(inppath)
-                s(i:i) = inppath(i)
-            end do
-            open (1, file=s)
-        end block
+        ! Convert the array of characters to string.
+        open (10, file=trim(inppath), status='old', iostat=iostat)
 
-        rewind (1); read (1, nml=esorem, IOSTAT=iostat)
+        rewind (10); read (10, nml=esorem, IOSTAT=iostat)
         if (iostat .eq. -1) then
             print *, "Warning.Input: nml=esorem not found"
         end if
 
-        rewind (1); read (1, nml=plasma, IOSTAT=iostat)
+        rewind (10); read (10, nml=plasma, IOSTAT=iostat)
         if (iostat .eq. -1) then
             print *, "Warning.Input: nml=plasma not found"
         end if
 
-        rewind (1); read (1, nml=tmgrid, IOSTAT=iostat)
+        rewind (10); read (10, nml=tmgrid, IOSTAT=iostat)
         if (iostat .eq. -1) then
             print *, "Warning.Input: nml=tmgrid not found"
         end if
 
-        rewind (1); read (1, nml=system, IOSTAT=iostat)
+        rewind (10); read (10, nml=system, IOSTAT=iostat)
         if (iostat .eq. -1) then
             print *, "Warning.Input: nml=system not found"
         end if
 
-        rewind (1); read (1, nml=intp, IOSTAT=iostat)
+        rewind (10); read (10, nml=intp, IOSTAT=iostat)
         if (iostat .eq. -1) then
             print *, "Warning.Input: nml=intp not found"
         end if
 
-        rewind (1); read (1, nml=ptcond, IOSTAT=iostat)
+        rewind (10); read (10, nml=ptcond, IOSTAT=iostat)
         if (iostat .eq. -1) then
             print *, "Warning.Input: nml=ptcond not found"
         end if
 
-        rewind (1); read (1, nml=emissn, IOSTAT=iostat)
+        rewind (10); read (10, nml=emissn, IOSTAT=iostat)
         if (iostat .eq. -1) then
             print *, "Warning.Input: nml=emissn not found"
         end if
 
-        close (1)
+        close (10)
     end subroutine
 
 end module
