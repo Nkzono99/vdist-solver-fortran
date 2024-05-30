@@ -10,7 +10,7 @@ module m_namelist
 
     namelist /plasma/ wp, wc, phixy, phiz
 
-    namelist /tmgrid/ dt, nx, ny, nz
+    namelist /tmgrid/ nx, ny, nz
 
     namelist /system/ nspec, npbnd
 
