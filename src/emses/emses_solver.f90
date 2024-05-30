@@ -24,7 +24,6 @@ contains
                              lx, ly, lz, &
                              ebvalues, &
                              ispec, &
-                             npcls, &
                              position, &
                              velocity, &
                              dt, &
@@ -43,7 +42,6 @@ contains
         integer(c_int), value, intent(in) :: lz
         real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
         integer(c_int), value, intent(in) :: ispec
-        integer(c_int), value, intent(in) :: npcls
         real(c_double), intent(in) :: position(3)
         real(c_double), intent(in) :: velocity(3)
         real(c_double), value, intent(in) :: dt
@@ -62,8 +60,6 @@ contains
         type(tp_Probabirity), allocatable :: probabirity_functions(:)
         integer :: n_probabirity_functions = 0
         integer :: ipcl
-
-        type(bar_object) :: bar
 
         allocate (probabirity_functions(max_probabirity_types))
 
@@ -102,44 +98,27 @@ contains
                                         probabirity_functions)
         end block
 
-        call bar%initialize(filled_char_string='+', &
-                            prefix_string='progress |', &
-                            suffix_string='| ', &
-                            add_progress_percent=.true.)
-        call bar%start
+        block
+            type(t_Particle) :: particle
+            type(t_BacktraceRecord) :: record
+            integer :: istep
+            type(t_Particle) :: trace
 
-        do ipcl = 1, npcls
-            ! When you print a progress bar to 100%, the opening is printed.
-            ! Therefore, it is modified to print 99% until the last particle is processed.
-            if (ipcl < npcls) then
-                call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
-            else ! if (ipcl == npcls)
-                call bar%update(current=1d0)
-            end if
+            particle = new_Particle(position(:), velocity(:))
+            record = simulator%backtrace(particle, &
+                                            dt, max_step, &
+                                            use_adaptive_dt == 1)
 
-            block
-                type(t_Particle) :: particle
-                type(t_BacktraceRecord) :: record
-                integer :: istep
-                type(t_Particle) :: trace
+            do istep = 1, record%last_step
+                trace = record%traces(istep)
 
-                particle = new_Particle(position(:), velocity(:))
-                record = simulator%backtrace(particle, &
-                                             dt, max_step, &
-                                             use_adaptive_dt == 1)
+                return_ts(istep) = trace%t
+                return_positions(:, istep) = trace%position(:)
+                return_velocities(:, istep) = trace%velocity(:)
+            end do
+            return_last_step = record%last_step
+        end block
 
-                do istep = 1, record%last_step
-                    trace = record%traces(istep)
-
-                    return_ts(istep) = trace%t
-                    return_positions(:, istep) = trace%position(:)
-                    return_velocities(:, istep) = trace%velocity(:)
-                end do
-                return_last_step = record%last_step
-            end block
-        end do
-
-        call bar%destroy
         call boundaries%destroy
     end subroutine
 
@@ -269,7 +248,6 @@ contains
         integer, intent(inout) :: n_probabirity_functions
         type(tp_Probabirity), intent(inout) :: probabirity_functions(:)
 
-        call add_external_boundaries
         call add_external_boundaries
 
     contains
