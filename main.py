@@ -1,5 +1,4 @@
 from argparse import ArgumentParser
-from ctypes import *
 
 import matplotlib.pyplot as plt
 from vdsolver.core import Particle, PhaseGrid
