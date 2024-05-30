@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vdsolverf"
+version = "0.1.0"
+dependencies = [
+  "f90nml",
+  "vdist-solver",
+  "emout",
+  "numpy",
+]
+requires-python = ">=3.7"
+authors = [
+  {name = "Nkzono99", email = "j-nakazono@stu.kobe-u.ac.jp"},
+]
+maintainers = [
+  {name = "Nkzono99", email = "j-nakazono@stu.kobe-u.ac.jp"}
+]
+description = "Wrapper of velocsty distribution solver written in Fortran"
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = []
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+]
+
+[project.urls]
+Repository = "https://github.com/Nkzono99/vdist-solver-fortran.git"
