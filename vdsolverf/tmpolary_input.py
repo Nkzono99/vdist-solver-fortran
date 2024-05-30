@@ -1,7 +1,7 @@
-import emout
-import f90nml
 from pathlib import Path
 
+import emout
+import f90nml
 
 TMP_INP_KEYS = {
     "esorem": ["emflag"],
