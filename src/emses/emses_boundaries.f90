@@ -866,7 +866,6 @@ contains
             double precision :: origin(3)
             double precision :: rnx, rny
             integer :: iboundary, nboundaries_init
-            double precision :: xmin, ymin, xmax, ymax
 
             nboundaries_init = boundaries%nboundaries
             rnx = nx
