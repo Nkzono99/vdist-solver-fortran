@@ -100,7 +100,7 @@ contains
         call bar%start
 
         do ipcl = 1, npcls
-            ! When I print a progress bar to 100%, the opening is printed.
+            ! When you print a progress bar to 100%, the opening is printed.
             ! Therefore, it is modified to print 99% until the last particle is processed.
             if (ipcl < npcls) then
                 call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
