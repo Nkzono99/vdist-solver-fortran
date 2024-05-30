@@ -7,7 +7,7 @@
 Installation scripts are currently only available for linux (using gfortran).
 
 ```
-git clone https://github.com/Nkzono99/
+git clone https://github.com/Nkzono99/vdist-solver-fortran.git
 source source_me.sh
 vdist-solver-fortran.git
 cd vdist-solver-fortran
