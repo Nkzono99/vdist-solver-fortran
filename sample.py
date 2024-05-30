@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 
+import emout
 import matplotlib.pyplot as plt
 from vdsolver.core import Particle, PhaseGrid
 
@@ -17,6 +18,8 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    data = emout.Emout(args.directory)
 
     NVX = 50
     NVZ = 50
@@ -42,7 +45,7 @@ def main():
         ispec=0,
         istep=-1,
         particles=particles,
-        dt_multiplier=1,
+        dt=data.inp.dt,
         max_step=100000,
     )
 

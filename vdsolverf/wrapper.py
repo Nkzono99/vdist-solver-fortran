@@ -20,7 +20,7 @@ def get_probabirities(
     ispec: int,
     istep: int,
     particles: List[Particle],
-    dt_multiplier: float,
+    dt: float,
     max_step: int,
     max_probabirity_types: int = 100,
     os: Literal["linux"] = "linux",
@@ -33,7 +33,7 @@ def get_probabirities(
             ispec=ispec,
             istep=istep,
             particles=particles,
-            dt_multiplier=dt_multiplier,
+            dt=dt,
             max_step=max_step,
             max_probabirity_types=max_probabirity_types,
             library_path=library_path,
@@ -45,7 +45,7 @@ def get_probabirities_linux(
     ispec: int,
     istep: int,
     particles: List[Particle],
-    dt_multiplier: float,
+    dt: float,
     max_step: int,
     max_probabirity_types: int = 100,
     library_path: PathLike = VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX,
@@ -63,7 +63,7 @@ def get_probabirities_linux(
         c_int,  # npcls
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # positions
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # velocities
-        c_double,  # dt_multiplier
+        c_double,  # dt
         c_int,  # max_step
         c_int,  # max_probabirity_types
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_probabirities
@@ -94,7 +94,7 @@ def get_probabirities_linux(
         _nz = c_int(data.inp.nz)
         _ispec = c_int(ispec + 1)
         _nparticles = c_int(len(particles))
-        _dt_multiplier = c_double(dt_multiplier)
+        _dt = c_double(dt)
         _max_step = c_int(max_step)
         _max_probabirity_types = c_int(max_probabirity_types)
 
@@ -109,7 +109,7 @@ def get_probabirities_linux(
             _nparticles,
             positions,
             velocities,
-            _dt_multiplier,
+            _dt,
             _max_step,
             _max_probabirity_types,
             return_probabirities,
