@@ -3,7 +3,6 @@ module m_simulator
     use finbound, only: t_BoundaryList, t_CollisionRecord
 
     use m_particle
-    use m_probabirity_record
     use m_Probabirities
     use m_field
 
@@ -12,6 +11,21 @@ module m_simulator
     private
     public t_ESSimulator
     public new_ESSimulator
+    public t_BacktraceRecord
+    public t_ProbabirityRecord
+
+    type t_BacktraceRecord
+        type(t_Particle), allocatable :: traces(:)
+        double precision, allocatable :: ts(:)
+        integer :: last_step
+    end type
+
+    type t_ProbabirityRecord
+        logical :: is_valid = .false.
+        double precision :: t
+        double precision :: probabirity
+        type(t_Particle) :: particle
+    end type
 
     type t_ESSimulator
         integer :: nx
@@ -23,6 +37,7 @@ module m_simulator
         type(t_BoundaryList) :: boundaries
         type(tp_Probabirity), allocatable :: probabirity_functions(:)
     contains
+        procedure :: backtrace => esSimulator_backtrace
         procedure :: calculate_probabirity => esSimulator_calculate_probabirity
         procedure :: backward => esSimulator_backward
         procedure :: update => esSimulator_update
@@ -64,6 +79,42 @@ contains
                 obj%probabirity_functions(i)%ref => probabirity_functions(i)%ref
             end do
         end block
+    end function
+
+    function esSimulator_backtrace(self, particle, dt, max_step, use_adaptive_dt) result(ret)
+        class(t_ESSimulator), intent(in) :: self
+        class(t_Particle), intent(in) :: particle
+        double precision, intent(in) :: dt
+        integer, intent(in) :: max_step
+        logical, intent(in) :: use_adaptive_dt
+        type(t_BacktraceRecord) :: ret
+
+        integer :: istep
+        type(t_Particle) :: pcl
+
+        pcl = particle
+        call self%apply_boundary_condition(pcl)
+
+        allocate (ret%traces(max_step))
+        allocate (ret%ts(max_step))
+        ret%traces(1) = pcl
+
+        do istep = 2, max_step
+            block
+                type(t_CollisionRecord) :: record
+                pcl = self%update(pcl, dt, use_adaptive_dt, record)
+
+                ret%traces(istep) = pcl
+                ret%ts(istep) = pcl%t
+
+                if (record%is_collided) then
+                    ret%last_step = istep
+                    return
+                end if
+            end block
+        end do
+
+        ret%last_step = max_step
     end function
 
     function esSimulator_calculate_probabirity(self, particle, dt, max_step, use_adaptive_dt) result(ret)

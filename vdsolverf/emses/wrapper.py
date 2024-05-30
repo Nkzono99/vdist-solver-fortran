@@ -15,6 +15,125 @@ VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX = (
 )
 
 
+def get_backtrace(
+    directory: PathLike,
+    ispec: int,
+    istep: int,
+    particle: Particle,
+    dt: float,
+    max_step: int,
+    use_adaptive_dt: bool,
+    max_probabirity_types: int = 100,
+    os: Literal["linux"] = "linux",
+    library_path: PathLike = None,
+):
+    if os == "linux":
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
+        return get_backtrace_linux(
+            directory=directory,
+            ispec=ispec,
+            istep=istep,
+            particle=particle,
+            dt=dt,
+            max_step=max_step,
+            use_adaptive_dt=use_adaptive_dt,
+            max_probabirity_types=max_probabirity_types,
+            library_path=library_path,
+        )
+
+
+def get_backtrace_linux(
+    directory: PathLike,
+    ispec: int,
+    istep: int,
+    particle: Particle,
+    dt: float,
+    max_step: int,
+    use_adaptive_dt: bool,
+    max_probabirity_types: int = 100,
+    library_path: PathLike = VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    dll = CDLL(library_path)
+
+    dll.get_backtrace.argtypes = [
+        c_char_p,  # inppath
+        c_int,  # length
+        c_int,  # lx
+        c_int,  # ly
+        c_int,  # lz
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=4),  # ebvalues
+        c_int,  # ispec
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # positions
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # velocities
+        c_double,  # dt
+        c_int,  # max_step
+        c_int,  # use_adaptive_dt
+        c_int,  # max_probabirity_types
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_ts
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_positions
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_velocities
+        POINTER(c_int),  # return_last_step
+    ]
+    dll.get_probabirities.restype = None
+
+    data = emout.Emout(directory)
+
+    ebvalues = create_relocated_ebvalues(data, istep)
+
+    return_ts = np.empty(max_step, dtype=np.float64)
+    return_positions = np.empty((max_step, 3), dtype=np.float64)
+    return_velocities = np.empty((max_step, 3), dtype=np.float64)
+
+    position = np.array(particle.pos, dtype=np.float64)
+    velocity = np.array(particle.vel, dtype=np.float64)
+
+    with TempolaryInput(data) as tmpinp:
+        inppath = tmpinp.tmppath
+        inppath_str = str(inppath.resolve())
+
+        _inppath = create_string_buffer(inppath_str.encode())
+        _length = c_int(len(inppath_str))
+        _nx = c_int(data.inp.nx)
+        _ny = c_int(data.inp.ny)
+        _nz = c_int(data.inp.nz)
+        _ispec = c_int(ispec + 1)
+        _dt = c_double(dt)
+        _max_step = c_int(max_step)
+        _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
+        _max_probabirity_types = c_int(max_probabirity_types)
+        _return_last_index = c_int()
+
+        dll.get_backtrace(
+            _inppath,
+            _length,
+            _nx,
+            _ny,
+            _nz,
+            ebvalues,
+            _ispec,
+            position,
+            velocity,
+            _dt,
+            _max_step,
+            _use_adaptive_dt,
+            _max_probabirity_types,
+            return_ts,
+            return_positions,
+            return_velocities,
+            byref(_return_last_index),
+        )
+        return_last_index = _return_last_index.value
+
+    handle = dll._handle
+    cdll.LoadLibrary("libdl.so").dlclose(handle)
+
+    ts = return_ts[:return_last_index].copy()
+    positions = return_positions[:return_last_index].copy()
+    velocities = return_velocities[:return_last_index].copy()
+
+    return ts, positions, velocities
+
+
 def get_probabirities(
     directory: PathLike,
     ispec: int,
@@ -202,7 +321,7 @@ def create_relocated_ebvalues(data: emout.Emout, istep: int) -> np.ndarray:
     ebvalues[:, :, :, ielem] = 0.25 * (
         bxe[:-1, :-1, :] + bxe[1:, :-1, :] + bxe[:-1, 1:, :] + bxe[1:, 1:, :]
     )
-    bxe = None # to deallocate memory
+    bxe = None  # to deallocate memory
 
     # BY
     ielem = 4
