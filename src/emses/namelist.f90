@@ -1,18 +1,7 @@
 !
 module m_namelist
     use, intrinsic :: iso_c_binding
-    !
-    !   ____________________________________________________________
-    !
-    !                    M O D U L E   N A M E L S
-    !   ____________________________________________________________
-    !
-    !   ............................................................
-    !   .                                                          .
-    !   .        module for common declaration of namelist         .
-    !   ............................................................
-    !
-    !-------------------- common declaration of namelist
+
     use allcom
     implicit none
 
