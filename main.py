@@ -10,7 +10,7 @@ from vdsolverf import get_probabirities
 def parse_args():
     parser = ArgumentParser()
 
-    parser.add_argument("directory", default="./")
+    parser.add_argument("--directory", "-d", default="./")
 
     return parser.parse_args()
 
@@ -53,3 +53,7 @@ def main():
     plt.pcolormesh(VX, VZ, probs, shading="auto")
     plt.colorbar()
     plt.gcf().savefig("a.png")
+
+
+if __name__ == "__main__":
+    main()
