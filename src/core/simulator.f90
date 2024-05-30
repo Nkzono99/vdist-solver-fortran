@@ -25,6 +25,7 @@ module m_simulator
     contains
         procedure :: calculate_probabirity => esSimulator_calculate_probabirity
         procedure :: backward => esSimulator_backward
+        procedure :: update => esSimulator_update
         procedure :: apply_boundary_condition => esSimulator_apply_boundary_condition
     end type
 
@@ -81,47 +82,58 @@ contains
 
         do i = 1, max_step
             block
-                type(t_Particle) :: pcl_new
                 type(t_CollisionRecord) :: record
-                double precision :: r
                 type(tp_Probabirity), allocatable :: probabirity_function
+                pcl = self%update(pcl, dt, use_adaptive_dt, record)
 
-                double precision :: tmp_dt
-
-                if (use_adaptive_dt) then
-                    tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
-                else
-                    tmp_dt = dt
-                end if
-
-                pcl_new = self%backward(pcl, tmp_dt)
-
-                ! Detect collision (pcl, pcl_new)
-                record = self%boundaries%check_collision(pcl%position, pcl_new%position)
-
-                ! if detected => return prob
                 if (record%is_collided) then
-                    r = record%t
-                    pcl_new%position = pcl%position*(1d0 - r) + pcl_new%position*r
-                    pcl_new%velocity = pcl%velocity*(1d0 - r) + pcl_new%velocity*r
-                    pcl_new%t = record%t
-
                     ret%is_valid = .true.
-                    ret%particle = pcl_new
+                    ret%particle = pcl
 
                     probabirity_function = self%probabirity_functions(record%material%tag)
-                    ret%probabirity = probabirity_function%at(pcl_new%position, pcl_new%velocity)
+                    ret%probabirity = probabirity_function%at(pcl%position, pcl%velocity)
                     return
                 end if
-
-                pcl = pcl_new
             end block
-
-            ! Apply boundary condition
-            call self%apply_boundary_condition(pcl)
         end do
 
         ret%is_valid = .false.
+    end function
+
+    function esSimulator_update(self, pcl, dt, use_adaptive_dt, record) result(pcl_new)
+        class(t_ESSimulator), intent(in) :: self
+        type(t_Particle), intent(in) :: pcl
+        double precision, intent(in) :: dt
+        logical, intent(in) :: use_adaptive_dt
+        type(t_CollisionRecord), intent(out) :: record
+        type(t_Particle) :: pcl_new
+
+        double precision :: tmp_dt
+
+        if (use_adaptive_dt) then
+            tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
+        else
+            tmp_dt = dt
+        end if
+
+        pcl_new = self%backward(pcl, tmp_dt)
+
+        record = self%boundaries%check_collision(pcl%position, pcl_new%position)
+
+        if (record%is_collided) then
+            block
+                double precision :: r
+
+                r = record%t
+                pcl_new%position = pcl%position*(1d0 - r) + pcl_new%position*r
+                pcl_new%velocity = pcl%velocity*(1d0 - r) + pcl_new%velocity*r
+                pcl_new%t = pcl%t + r
+            end block
+
+            return
+        end if
+
+        call self%apply_boundary_condition(pcl_new)
     end function
 
     subroutine esSimulator_apply_boundary_condition(self, particle)
