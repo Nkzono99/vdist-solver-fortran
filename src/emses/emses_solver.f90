@@ -19,6 +19,130 @@ module m_emses_solver
 
 contains
 
+    subroutine get_backtrace(inppath, &
+                             length, &
+                             lx, ly, lz, &
+                             ebvalues, &
+                             ispec, &
+                             npcls, &
+                             position, &
+                             velocity, &
+                             dt, &
+                             max_step, &
+                             use_adaptive_dt, &
+                             max_probabirity_types, &
+                             return_ts, &
+                             return_positions, &
+                             return_velocities, &
+                             return_last_step &
+                             ) bind(c)
+        character(1, c_char), intent(in) :: inppath(*)
+        integer(c_int), value, intent(in) :: length
+        integer(c_int), value, intent(in) :: lx
+        integer(c_int), value, intent(in) :: ly
+        integer(c_int), value, intent(in) :: lz
+        real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
+        integer(c_int), value, intent(in) :: ispec
+        integer(c_int), value, intent(in) :: npcls
+        real(c_double), intent(in) :: position(3)
+        real(c_double), intent(in) :: velocity(3)
+        real(c_double), value, intent(in) :: dt
+        integer(c_int), value, intent(in) :: max_step
+        integer(c_int), value, intent(in) :: use_adaptive_dt
+        integer(c_int), value, intent(in) :: max_probabirity_types
+        real(c_double), intent(out) :: return_ts(max_step)
+        real(c_double), intent(out) :: return_positions(3, max_step)
+        real(c_double), intent(out) :: return_velocities(3, max_step)
+        integer(c_int), intent(out) :: return_last_step
+
+        type(t_ESSimulator) :: simulator
+        type(t_VectorFieldGrid), target :: eb
+
+        type(t_BoundaryList) :: boundaries
+        type(tp_Probabirity), allocatable :: probabirity_functions(:)
+        integer :: n_probabirity_functions = 0
+        integer :: ipcl
+
+        type(bar_object) :: bar
+
+        allocate (probabirity_functions(max_probabirity_types))
+
+        block
+            character(length) :: s
+            integer :: i
+            do i = 1, length
+                s(i:i) = inppath(i)
+            end do
+            call read_namelist(s)
+        end block
+
+        block
+            integer :: isdoms(2, 3)
+            integer :: boundary_conditions(3)
+            class(t_VectorField), pointer :: peb
+
+            allocate (probabirity_functions(n_probabirity_functions + 1)%ref, source=new_ZeroProbabirity())
+            n_probabirity_functions = n_probabirity_functions + 1
+
+            isdoms = reshape([[0, lx], [0, ly], [0, lz]], [2, 3])
+            boundaries = create_simple_collision_boundaries(isdoms, tag=n_probabirity_functions)
+
+            eb = new_VectorFieldGrid(6, lx, ly, lz, &
+                                     ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1))
+            peb => eb
+
+            call add_probabirity_boundaries(boundaries, ispec, n_probabirity_functions, probabirity_functions)
+
+            boundary_conditions(:) = npbnd(:, ispec)
+            simulator = new_ESSimulator(lx, ly, lz, &
+                                        qm(ispec), &
+                                        boundary_conditions, &
+                                        peb, &
+                                        boundaries, &
+                                        probabirity_functions)
+        end block
+
+        call bar%initialize(filled_char_string='+', &
+                            prefix_string='progress |', &
+                            suffix_string='| ', &
+                            add_progress_percent=.true.)
+        call bar%start
+
+        do ipcl = 1, npcls
+            ! When you print a progress bar to 100%, the opening is printed.
+            ! Therefore, it is modified to print 99% until the last particle is processed.
+            if (ipcl < npcls) then
+                call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
+            else ! if (ipcl == npcls)
+                call bar%update(current=1d0)
+            end if
+
+            block
+                type(t_Particle) :: particle
+                type(t_BacktraceRecord) :: record
+                integer :: istep
+                type(t_Particle) :: trace
+
+                particle = new_Particle(position(:), velocity(:))
+                record = simulator%backtrace(particle, &
+                                             dt, max_step, &
+                                             use_adaptive_dt == 1)
+
+                do istep = 1, record%last_step
+                    trace = record%traces(istep)
+
+                    return_ts(istep) = trace%t
+                    return_positions(:, istep) = trace%position(:)
+                    return_velocities(:, istep) = trace%velocity(:)
+                end do
+                return_last_step = record%last_step
+            end block
+        end do
+
+        call bar%destroy
+        call boundaries%destroy
+    end subroutine
+
     subroutine get_probabirities(inppath, &
                                  length, &
                                  lx, ly, lz, &
@@ -120,7 +244,7 @@ contains
                 type(t_Particle) :: particle
 
                 particle = new_Particle(positions(:, ipcl), velocities(:, ipcl))
-                record = simulator%calculate_probabirity(particle, dt, max_step, use_adaptive_dt==1)
+                record = simulator%calculate_probabirity(particle, dt, max_step, use_adaptive_dt == 1)
 
                 if (record%is_valid) then
                     return_probabirities(ipcl) = record%probabirity
