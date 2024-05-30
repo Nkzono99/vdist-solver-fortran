@@ -12,6 +12,14 @@ module m_simulator
     private
     public t_ESSimulator
     public new_ESSimulator
+    public t_ProbabirityRecord
+
+    type t_ProbabirityRecord
+        logical :: is_valid = .false.
+        double precision :: t
+        double precision :: probabirity
+        type(t_Particle) :: particle
+    end type
 
     type t_ESSimulator
         integer :: nx
