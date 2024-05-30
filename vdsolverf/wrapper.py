@@ -129,7 +129,7 @@ def get_probabirities_linux(
     return return_probabirities, return_particles
 
 
-def create_relocated_ebvalues(data, istep):
+def create_relocated_ebvalues(data: emout.Emout, istep: int) -> np.ndarray:
     ebvalues = np.zeros(
         (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1, 6), dtype=np.float64
     )
@@ -196,7 +196,7 @@ def create_relocated_ebvalues(data, istep):
     ebvalues[:, :, :, ielem] = 0.25 * (
         bxe[:-1, :-1, :] + bxe[1:, :-1, :] + bxe[:-1, 1:, :] + bxe[1:, 1:, :]
     )
-    bxe = None
+    bxe = None # to deallocate memory
 
     # BY
     ielem = 4

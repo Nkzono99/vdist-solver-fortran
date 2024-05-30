@@ -55,11 +55,12 @@ class TempolaryInput(object):
         self.__data = data
         self.__tmppath: Path = data.directory / f"plasma.inp.{hash(str(data.inp))}"
 
-    def __enter__(self):
+    def __enter__(self) -> "TempolaryInput":
         data = self.__data
         from collections import defaultdict
+
         dic = defaultdict(lambda: dict())
-        
+
         for group in TMP_INP_KEYS.keys():
             for key in TMP_INP_KEYS[group]:
                 if key not in data.inp:
