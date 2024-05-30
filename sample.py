@@ -10,6 +10,7 @@ def parse_args():
     parser = ArgumentParser()
 
     parser.add_argument("--directory", "-d", default="./")
+    parser.add_argument("--output", "-o", default="sample.png")
 
     return parser.parse_args()
 
@@ -51,7 +52,7 @@ def main():
     probs = probs.reshape(NVZ, -1)
     plt.pcolormesh(VX, VZ, probs, shading="auto")
     plt.colorbar()
-    plt.gcf().savefig("a.png")
+    plt.gcf().savefig(args.output)
 
 
 if __name__ == "__main__":
