@@ -59,7 +59,6 @@ contains
         type(t_BoundaryList) :: boundaries
         type(tp_Probabirity), allocatable :: probabirity_functions(:)
         integer :: n_probabirity_functions = 0
-        integer :: ipcl
 
         allocate (probabirity_functions(max_probabirity_types))
 
