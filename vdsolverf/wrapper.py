@@ -15,6 +15,33 @@ VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX = (
 )
 
 
+def get_backtrace(
+    directory: PathLike,
+    ispec: int,
+    istep: int,
+    particle: Particle,
+    dt: float,
+    max_step: int,
+    use_adaptive_dt: bool,
+    max_probabirity_types: int = 100,
+    os: Literal["linux"] = "linux",
+    library_path: PathLike = None,
+):
+    if os == "linux":
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
+        return get_backtrace_linux(
+            directory=directory,
+            ispec=ispec,
+            istep=istep,
+            particle=particle,
+            dt=dt,
+            max_step=max_step,
+            use_adaptive_dt=use_adaptive_dt,
+            max_probabirity_types=max_probabirity_types,
+            library_path=library_path,
+        )
+
+
 def get_backtrace_linux(
     directory: PathLike,
     ispec: int,
@@ -25,10 +52,10 @@ def get_backtrace_linux(
     use_adaptive_dt: bool,
     max_probabirity_types: int = 100,
     library_path: PathLike = VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX,
-):
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     dll = CDLL(library_path)
 
-    dll.get_probabirities.argtypes = [
+    dll.get_backtrace.argtypes = [
         c_char_p,  # inppath
         c_int,  # length
         c_int,  # lx
@@ -36,9 +63,8 @@ def get_backtrace_linux(
         c_int,  # lz
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=4),  # ebvalues
         c_int,  # ispec
-        c_int,  # npcls
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # positions
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # velocities
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # positions
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # velocities
         c_double,  # dt
         c_int,  # max_step
         c_int,  # use_adaptive_dt
@@ -71,14 +97,13 @@ def get_backtrace_linux(
         _ny = c_int(data.inp.ny)
         _nz = c_int(data.inp.nz)
         _ispec = c_int(ispec + 1)
-        _nparticles = c_int(len(particles))
         _dt = c_double(dt)
         _max_step = c_int(max_step)
         _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
         _max_probabirity_types = c_int(max_probabirity_types)
         _return_last_index = c_int()
 
-        dll.get_probabirities(
+        dll.get_backtrace(
             _inppath,
             _length,
             _nx,
@@ -86,7 +111,6 @@ def get_backtrace_linux(
             _nz,
             ebvalues,
             _ispec,
-            _nparticles,
             position,
             velocity,
             _dt,
@@ -103,9 +127,9 @@ def get_backtrace_linux(
     handle = dll._handle
     cdll.LoadLibrary("libdl.so").dlclose(handle)
 
-    ts = return_ts[:return_last_index]
-    positions = return_positions[:return_last_index]
-    velocities = return_velocities[:return_last_index]
+    ts = return_ts[:return_last_index].copy()
+    positions = return_positions[:return_last_index].copy()
+    velocities = return_velocities[:return_last_index].copy()
 
     return ts, positions, velocities
 
