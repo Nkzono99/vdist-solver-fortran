@@ -6,6 +6,9 @@ module m_namelist
 
     implicit none
 
+    private
+    public read_namelist
+
     namelist /esorem/ emflag
 
     namelist /plasma/ wp, wc, phixy, phiz
