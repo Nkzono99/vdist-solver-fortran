@@ -4,7 +4,7 @@ import emout
 import matplotlib.pyplot as plt
 from vdsolver.core import Particle, PhaseGrid
 
-from vdsolverf import get_probabirities
+from vdsolverf.emses import get_probabirities
 
 
 def parse_args():

@@ -4,7 +4,7 @@ import emout
 import matplotlib.pyplot as plt
 from vdsolver.core import Particle
 
-from vdsolverf import get_backtrace
+from vdsolverf.emses import get_backtrace
 
 
 def parse_args():
