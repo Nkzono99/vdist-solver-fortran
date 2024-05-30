@@ -33,7 +33,7 @@ module m_simulator
         integer :: nz
         double precision :: q_m
         integer :: boundary_conditions(3)
-        class(t_VectorField), pointer :: eb
+        class(t_VectorField), allocatable :: eb
         type(t_BoundaryList) :: boundaries
         type(tp_Probabirity), allocatable :: probabirity_functions(:)
     contains
@@ -57,7 +57,7 @@ contains
         integer, intent(in) :: nz
         double precision, intent(in) :: q_m
         integer, intent(in) :: boundary_conditions(3)
-        class(t_VectorField), pointer, intent(in) :: eb
+        class(t_VectorField), intent(in) :: eb
         type(t_BoundaryList), intent(in) :: boundaries
         type(tp_Probabirity), intent(in) :: probabirity_functions(:)
 
@@ -68,7 +68,7 @@ contains
         obj%nz = nz
         obj%q_m = q_m
         obj%boundary_conditions(:) = boundary_conditions(:)
-        obj%eb => eb
+        obj%eb = eb
         obj%boundaries = boundaries
 
         allocate (obj%probabirity_functions(size(probabirity_functions)))
