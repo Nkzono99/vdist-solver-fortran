@@ -47,6 +47,7 @@ def main():
         particles=particles,
         dt=data.inp.dt,
         max_step=100000,
+        use_adaptive_dt=False,
     )
 
     phases = phases.reshape(NVZ, NVX, 6)
