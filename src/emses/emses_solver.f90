@@ -8,7 +8,11 @@ module m_emses_solver
     use forbear, only: bar_object
 
     use m_vdsolverf_core
-    use allcom
+    use allcom, only: npbnd, phiz, phixy, &
+                      nx, ny, nz, &
+                      zssurf, &
+                      peth, path, vdri, vdthz, vdthxy, &
+                      qm, wc
     use m_namelist
     use emses_boundaries
 
