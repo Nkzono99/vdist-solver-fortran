@@ -201,7 +201,6 @@ contains
         block
             integer :: isdoms(2, 3)
             integer :: boundary_conditions(3)
-            class(t_VectorField), pointer :: peb
 
             allocate (probabirity_functions(n_probabirity_functions + 1)%ref, source=new_ZeroProbabirity())
             n_probabirity_functions = n_probabirity_functions + 1
@@ -209,7 +208,7 @@ contains
             isdoms = reshape([[0, lx], [0, ly], [0, lz]], [2, 3])
             boundaries = create_simple_collision_boundaries(isdoms, tag=n_probabirity_functions)
 
-            allocate (peb, source=new_VectorFieldGrid(6, lx, ly, lz, ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1)))
+            eb = new_VectorFieldGrid(6, lx, ly, lz, ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1))
 
             call add_probabirity_boundaries(boundaries, ispec, n_probabirity_functions, probabirity_functions)
 
@@ -217,7 +216,7 @@ contains
             simulator = new_ESSimulator(lx, ly, lz, &
                                         qm(ispec), &
                                         boundary_conditions, &
-                                        peb, &
+                                        eb, &
                                         boundaries, &
                                         probabirity_functions)
         end block
