@@ -17,6 +17,7 @@ library = true
 [dependencies]
 futils = { git = "https://github.com/Nkzono99/futils" }
 finbound = { git = "https://github.com/Nkzono99/finbound" }
+forbear = { git = "https://github.com/szaghi/forbear.git" }
 
 [fortran]
 implicit-typing = false

@@ -8,6 +8,8 @@ module m_emses_solver
     use iso_c_binding
     use m_field
     use m_vector
+    use, intrinsic :: iso_fortran_env, only: I4P => int32, R8P => real64
+    use forbear, only: bar_object
     implicit none
 
 contains
@@ -52,6 +54,10 @@ contains
         integer :: n_probabirity_functions = 0
         integer :: ipcl
 
+        type(bar_object) :: bar
+
+        allocate (probabirity_functions(max_probabirity_types))
+
         block
             character(length) :: s
             integer :: i
@@ -60,8 +66,6 @@ contains
             end do
             call read_namelist(s)
         end block
-
-        allocate (probabirity_functions(max_probabirity_types))
 
         block
             integer :: isdoms(2, 3)
@@ -89,8 +93,21 @@ contains
                                         probabirity_functions)
         end block
 
+        call bar%initialize(filled_char_string='+', &
+                            prefix_string='progress |', &
+                            suffix_string='| ', &
+                            add_progress_percent=.true.)
+        call bar%start
+
         do ipcl = 1, npcls
-            ! print *, ipcl, '/', npcls
+            ! When I print a progress bar to 100%, the opening is printed.
+            ! Therefore, it is modified to print 99% until the last particle is processed.
+            if (ipcl < npcls) then
+                call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
+            else ! if (ipcl == npcls)
+                call bar%update(current=1d0)
+            end if
+
             block
                 type(t_ProbabirityRecord) :: record
                 type(t_Particle) :: particle
@@ -108,6 +125,7 @@ contains
             end block
         end do
 
+        call bar%destroy
         call boundaries%destroy
     end subroutine
 
