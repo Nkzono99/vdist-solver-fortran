@@ -1,16 +1,21 @@
 module m_emses_solver
-    use m_simulator
-    use m_particle
-    use m_boundary_list
-    use emses_boundaries
+    use, intrinsic :: iso_c_binding
+
+    use m_vector, only: rot3d_y, rot3d_z
+    use finbound, only: t_Boundary, t_BoundaryList, &
+                        t_PlaneXYZ, &
+                        new_PlaneX, new_PlaneY, new_PlaneZ
+    use forbear, only: bar_object
+
+    use m_vdsolverf_core
     use allcom
     use m_namelist
-    use, intrinsic :: iso_c_binding
-    use m_field
-    use m_vector
-    use, intrinsic :: iso_fortran_env, only: I4P => int32, R8P => real64
-    use forbear, only: bar_object
+    use emses_boundaries
+
     implicit none
+
+    private
+    public get_probabirities
 
 contains
 

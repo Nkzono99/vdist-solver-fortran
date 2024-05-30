@@ -1,11 +1,17 @@
 module m_simulator
-    use m_field
+    use m_vector, only: cross
+    use finbound, only: t_BoundaryList, t_CollisionRecord
+
     use m_particle
-    use m_vector
     use m_probabirity_record
     use m_Probabirities
-    use finbound
+    use m_field
+
     implicit none
+
+    private
+    public t_ESSimulator
+    public new_ESSimulator
 
     type t_ESSimulator
         integer :: nx
@@ -16,7 +22,6 @@ module m_simulator
         class(t_VectorField), pointer :: eb
         type(t_BoundaryList) :: boundaries
         type(tp_Probabirity), allocatable :: probabirity_functions(:)
-
     contains
         procedure :: calculate_probabirity => esSimulator_calculate_probabirity
         procedure :: backward => esSimulator_backward
@@ -41,8 +46,6 @@ contains
         type(tp_Probabirity), intent(in) :: probabirity_functions(:)
 
         type(t_ESSimulator) :: obj
-
-        integer :: ib
 
         obj%nx = nx
         obj%ny = ny
@@ -174,4 +177,5 @@ contains
         ret%position = position_new
         ret%velocity = velocity_new
     end function
+
 end module

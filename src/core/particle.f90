@@ -1,6 +1,10 @@
 module m_particle
     implicit none
 
+    private
+    public t_Particle
+    public new_Particle
+
     type t_Particle
         double precision :: t
         double precision :: position(3)
@@ -18,4 +22,5 @@ contains
         obj%position = position
         obj%velocity = velocity
     end function
+
 end module

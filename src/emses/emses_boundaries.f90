@@ -39,6 +39,7 @@
 !>
 module emses_boundaries
     use finbound
+
     use allcom, only: xlrechole, ylrechole, zlrechole, &
                       xurechole, yurechole, zurechole, &
                       zssurf, &
@@ -51,13 +52,14 @@ module emses_boundaries
                       circle_origin, circle_radius, &
                       cuboid_shape, &
                       disk_origin, disk_height, disk_radius, disk_inner_radius
-    implicit none
 
-    double precision, parameter :: extent(2, 3) = &
-        reshape([[1.0d0, 1.0d0], [1.0d0, 1.0d0], [1.0d0, 1.0d0]]*2, [2, 3])
+    implicit none
 
     private
     public create_simple_collision_boundaries
+
+    double precision, parameter :: extent(2, 3) = &
+        reshape([[1.0d0, 1.0d0], [1.0d0, 1.0d0], [1.0d0, 1.0d0]]*2, [2, 3])
 
 contains
 

@@ -3,6 +3,7 @@ module m_namelist
     use, intrinsic :: iso_c_binding
 
     use allcom
+
     implicit none
 
     namelist /esorem/ emflag

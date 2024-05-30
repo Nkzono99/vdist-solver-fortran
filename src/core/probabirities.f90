@@ -37,6 +37,14 @@ module m_Probabirities
         procedure :: at => p_Probabirity_at
     end type
 
+    private
+    public t_Probabirity
+    public t_ZeroProbabirity
+    public new_ZeroProbabirity
+    public t_MaxwellianProbabirity
+    public new_MaxwellianProbabirity
+    public tp_Probabirity
+
 contains
 
     function new_ZeroProbabirity() result(obj)

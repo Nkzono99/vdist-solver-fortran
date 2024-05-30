@@ -1,6 +1,11 @@
 module m_field
     implicit none
 
+    private
+    public t_VectorField
+    public t_VectorFieldGrid
+    public new_VectorFieldGrid
+
     type, abstract :: t_VectorField
         integer :: n_elements
     contains
