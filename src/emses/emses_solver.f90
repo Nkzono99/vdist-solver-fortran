@@ -29,6 +29,7 @@ contains
                                  velocities, &
                                  dt, &
                                  max_step, &
+                                 use_adaptive_dt, &
                                  max_probabirity_types, &
                                  return_probabirities, &
                                  return_positions, &
@@ -46,6 +47,7 @@ contains
         real(c_double), intent(in) :: velocities(3, npcls)
         real(c_double), value, intent(in) :: dt
         integer(c_int), value, intent(in) :: max_step
+        integer(c_int), value, intent(in) :: use_adaptive_dt
         integer(c_int), value, intent(in) :: max_probabirity_types
         real(c_double), intent(out) :: return_probabirities(npcls)
         real(c_double), intent(out) :: return_positions(3, npcls)
@@ -118,7 +120,7 @@ contains
                 type(t_Particle) :: particle
 
                 particle = new_Particle(positions(:, ipcl), velocities(:, ipcl))
-                record = simulator%calculate_probabirity(particle, dt, max_step)
+                record = simulator%calculate_probabirity(particle, dt, max_step, use_adaptive_dt==1)
 
                 if (record%is_valid) then
                     return_probabirities(ipcl) = record%probabirity

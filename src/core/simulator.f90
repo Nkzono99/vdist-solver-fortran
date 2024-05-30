@@ -65,11 +65,12 @@ contains
         end block
     end function
 
-    function esSimulator_calculate_probabirity(self, particle, dt, max_step) result(ret)
+    function esSimulator_calculate_probabirity(self, particle, dt, max_step, use_adaptive_dt) result(ret)
         class(t_ESSimulator), intent(in) :: self
         class(t_Particle), intent(in) :: particle
         double precision, intent(in) :: dt
         integer, intent(in) :: max_step
+        logical, intent(in) :: use_adaptive_dt
         type(t_ProbabirityRecord) :: ret
 
         integer :: i
@@ -85,7 +86,15 @@ contains
                 double precision :: r
                 type(tp_Probabirity), allocatable :: probabirity_function
 
-                pcl_new = self%backward(pcl, dt)
+                double precision :: tmp_dt
+
+                if (use_adaptive_dt) then
+                    tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
+                else
+                    tmp_dt = dt
+                end if
+
+                pcl_new = self%backward(pcl, tmp_dt)
 
                 ! Detect collision (pcl, pcl_new)
                 record = self%boundaries%check_collision(pcl%position, pcl_new%position)

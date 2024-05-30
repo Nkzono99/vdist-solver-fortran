@@ -22,6 +22,7 @@ def get_probabirities(
     particles: List[Particle],
     dt: float,
     max_step: int,
+    use_adaptive_dt: bool = False,
     max_probabirity_types: int = 100,
     os: Literal["linux"] = "linux",
     library_path: PathLike = None,
@@ -35,6 +36,7 @@ def get_probabirities(
             particles=particles,
             dt=dt,
             max_step=max_step,
+            use_adaptive_dt=use_adaptive_dt,
             max_probabirity_types=max_probabirity_types,
             library_path=library_path,
         )
@@ -47,6 +49,7 @@ def get_probabirities_linux(
     particles: List[Particle],
     dt: float,
     max_step: int,
+    use_adaptive_dt: bool,
     max_probabirity_types: int = 100,
     library_path: PathLike = VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX,
 ) -> Tuple[np.ndarray, List[Particle]]:
@@ -65,6 +68,7 @@ def get_probabirities_linux(
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # velocities
         c_double,  # dt
         c_int,  # max_step
+        c_int,  # use_adaptive_dt
         c_int,  # max_probabirity_types
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_probabirities
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_positions
@@ -96,6 +100,7 @@ def get_probabirities_linux(
         _nparticles = c_int(len(particles))
         _dt = c_double(dt)
         _max_step = c_int(max_step)
+        _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
         _max_probabirity_types = c_int(max_probabirity_types)
 
         dll.get_probabirities(
@@ -111,6 +116,7 @@ def get_probabirities_linux(
             velocities,
             _dt,
             _max_step,
+            _use_adaptive_dt,
             _max_probabirity_types,
             return_probabirities,
             return_positions,
