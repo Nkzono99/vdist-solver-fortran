@@ -5,7 +5,7 @@ module m_emses_solver
     use emses_boundaries
     use allcom
     use m_namelist
-    use iso_c_binding
+    use, intrinsic :: iso_c_binding
     use m_field
     use m_vector
     use, intrinsic :: iso_fortran_env, only: I4P => int32, R8P => real64

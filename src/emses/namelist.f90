@@ -1,6 +1,6 @@
 !
 module m_namelist
-    use iso_c_binding
+    use, intrinsic :: iso_c_binding
     !
     !   ____________________________________________________________
     !
