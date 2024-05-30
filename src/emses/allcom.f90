@@ -15,6 +15,7 @@ module allcom
     double precision :: phiz
 
     ! /tmgrid/
+    double precision :: dt
     integer :: nx, ny, nz
 
     ! /system/
