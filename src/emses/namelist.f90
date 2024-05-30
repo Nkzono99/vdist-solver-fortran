@@ -47,9 +47,6 @@ contains
         character(len=*), intent(In) :: inppath
         integer :: iostat
 
-        character(:), allocatable :: s
-        integer :: i
-
         ! Convert the array of characters to string.
         open (10, file=trim(inppath), status='old', iostat=iostat)
 
