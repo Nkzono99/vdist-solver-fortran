@@ -3,7 +3,6 @@ module m_simulator
     use finbound, only: t_BoundaryList, t_CollisionRecord
 
     use m_particle
-    use m_probabirity_record
     use m_Probabirities
     use m_field
 
