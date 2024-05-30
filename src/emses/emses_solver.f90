@@ -58,48 +58,12 @@ contains
         integer(c_int), intent(out) :: return_last_step
 
         type(t_ESSimulator) :: simulator
-        type(t_VectorFieldGrid), target :: eb
 
-        type(t_BoundaryList) :: boundaries
-        type(tp_Probabirity), allocatable :: probabirity_functions(:)
-        integer :: n_probabirity_functions = 0
-
-        allocate (probabirity_functions(max_probabirity_types))
-
-        block
-            character(length) :: s
-            integer :: i
-            do i = 1, length
-                s(i:i) = inppath(i)
-            end do
-            call read_namelist(s)
-        end block
-
-        block
-            integer :: isdoms(2, 3)
-            integer :: boundary_conditions(3)
-            class(t_VectorField), pointer :: peb
-
-            allocate (probabirity_functions(n_probabirity_functions + 1)%ref, source=new_ZeroProbabirity())
-            n_probabirity_functions = n_probabirity_functions + 1
-
-            isdoms = reshape([[0, lx], [0, ly], [0, lz]], [2, 3])
-            boundaries = create_simple_collision_boundaries(isdoms, tag=n_probabirity_functions)
-
-            eb = new_VectorFieldGrid(6, lx, ly, lz, &
-                                     ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1))
-            peb => eb
-
-            call add_probabirity_boundaries(boundaries, ispec, n_probabirity_functions, probabirity_functions)
-
-            boundary_conditions(:) = npbnd(:, ispec)
-            simulator = new_ESSimulator(lx, ly, lz, &
-                                        qm(ispec), &
-                                        boundary_conditions, &
-                                        peb, &
-                                        boundaries, &
-                                        probabirity_functions)
-        end block
+        simulator = create_simulator(inppath, length, &
+                                     lx, ly, lz, &
+                                     ebvalues, &
+                                     ispec, &
+                                     max_probabirity_types)
 
         block
             type(t_Particle) :: particle
@@ -109,8 +73,8 @@ contains
 
             particle = new_Particle(position(:), velocity(:))
             record = simulator%backtrace(particle, &
-                                            dt, max_step, &
-                                            use_adaptive_dt == 1)
+                                         dt, max_step, &
+                                         use_adaptive_dt == 1)
 
             do istep = 1, record%last_step
                 trace = record%traces(istep)
@@ -119,10 +83,11 @@ contains
                 return_positions(:, istep) = trace%position(:)
                 return_velocities(:, istep) = trace%velocity(:)
             end do
+
             return_last_step = record%last_step
         end block
 
-        call boundaries%destroy
+        call simulator%boundaries%destroy
     end subroutine
 
     subroutine get_probabirities(inppath, &
@@ -160,51 +125,14 @@ contains
         real(c_double), intent(out) :: return_velocities(3, npcls)
 
         type(t_ESSimulator) :: simulator
-        type(t_VectorFieldGrid), target :: eb
-
-        type(t_BoundaryList) :: boundaries
-        type(tp_Probabirity), allocatable :: probabirity_functions(:)
-        integer :: n_probabirity_functions = 0
+        type(bar_object) :: bar
         integer :: ipcl
 
-        type(bar_object) :: bar
-
-        allocate (probabirity_functions(max_probabirity_types))
-
-        block
-            character(length) :: s
-            integer :: i
-            do i = 1, length
-                s(i:i) = inppath(i)
-            end do
-            call read_namelist(s)
-        end block
-
-        block
-            integer :: isdoms(2, 3)
-            integer :: boundary_conditions(3)
-            class(t_VectorField), pointer :: peb
-
-            allocate (probabirity_functions(n_probabirity_functions + 1)%ref, source=new_ZeroProbabirity())
-            n_probabirity_functions = n_probabirity_functions + 1
-
-            isdoms = reshape([[0, lx], [0, ly], [0, lz]], [2, 3])
-            boundaries = create_simple_collision_boundaries(isdoms, tag=n_probabirity_functions)
-
-            eb = new_VectorFieldGrid(6, lx, ly, lz, &
-                                     ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1))
-            peb => eb
-
-            call add_probabirity_boundaries(boundaries, ispec, n_probabirity_functions, probabirity_functions)
-
-            boundary_conditions(:) = npbnd(:, ispec)
-            simulator = new_ESSimulator(lx, ly, lz, &
-                                        qm(ispec), &
-                                        boundary_conditions, &
-                                        peb, &
-                                        boundaries, &
-                                        probabirity_functions)
-        end block
+        simulator = create_simulator(inppath, length, &
+                                     lx, ly, lz, &
+                                     ebvalues, &
+                                     ispec, &
+                                     max_probabirity_types)
 
         call bar%initialize(filled_char_string='+', &
                             prefix_string='progress |', &
@@ -239,8 +167,61 @@ contains
         end do
 
         call bar%destroy
-        call boundaries%destroy
+        call simulator%boundaries%destroy
     end subroutine
+
+    function create_simulator(inppath, length, lx, ly, lz, ebvalues, ispec, max_probabirity_types) result(simulator)
+        character(1, c_char), intent(in) :: inppath(*)
+        integer(c_int), value, intent(in) :: length
+        integer(c_int), value, intent(in) :: lx
+        integer(c_int), value, intent(in) :: ly
+        integer(c_int), value, intent(in) :: lz
+        real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
+        integer(c_int), value, intent(in) :: ispec
+        integer(c_int), value, intent(in) :: max_probabirity_types
+        type(t_ESSimulator) :: simulator
+
+        type(t_VectorFieldGrid), target :: eb
+
+        type(t_BoundaryList) :: boundaries
+        type(tp_Probabirity), allocatable :: probabirity_functions(:)
+        integer :: n_probabirity_functions = 0
+
+        allocate (probabirity_functions(max_probabirity_types))
+
+        block
+            character(length) :: s
+            integer :: i
+            do i = 1, length
+                s(i:i) = inppath(i)
+            end do
+            call read_namelist(s)
+        end block
+
+        block
+            integer :: isdoms(2, 3)
+            integer :: boundary_conditions(3)
+            class(t_VectorField), pointer :: peb
+
+            allocate (probabirity_functions(n_probabirity_functions + 1)%ref, source=new_ZeroProbabirity())
+            n_probabirity_functions = n_probabirity_functions + 1
+
+            isdoms = reshape([[0, lx], [0, ly], [0, lz]], [2, 3])
+            boundaries = create_simple_collision_boundaries(isdoms, tag=n_probabirity_functions)
+
+            allocate (peb, source=new_VectorFieldGrid(6, lx, ly, lz, ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1)))
+
+            call add_probabirity_boundaries(boundaries, ispec, n_probabirity_functions, probabirity_functions)
+
+            boundary_conditions(:) = npbnd(:, ispec)
+            simulator = new_ESSimulator(lx, ly, lz, &
+                                        qm(ispec), &
+                                        boundary_conditions, &
+                                        peb, &
+                                        boundaries, &
+                                        probabirity_functions)
+        end block
+    end function
 
     subroutine add_probabirity_boundaries(boundaries, &
                                           ispec, &
