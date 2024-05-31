@@ -1,7 +1,8 @@
+import platform
 from ctypes import *
 from os import PathLike
 from pathlib import Path
-from typing import List, Tuple, Literal
+from typing import List, Literal, Tuple, Union
 
 import emout
 import numpy as np
@@ -9,9 +10,16 @@ from vdsolver.core import Particle
 
 from .tmpolary_input import TempolaryInput
 
-
 VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX = (
-    Path().home() / ".local/lib" / "libvdist-solver-fortran.so"
+    Path(__file__).parent.parent / "libvdist-solver-fortran.so"
+)
+
+VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN = (
+    Path(__file__).parent.parent / "libvdist-solver-fortran.dylib"
+)
+
+VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS = (
+    Path(__file__).parent.parent / "libvdist-solver-fortran.dll"
 )
 
 
@@ -24,25 +32,49 @@ def get_backtrace(
     max_step: int,
     use_adaptive_dt: bool,
     max_probabirity_types: int = 100,
-    os: Literal["linux"] = "linux",
+    os: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
 ):
+    if os == "auto":
+        os = platform.system().lower()
+
     if os == "linux":
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
-        return get_backtrace_linux(
-            directory=directory,
-            ispec=ispec,
-            istep=istep,
-            particle=particle,
-            dt=dt,
-            max_step=max_step,
-            use_adaptive_dt=use_adaptive_dt,
-            max_probabirity_types=max_probabirity_types,
-            library_path=library_path,
-        )
+        dll = CDLL(library_path)
+    elif os == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
+        dll = CDLL(library_path)
+    elif os == "windows":  # TODO: 実際に動作するのかは未検証
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
+        dll = WinDLL(library_path)
+    else:
+        raise RuntimeError(f"This platform is not supported: {os}")
+
+    result = get_backtrace_dll(
+        directory=directory,
+        ispec=ispec,
+        istep=istep,
+        particle=particle,
+        dt=dt,
+        max_step=max_step,
+        use_adaptive_dt=use_adaptive_dt,
+        max_probabirity_types=max_probabirity_types,
+        dll=dll,
+    )
+
+    handle = dll._handle
+
+    if os == "linux":
+        cdll.LoadLibrary("libdl.so").dlclose(handle)
+    elif os == "darwin":
+        cdll.LoadLibrary("libdl.so").dlclose(handle)
+    elif os == "windows":
+        windll.kernel32.FreeLibrary(handle)
+
+    return result
 
 
-def get_backtrace_linux(
+def get_backtrace_dll(
     directory: PathLike,
     ispec: int,
     istep: int,
@@ -50,11 +82,9 @@ def get_backtrace_linux(
     dt: float,
     max_step: int,
     use_adaptive_dt: bool,
-    max_probabirity_types: int = 100,
-    library_path: PathLike = VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX,
+    max_probabirity_types: int,
+    dll: Union[CDLL, "WinDLL"],
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    dll = CDLL(library_path)
-
     dll.get_backtrace.argtypes = [
         c_char_p,  # inppath
         c_int,  # length
@@ -124,9 +154,6 @@ def get_backtrace_linux(
         )
         return_last_index = _return_last_index.value
 
-    handle = dll._handle
-    cdll.LoadLibrary("libdl.so").dlclose(handle)
-
     ts = return_ts[:return_last_index].copy()
     positions = return_positions[:return_last_index].copy()
     velocities = return_velocities[:return_last_index].copy()
@@ -143,25 +170,49 @@ def get_probabirities(
     max_step: int,
     use_adaptive_dt: bool = False,
     max_probabirity_types: int = 100,
-    os: Literal["linux"] = "linux",
+    os: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
 ):
+    if os == "auto":
+        os = platform.system().lower()
+
     if os == "linux":
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
-        return get_probabirities_linux(
-            directory=directory,
-            ispec=ispec,
-            istep=istep,
-            particles=particles,
-            dt=dt,
-            max_step=max_step,
-            use_adaptive_dt=use_adaptive_dt,
-            max_probabirity_types=max_probabirity_types,
-            library_path=library_path,
-        )
+        dll = CDLL(library_path)
+    elif os == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
+        dll = CDLL(library_path)
+    elif os == "windows":  # TODO: 実際に動作するのかは未検証
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
+        dll = WinDLL(library_path)
+    else:
+        raise RuntimeError(f"This platform is not supported: {os}")
+
+    result = get_probabirities_dll(
+        directory=directory,
+        ispec=ispec,
+        istep=istep,
+        particles=particles,
+        dt=dt,
+        max_step=max_step,
+        use_adaptive_dt=use_adaptive_dt,
+        max_probabirity_types=max_probabirity_types,
+        dll=dll,
+    )
+
+    handle = dll._handle
+
+    if os == "linux":
+        cdll.LoadLibrary("libdl.so").dlclose(handle)
+    elif os == "darwin":
+        cdll.LoadLibrary("libdl.so").dlclose(handle)
+    elif os == "windows":
+        windll.kernel32.FreeLibrary(handle)
+
+    return result
 
 
-def get_probabirities_linux(
+def get_probabirities_dll(
     directory: PathLike,
     ispec: int,
     istep: int,
@@ -169,11 +220,9 @@ def get_probabirities_linux(
     dt: float,
     max_step: int,
     use_adaptive_dt: bool,
-    max_probabirity_types: int = 100,
-    library_path: PathLike = VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX,
+    max_probabirity_types: int,
+    dll: Union[CDLL, "WinDLL"],
 ) -> Tuple[np.ndarray, List[Particle]]:
-    dll = CDLL(library_path)
-
     dll.get_probabirities.argtypes = [
         c_char_p,  # inppath
         c_int,  # length
@@ -241,9 +290,6 @@ def get_probabirities_linux(
             return_positions,
             return_velocities,
         )
-
-    handle = dll._handle
-    cdll.LoadLibrary("libdl.so").dlclose(handle)
 
     return_particles = [
         Particle(pos, vel) for pos, vel in zip(return_positions, return_velocities)

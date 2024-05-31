@@ -1,27 +1,35 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+build-backend = "setuptools.build_meta"
+requires = ["setuptools", "fpm"]
 
 [project]
-name = "vdsolverf"
+name = "vdist-solver-fortran"
 version = "0.1.0"
+
+requires-python = ">=3.7"
+
+description = "Wrapper of velocsty distribution solver written in Fortran"
+readme = "README.md"
+
+keywords = []
+
+authors = [
+  {name = "Nkzono99", email = "j-nakazono@stu.kobe-u.ac.jp"},
+]
+
+maintainers = [
+  {name = "Nkzono99", email = "j-nakazono@stu.kobe-u.ac.jp"},
+]
+
+license = {file = "LICENSE"}
+
 dependencies = [
   "f90nml",
   "vdist-solver",
   "emout",
   "numpy",
 ]
-requires-python = ">=3.7"
-authors = [
-  {name = "Nkzono99", email = "j-nakazono@stu.kobe-u.ac.jp"},
-]
-maintainers = [
-  {name = "Nkzono99", email = "j-nakazono@stu.kobe-u.ac.jp"}
-]
-description = "Wrapper of velocsty distribution solver written in Fortran"
-readme = "README.md"
-license = {file = "LICENSE"}
-keywords = []
+
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
   "Development Status :: 3 - Alpha",
@@ -33,3 +41,6 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/Nkzono99/vdist-solver-fortran.git"
+
+[tool.setuptools]
+include-package-data = true
