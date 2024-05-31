@@ -28,6 +28,7 @@ dependencies = [
   "vdist-solver",
   "emout",
   "numpy",
+  "fpm",
 ]
 
 classifiers = [
