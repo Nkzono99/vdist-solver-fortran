@@ -17,6 +17,8 @@ pip install git+https://github.com/Nkzono99/vdist-solver-fortran.git
 
 ## Usage
 
+### Backtrace
+
 ```python
 import matplotlib.pyplot as plt
 from vdsolver.core import Particle
@@ -43,6 +45,8 @@ print("Number of trace-points:", len(positions))
 plt.plot(positions[:, 0], positions[:, 2])
 plt.gcf().savefig("backtrace.png")
 ```
+
+### Phase Probabirity Distribution Solver
 
 ```python
 from vdsolver.core import Particle
