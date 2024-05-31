@@ -42,13 +42,13 @@ shared_windows:
 copy_shared: copy_shared_${PLATFORM}
 
 copy_shared_linux:
-	cp ${BUILD_DIR}/lib${LIBNAME}.so vdsolverf/lib/
+	cp ${BUILD_DIR}/lib${LIBNAME}.so vdsolverf/
 
 copy_shared_darwin:
-	cp ${BUILD_DIR}/lib${LIBNAME}.so vdsolverf/lib/
+	cp ${BUILD_DIR}/lib${LIBNAME}.dylib vdsolverf/
 
 copy_shared_windows:
-	cp ${BUILD_DIR}/lib${LIBNAME}.so vdsolverf/lib/
+	cp ${BUILD_DIR}/lib${LIBNAME}.dll vdsolverf/
 
 .PHONY: clean
 clean: 
