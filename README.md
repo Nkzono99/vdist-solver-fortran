@@ -9,6 +9,7 @@ Velocity distribution solver for python written in Fortran.
 ## Install
 
 Installation scripts are currently only guaranteed to work on Linux.
+
 In the meantime, the script is designed to be installed on Windows and Mac...
 
 ```
