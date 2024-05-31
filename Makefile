@@ -51,7 +51,16 @@ copy_shared_windows:
 	cp ${BUILD_DIR}/lib${LIBNAME}.dll vdsolverf/
 
 .PHONY: clean
-clean: 
+clean: clean_$(PLATFORM)
 	fpm clean --skip
 	rm ${BUILD_DIR}/lib${LIBNAME}.a
 	rm ${BUILD_DIR}/lib${LIBNAME}.so
+
+clean_linux:
+	rm vdsolverf/lib${LIBNAME}.so
+
+clean_darwin:
+	rm vdsolverf/lib${LIBNAME}.dylib
+
+clean_windows:
+	rm vdsolverf/lib${LIBNAME}.dll
