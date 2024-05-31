@@ -1,1 +1,1 @@
-include vdsolverf/libvdist-solver-fortran.so
+include vdsolverf/libvdist-solver-fortran.*
