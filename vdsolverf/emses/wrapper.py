@@ -11,7 +11,7 @@ from .tmpolary_input import TempolaryInput
 
 
 VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX = (
-    Path().home() / ".local/lib" / "libvdist-solver-fortran.so"
+    Path(__file__).parent.parent.parent / "build" / "libvdist-solver-fortran.so"
 )
 
 

@@ -1,12 +1,15 @@
 SHELL=/bin/bash
+
 LIBNAME=vdist-solver-fortran
 PLATFORM=linux
+
 BUILD_DIR=./build
+
 all: $(LIBNAME)
 
-$(LIBNAME): build copy_static shared copy_shared
+$(LIBNAME): build copy_static shared
 
-.PHONY: build
+.PHONY: build clean
 build:
 	fpm build --profile=release
 
@@ -19,7 +22,7 @@ shared_linux:
 	gfortran -shared -o $(BUILD_DIR)/lib$(LIBNAME).so -Wl,--whole-archive $(BUILD_DIR)/lib$(LIBNAME).a -Wl,--no-whole-archive
 
 shared_darwin: 
-	gfortran -dynamiclib -install_name @rpath/lib$(LIBNAME).dylib -static-libgfortran -static-libquadmath -static-libgcc -o $(BUILD_DIR)/lib$(LIBNAME).dylib -Wl,-all_load $(BUILD_DIR)/lib$(LIBNAME).a -Wl,-noall_load
+	gfortran -dynamiclib -install_name ${BUILD_DIR}/lib$(LIBNAME).dylib -static-libgfortran -static-libquadmath -static-libgcc -o $(BUILD_DIR)/lib$(LIBNAME).dylib -Wl,-all_load $(BUILD_DIR)/lib$(LIBNAME).a -Wl,-noall_load
 
 shared_windows: 
 	gfortran -shared -static -o $(BUILD_DIR)/lib$(LIBNAME).dll -Wl,--out-implib=$(BUILD_DIR)/lib$(LIBNAME).dll.a,--export-all-symbols,--enable-auto-import,--whole-archive $(BUILD_DIR)/lib$(LIBNAME).a -Wl,--no-whole-archive
@@ -28,3 +31,17 @@ copy_shared: copy_shared_${PLATFORM}
 
 copy_shared_linux:
 	cp ${BUILD_DIR}/lib${LIBNAME}.so ~/.local/lib/
+
+clean: clean_${PLATFORM}
+
+clean_linux:
+	fpm clean --skip
+	rm ${BUILD_DIR}/lib${LIBNAME}.so
+
+clean_darwin:
+	fpm clean --skip
+	rm ${BUILD_DIR}/lib${LIBNAME}.dylib
+
+clean_windows:
+	fpm clean --skip
+	rm ${BUILD_DIR}/lib${LIBNAME}.dll
