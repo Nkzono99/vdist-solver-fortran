@@ -1,6 +1,6 @@
 import subprocess
 
-from setuptools import Command, setup
+from setuptools import Command, setup, find_packages
 from setuptools.command.build import build
 
 
@@ -20,4 +20,7 @@ class CustomBuild(build):
     sub_commands = [("build_custom", None)] + build.sub_commands
 
 
-setup(cmdclass={"build": CustomBuild, "build_custom": CustomCommnad})
+setup(
+    cmdclass={"build": CustomBuild, "build_custom": CustomCommnad},
+    packages=find_packages(),
+)

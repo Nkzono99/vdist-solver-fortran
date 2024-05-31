@@ -1,15 +1,27 @@
 SHELL=/bin/bash
 
 LIBNAME=vdist-solver-fortran
-PLATFORM=linux
+
+ifeq ($(OS),Windows_NT)
+    PLATFORM := windows
+else
+    UNAME_OS := $(shell uname -s)
+    ifeq ($(UNAME_OS),Linux)
+        PLATFORM := linux
+    else ifeq ($(UNAME_OS),Darwin)
+        PLATFORM := darwin
+    else
+        PLATFORM:=unknown
+    endif
+endif
 
 BUILD_DIR=./build
 
 all: $(LIBNAME)
 
-$(LIBNAME): build copy_static shared
+$(LIBNAME): build copy_static shared copy_shared
 
-.PHONY: build clean
+.PHONY: build
 build:
 	fpm build --profile=release
 
@@ -30,18 +42,16 @@ shared_windows:
 copy_shared: copy_shared_${PLATFORM}
 
 copy_shared_linux:
-	cp ${BUILD_DIR}/lib${LIBNAME}.so ~/.local/lib/
+	cp ${BUILD_DIR}/lib${LIBNAME}.so vdsolverf/lib/
 
-clean: clean_${PLATFORM}
+copy_shared_darwin:
+	cp ${BUILD_DIR}/lib${LIBNAME}.so vdsolverf/lib/
 
-clean_linux:
+copy_shared_windows:
+	cp ${BUILD_DIR}/lib${LIBNAME}.so vdsolverf/lib/
+
+.PHONY: clean
+clean: 
 	fpm clean --skip
+	rm ${BUILD_DIR}/lib${LIBNAME}.a
 	rm ${BUILD_DIR}/lib${LIBNAME}.so
-
-clean_darwin:
-	fpm clean --skip
-	rm ${BUILD_DIR}/lib${LIBNAME}.dylib
-
-clean_windows:
-	fpm clean --skip
-	rm ${BUILD_DIR}/lib${LIBNAME}.dll
