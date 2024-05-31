@@ -1,6 +1,6 @@
 [build-system]
 build-backend = "setuptools.build_meta"
-requires = ["setuptools"]
+requires = ["setuptools", "fpm"]
 
 [project]
 name = "vdist-solver-fortran"
@@ -28,7 +28,6 @@ dependencies = [
   "vdist-solver",
   "emout",
   "numpy",
-  "fpm",
 ]
 
 classifiers = [
