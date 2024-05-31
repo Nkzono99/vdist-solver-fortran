@@ -1,0 +1,10 @@
+{
+    "fortran.fortls.extraArgs": [
+        "--include-dirs .lint",
+        "-nofpp"
+    ],
+    "fortran.linter.modOutput": "${workspaceFolder}/.lint",
+    "fortran.linter.includePaths": [
+        "${workspaceFolder}/.lint"
+    ]
+}
