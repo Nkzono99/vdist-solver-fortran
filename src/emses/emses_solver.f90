@@ -105,7 +105,8 @@ contains
                                  max_probabirity_types, &
                                  return_probabirities, &
                                  return_positions, &
-                                 return_velocities &
+                                 return_velocities, &
+                                 n_threads &
                                  ) bind(c)
         character(1, c_char), intent(in) :: inppath(*)
         integer(c_int), value, intent(in) :: length
@@ -124,6 +125,7 @@ contains
         real(c_double), intent(out) :: return_probabirities(npcls)
         real(c_double), intent(out) :: return_positions(3, npcls)
         real(c_double), intent(out) :: return_velocities(3, npcls)
+        integer(c_int), optional, intent(in) :: n_threads
 
         type(t_ESSimulator) :: simulator
         type(bar_object) :: bar
@@ -142,6 +144,10 @@ contains
                             suffix_string='| ', &
                             add_progress_percent=.true.)
         call bar%start
+
+!$      if (present(n_threads)) then
+!$          call omp_set_num_threads(n_threads)
+!$      end if
 
         !$omp parallel
 

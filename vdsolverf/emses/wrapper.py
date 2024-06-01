@@ -1,5 +1,6 @@
 import platform
 from ctypes import *
+import os
 from os import PathLike
 from pathlib import Path
 from typing import List, Literal, Tuple, Union
@@ -170,23 +171,26 @@ def get_probabirities(
     max_step: int,
     use_adaptive_dt: bool = False,
     max_probabirity_types: int = 100,
-    os: Literal["auto", "linux", "darwin", "windows"] = "auto",
+    system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
+    n_threads: Union[int, None] = None,
 ):
-    if os == "auto":
-        os = platform.system().lower()
+    n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
-    if os == "linux":
+    if system == "auto":
+        system = platform.system().lower()
+
+    if system == "linux":
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
         dll = CDLL(library_path)
-    elif os == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
+    elif system == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
         dll = CDLL(library_path)
-    elif os == "windows":  # TODO: 実際に動作するのかは未検証
+    elif system == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
         dll = WinDLL(library_path)
     else:
-        raise RuntimeError(f"This platform is not supported: {os}")
+        raise RuntimeError(f"This platform is not supported: {system}")
 
     result = get_probabirities_dll(
         directory=directory,
@@ -198,15 +202,16 @@ def get_probabirities(
         use_adaptive_dt=use_adaptive_dt,
         max_probabirity_types=max_probabirity_types,
         dll=dll,
+        n_threads=n_threads,
     )
 
     handle = dll._handle
 
-    if os == "linux":
+    if system == "linux":
         cdll.LoadLibrary("libdl.so").dlclose(handle)
-    elif os == "darwin":
+    elif system == "darwin":
         cdll.LoadLibrary("libdl.so").dlclose(handle)
-    elif os == "windows":
+    elif system == "windows":
         windll.kernel32.FreeLibrary(handle)
 
     return result
@@ -222,6 +227,7 @@ def get_probabirities_dll(
     use_adaptive_dt: bool,
     max_probabirity_types: int,
     dll: Union[CDLL, "WinDLL"],
+    n_threads: int = 1,
 ) -> Tuple[np.ndarray, List[Particle]]:
     dll.get_probabirities.argtypes = [
         c_char_p,  # inppath
@@ -241,6 +247,7 @@ def get_probabirities_dll(
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_probabirities
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_positions
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_velocities
+        POINTER(c_int),  # n_threads
     ]
     dll.get_probabirities.restype = None
 
@@ -270,6 +277,7 @@ def get_probabirities_dll(
         _max_step = c_int(max_step)
         _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
         _max_probabirity_types = c_int(max_probabirity_types)
+        _n_threads = c_int(n_threads)
 
         dll.get_probabirities(
             _inppath,
@@ -289,6 +297,7 @@ def get_probabirities_dll(
             return_probabirities,
             return_positions,
             return_velocities,
+            byref(_n_threads),
         )
 
     return_particles = [
