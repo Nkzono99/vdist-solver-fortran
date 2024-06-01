@@ -71,7 +71,7 @@ contains
             integer :: istep
             type(t_Particle) :: trace
 
-            particle = new_Particle(position(:), velocity(:))
+            particle = new_Particle(qm(ispec), position(:), velocity(:))
             record = simulator%backtrace(particle, &
                                          dt, max_step, &
                                          use_adaptive_dt == 1)
@@ -153,7 +153,7 @@ contains
                 type(t_ProbabirityRecord) :: record
                 type(t_Particle) :: particle
 
-                particle = new_Particle(positions(:, ipcl), velocities(:, ipcl))
+                particle = new_Particle(qm(ispec), positions(:, ipcl), velocities(:, ipcl))
                 record = simulator%calculate_probabirity(particle, dt, max_step, use_adaptive_dt == 1)
 
                 if (record%is_valid) then
@@ -214,7 +214,6 @@ contains
 
             boundary_conditions(:) = npbnd(:, ispec)
             simulator = new_ESSimulator(lx, ly, lz, &
-                                        qm(ispec), &
                                         boundary_conditions, &
                                         eb, &
                                         boundaries, &
