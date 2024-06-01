@@ -5,7 +5,7 @@ module m_simulator
     use m_vector, only: cross
     use finbound, only: t_BoundaryList, t_CollisionRecord
     use m_particle
-    use m_Probabirities
+    use m_Probabilities
     use m_field
 
     implicit none
@@ -14,7 +14,7 @@ module m_simulator
     public t_ESSimulator
     public new_ESSimulator
     public t_BacktraceRecord
-    public t_ProbabirityRecord
+    public t_ProbabilityRecord
 
     type t_BacktraceRecord
         !! Record for storing backtrace information
@@ -26,13 +26,13 @@ module m_simulator
             !! Last step in the backtrace
     end type
 
-    type t_ProbabirityRecord
+    type t_ProbabilityRecord
         !! Record for storing probability calculation results
         logical :: is_valid = .false.
             !! Flag indicating if the record is valid (If .false., probability calculation is not completed within max_step)
         double precision :: t
             !! Time at which the probability is calculated since the start of the simulation
-        double precision :: probabirity
+        double precision :: probability
             !! Calculated probability
         type(t_Particle) :: particle
             !! Particle state at the time of calculation probability
@@ -52,12 +52,12 @@ module m_simulator
             !! Electric and magnetic fields
         type(t_BoundaryList) :: boundaries
             !! List of boundary conditions
-        type(tp_Probabirity), allocatable :: probabirity_functions(:)
+        type(tp_Probability), allocatable :: probability_functions(:)
             !! Array of probability functions
     contains
         procedure :: backtrace => esSimulator_backtrace
             !! Perform a backtrace of a particle
-        procedure :: calculate_probabirity => esSimulator_calculate_probabirity
+        procedure :: calculate_probability => esSimulator_calculate_probability
             !! Calculate the probability for a particle
         procedure :: backward => esSimulator_backward
             !! Perform a backward step for a particle
@@ -73,7 +73,7 @@ contains
                              boundary_conditions, &
                              eb, &
                              boundaries, &
-                             probabirity_functions) result(obj)
+                             probability_functions) result(obj)
         !! Create a new ES simulator object with specified properties.
 
         integer, intent(in) :: nx
@@ -88,7 +88,7 @@ contains
             !! Electric and magnetic fields
         type(t_BoundaryList), intent(in) :: boundaries
             !! List of boundary conditions
-        type(tp_Probabirity), intent(in) :: probabirity_functions(:)
+        type(tp_Probability), intent(in) :: probability_functions(:)
             !! Array of probability functions
 
         type(t_ESSimulator) :: obj
@@ -101,12 +101,12 @@ contains
         obj%eb = eb
         obj%boundaries = boundaries
 
-        allocate (obj%probabirity_functions(size(probabirity_functions)))
+        allocate (obj%probability_functions(size(probability_functions)))
 
         block
             integer :: i
-            do i = 1, size(probabirity_functions)
-                obj%probabirity_functions(i)%ref => probabirity_functions(i)%ref
+            do i = 1, size(probability_functions)
+                obj%probability_functions(i)%ref => probability_functions(i)%ref
             end do
         end block
     end function
@@ -155,7 +155,7 @@ contains
         ret%last_step = max_step
     end function
 
-    function esSimulator_calculate_probabirity(self, particle, dt, max_step, use_adaptive_dt) result(ret)
+    function esSimulator_calculate_probability(self, particle, dt, max_step, use_adaptive_dt) result(ret)
         !! Calculate the probability for a particle.
 
         class(t_ESSimulator), intent(in) :: self
@@ -168,7 +168,7 @@ contains
             !! Maximum number of steps
         logical, intent(in) :: use_adaptive_dt
             !! Flag to use adaptive time step
-        type(t_ProbabirityRecord) :: ret
+        type(t_ProbabilityRecord) :: ret
             !! Probability record
 
         integer :: i
@@ -180,15 +180,15 @@ contains
         do i = 1, max_step
             block
                 type(t_CollisionRecord) :: record
-                type(tp_Probabirity), allocatable :: probabirity_function
+                type(tp_Probability), allocatable :: probability_function
                 pcl = self%update(pcl, dt, use_adaptive_dt, record)
 
                 if (record%is_collided) then
                     ret%is_valid = .true.
                     ret%particle = pcl
 
-                    probabirity_function = self%probabirity_functions(record%material%tag)
-                    ret%probabirity = probabirity_function%at(pcl%position, pcl%velocity)
+                    probability_function = self%probability_functions(record%material%tag)
+                    ret%probability = probability_function%at(pcl%position, pcl%velocity)
                     return
                 end if
             end block

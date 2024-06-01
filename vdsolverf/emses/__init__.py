@@ -1,1 +1,1 @@
-from .wrapper import get_probabirities, get_backtrace
+from .wrapper import get_probabilities, get_backtrace

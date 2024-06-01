@@ -50,18 +50,18 @@ plt.plot(positions[:, 0], positions[:, 2])
 plt.gcf().savefig("backtrace.png")
 ```
 
-### Phase Probabirity Distribution Solver
+### Phase Probability Distribution Solver
 
 ```python
 from vdsolver.core import Particle
-from vdsolverf.emses import get_probabirities
+from vdsolverf.emses import get_probabilities
 
 particles = [
     Particle([16, 16, 400], [0, 0, -20]),
     Particle([16, 16, 400], [0, 0, -30]),
     ]
 
-probabirities, ret_particles = get_probabirities(
+probabilities, ret_particles = get_probabilities(
         directory="EMSES-simulation-directory",
         ispec=0, # 0: electron, 1: ion, 2: photoelectron(not supported yet)
         istep=-1,
@@ -71,6 +71,6 @@ probabirities, ret_particles = get_probabirities(
         adaptive_dt=False,
     )
 
-print(probabirities)
+print(probabilities)
 print(ret_particles)
 ```
