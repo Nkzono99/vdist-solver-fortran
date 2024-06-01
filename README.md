@@ -10,9 +10,10 @@ Velocity distribution solver for python written in Fortran.
 
 Installation scripts are currently only guaranteed to work on Linux.
 
-[Note]
-This script should work on Windows and Mac. 
-However, it has not been tested and is not guaranteed to work.
+> [!Note]
+> This script should work on Windows and Mac.
+> 
+> However, it has not been tested and is not guaranteed to work.
 
 ```
 pip install git+https://github.com/Nkzono99/vdist-solver-fortran.git
