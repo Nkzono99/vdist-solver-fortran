@@ -30,7 +30,7 @@ def get_backtrace(
     particle: Particle,
     dt: float,
     max_step: int,
-    use_adaptive_dt: bool,
+    use_adaptive_dt: bool = False,
     max_probabirity_types: int = 100,
     os: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
