@@ -1,7 +1,9 @@
 module m_simulator
+    !! This module defines the ES simulator which simulates particle dynamics
+    !! in a electrostatic field with specified boundary conditions.
+
     use m_vector, only: cross
     use finbound, only: t_BoundaryList, t_CollisionRecord
-
     use m_particle
     use m_Probabirities
     use m_field
@@ -15,32 +17,54 @@ module m_simulator
     public t_ProbabirityRecord
 
     type t_BacktraceRecord
+        !! Record for storing backtrace information
         type(t_Particle), allocatable :: traces(:)
+            !! Array of particle traces
         double precision, allocatable :: ts(:)
+            !! Array of time steps
         integer :: last_step
+            !! Last step in the backtrace
     end type
 
     type t_ProbabirityRecord
+        !! Record for storing probability calculation results
         logical :: is_valid = .false.
+            !! Flag indicating if the record is valid (If .false., probability calculation is not completed within max_step)
         double precision :: t
+            !! Time at which the probability is calculated since the start of the simulation
         double precision :: probabirity
+            !! Calculated probability
         type(t_Particle) :: particle
+            !! Particle state at the time of calculation probability
     end type
 
     type t_ESSimulator
+        !! Electric static simulator for particle dynamics
         integer :: nx
+            !! Number of grid cells in the x direction
         integer :: ny
+            !! Number of grid cells in the y direction
         integer :: nz
+            !! Number of grid cells in the z direction
         integer :: boundary_conditions(3)
+            !! Boundary conditions for each axis (0: periodic, 1: reflective)
         class(t_VectorField), allocatable :: eb
+            !! Electric and magnetic fields
         type(t_BoundaryList) :: boundaries
+            !! List of boundary conditions
         type(tp_Probabirity), allocatable :: probabirity_functions(:)
+            !! Array of probability functions
     contains
         procedure :: backtrace => esSimulator_backtrace
+            !! Perform a backtrace of a particle
         procedure :: calculate_probabirity => esSimulator_calculate_probabirity
+            !! Calculate the probability for a particle
         procedure :: backward => esSimulator_backward
+            !! Perform a backward step for a particle
         procedure :: update => esSimulator_update
+            !! Update the state of a particle
         procedure :: apply_boundary_condition => esSimulator_apply_boundary_condition
+            !! Apply boundary conditions to a particle
     end type
 
 contains
@@ -50,15 +74,25 @@ contains
                              eb, &
                              boundaries, &
                              probabirity_functions) result(obj)
+        !! Create a new ES simulator object with specified properties.
+
         integer, intent(in) :: nx
+            !! Number of grid points in the x direction
         integer, intent(in) :: ny
+            !! Number of grid points in the y direction
         integer, intent(in) :: nz
+            !! Number of grid points in the z direction
         integer, intent(in) :: boundary_conditions(3)
+            !! Boundary conditions for each axis (0: periodic, 1: reflective, 2: free)
         class(t_VectorField), intent(in) :: eb
+            !! Electric and magnetic fields
         type(t_BoundaryList), intent(in) :: boundaries
+            !! List of boundary conditions
         type(tp_Probabirity), intent(in) :: probabirity_functions(:)
+            !! Array of probability functions
 
         type(t_ESSimulator) :: obj
+            !! A new ES simulator object with specified properties
 
         obj%nx = nx
         obj%ny = ny
@@ -78,12 +112,20 @@ contains
     end function
 
     function esSimulator_backtrace(self, particle, dt, max_step, use_adaptive_dt) result(ret)
+        !! Perform a backtrace of a particle.
+
         class(t_ESSimulator), intent(in) :: self
+            !! Instance of the ES simulator
         class(t_Particle), intent(in) :: particle
+            !! Particle to backtrace
         double precision, intent(in) :: dt
+            !! Time step width for backtracing
         integer, intent(in) :: max_step
+            !! Maximum number of steps
         logical, intent(in) :: use_adaptive_dt
+            !! Flag to use adaptive time step
         type(t_BacktraceRecord) :: ret
+            !! Backtrace record
 
         integer :: istep
         type(t_Particle) :: pcl
@@ -114,12 +156,20 @@ contains
     end function
 
     function esSimulator_calculate_probabirity(self, particle, dt, max_step, use_adaptive_dt) result(ret)
+        !! Calculate the probability for a particle.
+
         class(t_ESSimulator), intent(in) :: self
+            !! Instance of the ES simulator
         class(t_Particle), intent(in) :: particle
+            !! Particle for which to calculate the probability
         double precision, intent(in) :: dt
+            !! Time step for the calculation
         integer, intent(in) :: max_step
+            !! Maximum number of steps
         logical, intent(in) :: use_adaptive_dt
+            !! Flag to use adaptive time step
         type(t_ProbabirityRecord) :: ret
+            !! Probability record
 
         integer :: i
         type(t_Particle) :: pcl
@@ -148,12 +198,20 @@ contains
     end function
 
     function esSimulator_update(self, pcl, dt, use_adaptive_dt, record) result(pcl_new)
+        !! Update the state of a particle.
+
         class(t_ESSimulator), intent(in) :: self
+            !! Instance of the ES simulator
         type(t_Particle), intent(in) :: pcl
+            !! Particle to update
         double precision, intent(in) :: dt
+            !! Time step for the update
         logical, intent(in) :: use_adaptive_dt
+            !! Flag to use adaptive time step
         type(t_CollisionRecord), intent(out) :: record
+            !! Collision record
         type(t_Particle) :: pcl_new
+            !! Updated particle
 
         double precision :: tmp_dt
 
@@ -185,8 +243,12 @@ contains
     end function
 
     subroutine esSimulator_apply_boundary_condition(self, particle)
+        !! Apply boundary conditions to a particle.
+
         class(t_ESSimulator), intent(in) :: self
+            !! Instance of the ES simulator
         class(t_Particle), intent(inout) :: particle
+            !! Particle to apply boundary conditions to
 
         integer :: i
         double precision :: nxyz(3)
@@ -196,19 +258,27 @@ contains
         nxyz(3) = self%nz
 
         do i = 1, 3
-            if (self%boundary_conditions(i) == 0) then ! if periodic
+            if (self%boundary_conditions(i) == 0) then
+                ! Periodic boundary condition
                 particle%position(i) = modulo(particle%position(i), nxyz(i))
-            else if (self%boundary_conditions(i) == 1) then ! if refrect
+            else if (self%boundary_conditions(i) == 1) then
+                ! Reflective boundary condition
                 particle%position(i) = modulo(2*nxyz(i) - particle%position(i), nxyz(i))
             end if
         end do
     end subroutine
 
     function esSimulator_backward(self, particle, dt) result(ret)
+        !! Perform a backward step for a particle.
+
         class(t_ESSimulator), intent(in) :: self
+            !! Instance of the ES simulator
         class(t_Particle), intent(in) :: particle
+            !! Particle to perform the backward step
         double precision, intent(in) :: dt
+            !! Time step for the backward step
         type(t_Particle) :: ret
+            !! Particle after the backward step
 
         double precision :: position_new(3)
         double precision :: velocity_new(3)
@@ -225,6 +295,7 @@ contains
             double precision :: upm(3)
             double precision :: upa(3)
             double precision :: upp(3)
+
             dt2 = -0.5d0*dt
 
             eb = self%eb%at(particle%position)

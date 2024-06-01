@@ -1,5 +1,10 @@
 module m_emses_solver
+    !! This module provides functionalities for the EMSES simulation data,
+    !! including backtrace and probability calculations.
+
     use, intrinsic :: iso_c_binding
+
+    ! Use OpenMP library
 !$  use omp_lib
 
     use m_vector, only: rot3d_y, rot3d_z
@@ -40,23 +45,42 @@ contains
                              return_velocities, &
                              return_last_step &
                              ) bind(c)
+        !! Perform backtrace of a particle and return the trace data.
+
         character(1, c_char), intent(in) :: inppath(*)
+            !! Path to the input file
         integer(c_int), value, intent(in) :: length
+            !! Length of the input path
         integer(c_int), value, intent(in) :: lx
+            !! Number of grid cells in the x direction
         integer(c_int), value, intent(in) :: ly
+            !! Number of grid cells in the y direction
         integer(c_int), value, intent(in) :: lz
+            !! Number of grid cells in the z direction
         real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
+            !! Electric and magnetic field values
         integer(c_int), value, intent(in) :: ispec
+            !! Species index
         real(c_double), intent(in) :: position(3)
+            !! Initial position of the particle
         real(c_double), intent(in) :: velocity(3)
+            !! Initial velocity of the particle
         real(c_double), value, intent(in) :: dt
+            !! Time step width (Distance moving in one step (x += v/abs(v)*dt) when use_adaptive_dt is .true.)
         integer(c_int), value, intent(in) :: max_step
+            !! Maximum number of steps
         integer(c_int), value, intent(in) :: use_adaptive_dt
+            !! Flag to use adaptive time step
         integer(c_int), value, intent(in) :: max_probabirity_types
+            !! Maximum number of probability types
         real(c_double), intent(out) :: return_ts(max_step)
+            !! Array to store time steps
         real(c_double), intent(out) :: return_positions(3, max_step)
+            !! Array to store positions
         real(c_double), intent(out) :: return_velocities(3, max_step)
+            !! Array to store velocities
         integer(c_int), intent(out) :: return_last_step
+            !! Last step index
 
         type(t_ESSimulator) :: simulator
 
@@ -108,24 +132,44 @@ contains
                                  return_velocities, &
                                  n_threads &
                                  ) bind(c)
+        !! Calculate probabilities for multiple particles and return the results.
+
         character(1, c_char), intent(in) :: inppath(*)
+            !! Path to the input file
         integer(c_int), value, intent(in) :: length
+            !! Length of the input path
         integer(c_int), value, intent(in) :: lx
+            !! Number of grid cells in the x direction
         integer(c_int), value, intent(in) :: ly
+            !! Number of grid cells in the y direction
         integer(c_int), value, intent(in) :: lz
+            !! Number of grid cells in the z direction
         real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
+            !! Electric and magnetic field values
         integer(c_int), value, intent(in) :: ispec
+            !! Species index
         integer(c_int), value, intent(in) :: npcls
+            !! Number of particles
         real(c_double), intent(in) :: positions(3, npcls)
+            !! Initial positions of the particles
         real(c_double), intent(in) :: velocities(3, npcls)
+            !! Initial velocities of the particles
         real(c_double), value, intent(in) :: dt
+            !! Time step
         integer(c_int), value, intent(in) :: max_step
+            !! Maximum number of steps
         integer(c_int), value, intent(in) :: use_adaptive_dt
+            !! Flag to use adaptive time step
         integer(c_int), value, intent(in) :: max_probabirity_types
+            !! Maximum number of probability types
         real(c_double), intent(out) :: return_probabirities(npcls)
+            !! Array to store calculated probabilities
         real(c_double), intent(out) :: return_positions(3, npcls)
+            !! Array to store final positions
         real(c_double), intent(out) :: return_velocities(3, npcls)
+            !! Array to store final velocities
         integer(c_int), optional, intent(in) :: n_threads
+            !! Number of threads for parallel computation
 
         type(t_ESSimulator) :: simulator
         type(bar_object) :: bar
@@ -196,19 +240,31 @@ contains
     end subroutine
 
     function create_simulator(inppath, length, lx, ly, lz, ebvalues, ispec, max_probabirity_types) result(simulator)
+        !! Create and initialize a new ES simulator object.
+
         character(1, c_char), intent(in) :: inppath(*)
+            !! Path to the input file
         integer(c_int), value, intent(in) :: length
+            !! Length of the input path
         integer(c_int), value, intent(in) :: lx
+            !! Number of grid cells in the x direction
         integer(c_int), value, intent(in) :: ly
+            !! Number of grid cells in the y direction
         integer(c_int), value, intent(in) :: lz
+            !! Number of grid cells in the z direction
         real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
+            !! Electric and magnetic field values
         integer(c_int), value, intent(in) :: ispec
+            !! Species index
         integer(c_int), value, intent(in) :: max_probabirity_types
+            !! Maximum number of probability types
         type(t_ESSimulator) :: simulator
+            !! Simulator object
 
         type(t_VectorFieldGrid), target :: eb
 
         type(t_BoundaryList) :: boundaries
+
         type(tp_Probabirity), allocatable :: probabirity_functions(:)
         integer :: n_probabirity_functions = 0
 
@@ -250,22 +306,33 @@ contains
                                           ispec, &
                                           n_probabirity_functions, &
                                           probabirity_functions)
+        !! Add probability boundaries to the simulator.
+
         type(t_BoundaryList), intent(inout) :: boundaries
+            !! Boundary list
         integer, intent(in) :: ispec
+            !! Species index
         integer, intent(inout) :: n_probabirity_functions
+            !! Number of probability functions
         type(tp_Probabirity), intent(inout) :: probabirity_functions(:)
+            !! Array of probability functions
 
         call add_external_boundaries
 
     contains
 
         subroutine add_external_boundaries
+            !! Add external boundaries to the simulator.
+
             double precision :: vmean(3), vthermal(3)
+                !! Mean velocity and thermal velocity
             class(t_Boundary), pointer :: pbound
             type(t_PlaneXYZ), pointer :: pplane
 
             integer :: tag_zero
+                !! Tag for zero probability boundary
             integer :: tag_vdist
+                !! Tag for maxwellian velocity distribution boundary
 
             vmean(:) = vdri_vector(ispec)
             vthermal(:) = vth_vector(ispec)
@@ -336,8 +403,12 @@ contains
     end subroutine
 
     function vdri_vector(ispec) result(ret)
+        !! Calculate the drift velocity vector.
+
         integer, intent(in) :: ispec
+            !! Species index
         double precision :: ret(3)
+            !! Resulting drift velocity vector
 
         ret(:) = [0d0, 0d0, vdri(ispec)]
         ret(:) = rot3d_y(ret, vdthz(ispec))
@@ -345,8 +416,12 @@ contains
     end function
 
     function vth_vector(ispec) result(ret)
+        !! Calculate the thermal velocity vector.
+
         integer, intent(in) :: ispec
+            !! Species index
         double precision :: ret(3)
+            !! Resulting thermal velocity vector
 
         ret(:) = [peth(ispec), peth(ispec), path(ispec)]
         ret(:) = rot3d_y(ret, phiz)
