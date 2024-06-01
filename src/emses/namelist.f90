@@ -37,10 +37,14 @@ module m_namelist
 contains
 
     subroutine read_namelist(inppath)
-        character(len=*), intent(In) :: inppath
-        integer :: iostat
+        !! Read namelists from a specified input file path.
 
-        ! Convert the array of characters to string.
+        character(len=*), intent(in) :: inppath
+            !! Path to the input file
+
+        integer :: iostat
+            !! I/O status variable
+
         open (10, file=trim(inppath), status='old', iostat=iostat)
 
         rewind (10); read (10, nml=esorem, IOSTAT=iostat)
