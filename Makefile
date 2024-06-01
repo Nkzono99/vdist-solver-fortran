@@ -15,6 +15,10 @@ else
     endif
 endif
 
+export FPM_FC := gfortran
+export FPM_FFLAGS := -Ofast -m64 -fPIC
+export FPM_FFLAGS := $(FPM_FFLAGS) -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow
+
 BUILD_DIR=./build
 
 all: $(LIBNAME)
