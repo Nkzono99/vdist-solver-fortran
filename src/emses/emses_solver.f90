@@ -1,6 +1,6 @@
 module m_emses_solver
     use, intrinsic :: iso_c_binding
-    use omp_lib
+!$  use omp_lib
 
     use m_vector, only: rot3d_y, rot3d_z
     use finbound, only: t_Boundary, t_BoundaryList, &
@@ -129,7 +129,7 @@ contains
         type(bar_object) :: bar
         integer :: ipcl
 
-        integer :: ithread, nthread
+!$      integer :: ithread
 
         simulator = create_simulator(inppath, length, &
                                      lx, ly, lz, &
@@ -143,11 +143,11 @@ contains
                             add_progress_percent=.true.)
         call bar%start
 
-        !$omp parallel private(ithread)
-        nthread = omp_get_num_threads()
-        ithread = omp_get_thread_num()
+        !$omp parallel
 
-        ! Note: Reason for not using the omp do statement
+!$      ithread = omp_get_thread_num()
+
+        ! Note: Reason for using the "omp do schedule(static, 1)" statement
         !     Particles are often passed sorted by position and velocity.
         !     Particles with similar phase values tend to follow similar trajectories.
         !     This results in similar computation times.
@@ -155,13 +155,14 @@ contains
         !     Using the typical omp do method to divide particles evenly can cause an unbalanced load on each thread.
         !     This imbalance means parallelization does not improve speedup.
         !
-        !     Therefore, this process samples from the particle list based on the maximum number of threads.
-        do ipcl = ithread + 1, npcls, nthread
-            if (ithread == 0) then
+        !     Therefore, this process samples every chunk size (= 1) from the particle list.
+        !$omp do schedule(static, 1)
+        do ipcl = 1, npcls
+!$          if (ithread == 0) then
                 ! When you print a progress bar to 100%, the opening is printed.
                 ! Therefore, it is modified to print 99% until the last particle is processed.
                 call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
-            end if
+!$          end if
 
             block
                 type(t_ProbabirityRecord) :: record
@@ -179,6 +180,7 @@ contains
                 end if
             end block
         end do
+        !$omp end do
         !$omp end parallel
 
         call bar%update(current=1d0)
