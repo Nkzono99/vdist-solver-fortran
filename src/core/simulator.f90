@@ -31,7 +31,6 @@ module m_simulator
         integer :: nx
         integer :: ny
         integer :: nz
-        double precision :: q_m
         integer :: boundary_conditions(3)
         class(t_VectorField), allocatable :: eb
         type(t_BoundaryList) :: boundaries
@@ -47,7 +46,6 @@ module m_simulator
 contains
 
     function new_ESSimulator(nx, ny, nz, &
-                             q_m, &
                              boundary_conditions, &
                              eb, &
                              boundaries, &
@@ -55,7 +53,6 @@ contains
         integer, intent(in) :: nx
         integer, intent(in) :: ny
         integer, intent(in) :: nz
-        double precision, intent(in) :: q_m
         integer, intent(in) :: boundary_conditions(3)
         class(t_VectorField), intent(in) :: eb
         type(t_BoundaryList), intent(in) :: boundaries
@@ -66,7 +63,6 @@ contains
         obj%nx = nx
         obj%ny = ny
         obj%nz = nz
-        obj%q_m = q_m
         obj%boundary_conditions(:) = boundary_conditions(:)
         obj%eb = eb
         obj%boundaries = boundaries
@@ -234,15 +230,15 @@ contains
             ef(:) = eb(1:3)
             bf(:) = eb(4:6)
 
-            t = bf*self%q_m*dt2
+            t = bf*particle%q_m*dt2
             s = 2*t/(1 + t*t)
 
-            upm = particle%velocity + self%q_m*ef*dt2
+            upm = particle%velocity + particle%q_m*ef*dt2
 
             upa = upm + cross(upm, t)
             upp = upm + cross(upa, s)
 
-            velocity_new = upp + self%q_m*ef*dt2
+            velocity_new = upp + particle%q_m*ef*dt2
         end block
 
         ret%t = particle%t + dt
