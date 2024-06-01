@@ -172,6 +172,7 @@ contains
                 double precision :: r
 
                 r = record%t
+                pcl_new%q_m = pcl%q_m
                 pcl_new%position = pcl%position*(1d0 - r) + pcl_new%position*r
                 pcl_new%velocity = pcl%velocity*(1d0 - r) + pcl_new%velocity*r
                 pcl_new%t = pcl%t + r
@@ -242,6 +243,7 @@ contains
         end block
 
         ret%t = particle%t + dt
+        ret%q_m = particle%q_m
         ret%position = position_new
         ret%velocity = velocity_new
     end function
