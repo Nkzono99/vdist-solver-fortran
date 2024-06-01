@@ -1,5 +1,6 @@
 module m_emses_solver
     use, intrinsic :: iso_c_binding
+    use omp_lib
 
     use m_vector, only: rot3d_y, rot3d_z
     use finbound, only: t_Boundary, t_BoundaryList, &
@@ -128,6 +129,8 @@ contains
         type(bar_object) :: bar
         integer :: ipcl
 
+        integer :: ithread, nthread
+
         simulator = create_simulator(inppath, length, &
                                      lx, ly, lz, &
                                      ebvalues, &
@@ -140,13 +143,24 @@ contains
                             add_progress_percent=.true.)
         call bar%start
 
-        do ipcl = 1, npcls
-            ! When you print a progress bar to 100%, the opening is printed.
-            ! Therefore, it is modified to print 99% until the last particle is processed.
-            if (ipcl < npcls) then
+        !$omp parallel private(ithread)
+        nthread = omp_get_num_threads()
+        ithread = omp_get_thread_num()
+
+        ! Note: Reason for not using the omp do statement
+        !     Particles are often passed sorted by position and velocity.
+        !     Particles with similar phase values tend to follow similar trajectories.
+        !     This results in similar computation times.
+        !
+        !     Using the typical omp do method to divide particles evenly can cause an unbalanced load on each thread.
+        !     This imbalance means parallelization does not improve speedup.
+        !
+        !     Therefore, this process samples from the particle list based on the maximum number of threads.
+        do ipcl = ithread + 1, npcls, nthread
+            if (ithread == 0) then
+                ! When you print a progress bar to 100%, the opening is printed.
+                ! Therefore, it is modified to print 99% until the last particle is processed.
                 call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
-            else ! if (ipcl == npcls)
-                call bar%update(current=1d0)
             end if
 
             block
@@ -165,6 +179,9 @@ contains
                 end if
             end block
         end do
+        !$omp end parallel
+
+        call bar%update(current=1d0)
 
         call bar%destroy
         call simulator%boundaries%destroy
