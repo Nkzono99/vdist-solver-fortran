@@ -25,7 +25,7 @@ module m_emses_solver
     implicit none
 
     private
-    public get_probabirities
+    public get_probabilities
 
 contains
 
@@ -39,7 +39,7 @@ contains
                              dt, &
                              max_step, &
                              use_adaptive_dt, &
-                             max_probabirity_types, &
+                             max_probability_types, &
                              return_ts, &
                              return_positions, &
                              return_velocities, &
@@ -71,7 +71,7 @@ contains
             !! Maximum number of steps
         integer(c_int), value, intent(in) :: use_adaptive_dt
             !! Flag to use adaptive time step
-        integer(c_int), value, intent(in) :: max_probabirity_types
+        integer(c_int), value, intent(in) :: max_probability_types
             !! Maximum number of probability types
         real(c_double), intent(out) :: return_ts(max_step)
             !! Array to store time steps
@@ -88,7 +88,7 @@ contains
                                      lx, ly, lz, &
                                      ebvalues, &
                                      ispec, &
-                                     max_probabirity_types)
+                                     max_probability_types)
 
         block
             type(t_Particle) :: particle
@@ -115,7 +115,7 @@ contains
         call simulator%boundaries%destroy
     end subroutine
 
-    subroutine get_probabirities(inppath, &
+    subroutine get_probabilities(inppath, &
                                  length, &
                                  lx, ly, lz, &
                                  ebvalues, &
@@ -126,8 +126,8 @@ contains
                                  dt, &
                                  max_step, &
                                  use_adaptive_dt, &
-                                 max_probabirity_types, &
-                                 return_probabirities, &
+                                 max_probability_types, &
+                                 return_probabilities, &
                                  return_positions, &
                                  return_velocities, &
                                  n_threads &
@@ -160,9 +160,9 @@ contains
             !! Maximum number of steps
         integer(c_int), value, intent(in) :: use_adaptive_dt
             !! Flag to use adaptive time step
-        integer(c_int), value, intent(in) :: max_probabirity_types
+        integer(c_int), value, intent(in) :: max_probability_types
             !! Maximum number of probability types
-        real(c_double), intent(out) :: return_probabirities(npcls)
+        real(c_double), intent(out) :: return_probabilities(npcls)
             !! Array to store calculated probabilities
         real(c_double), intent(out) :: return_positions(3, npcls)
             !! Array to store final positions
@@ -181,7 +181,7 @@ contains
                                      lx, ly, lz, &
                                      ebvalues, &
                                      ispec, &
-                                     max_probabirity_types)
+                                     max_probability_types)
 
         call bar%initialize(filled_char_string='+', &
                             prefix_string='progress |', &
@@ -215,18 +215,18 @@ contains
 !$          end if
 
             block
-                type(t_ProbabirityRecord) :: record
+                type(t_ProbabilityRecord) :: record
                 type(t_Particle) :: particle
 
                 particle = new_Particle(qm(ispec), positions(:, ipcl), velocities(:, ipcl))
-                record = simulator%calculate_probabirity(particle, dt, max_step, use_adaptive_dt == 1)
+                record = simulator%calculate_probability(particle, dt, max_step, use_adaptive_dt == 1)
 
                 if (record%is_valid) then
-                    return_probabirities(ipcl) = record%probabirity
+                    return_probabilities(ipcl) = record%probability
                     return_positions(:, ipcl) = record%particle%position(:)
                     return_velocities(:, ipcl) = record%particle%velocity(:)
                 else
-                    return_probabirities(ipcl) = -1.0d0
+                    return_probabilities(ipcl) = -1.0d0
                 end if
             end block
         end do
@@ -239,7 +239,7 @@ contains
         call simulator%boundaries%destroy
     end subroutine
 
-    function create_simulator(inppath, length, lx, ly, lz, ebvalues, ispec, max_probabirity_types) result(simulator)
+    function create_simulator(inppath, length, lx, ly, lz, ebvalues, ispec, max_probability_types) result(simulator)
         !! Create and initialize a new ES simulator object.
 
         character(1, c_char), intent(in) :: inppath(*)
@@ -256,7 +256,7 @@ contains
             !! Electric and magnetic field values
         integer(c_int), value, intent(in) :: ispec
             !! Species index
-        integer(c_int), value, intent(in) :: max_probabirity_types
+        integer(c_int), value, intent(in) :: max_probability_types
             !! Maximum number of probability types
         type(t_ESSimulator) :: simulator
             !! Simulator object
@@ -265,10 +265,10 @@ contains
 
         type(t_BoundaryList) :: boundaries
 
-        type(tp_Probabirity), allocatable :: probabirity_functions(:)
-        integer :: n_probabirity_functions = 0
+        type(tp_Probability), allocatable :: probability_functions(:)
+        integer :: n_probability_functions = 0
 
-        allocate (probabirity_functions(max_probabirity_types))
+        allocate (probability_functions(max_probability_types))
 
         block
             character(length) :: s
@@ -283,38 +283,38 @@ contains
             integer :: isdoms(2, 3)
             integer :: boundary_conditions(3)
 
-            allocate (probabirity_functions(n_probabirity_functions + 1)%ref, source=new_ZeroProbabirity())
-            n_probabirity_functions = n_probabirity_functions + 1
+            allocate (probability_functions(n_probability_functions + 1)%ref, source=new_ZeroProbability())
+            n_probability_functions = n_probability_functions + 1
 
             isdoms = reshape([[0, lx], [0, ly], [0, lz]], [2, 3])
-            boundaries = create_simple_collision_boundaries(isdoms, tag=n_probabirity_functions)
+            boundaries = create_simple_collision_boundaries(isdoms, tag=n_probability_functions)
 
             eb = new_VectorFieldGrid(6, lx, ly, lz, ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1))
 
-            call add_probabirity_boundaries(boundaries, ispec, n_probabirity_functions, probabirity_functions)
+            call add_probability_boundaries(boundaries, ispec, n_probability_functions, probability_functions)
 
             boundary_conditions(:) = npbnd(:, ispec)
             simulator = new_ESSimulator(lx, ly, lz, &
                                         boundary_conditions, &
                                         eb, &
                                         boundaries, &
-                                        probabirity_functions)
+                                        probability_functions)
         end block
     end function
 
-    subroutine add_probabirity_boundaries(boundaries, &
+    subroutine add_probability_boundaries(boundaries, &
                                           ispec, &
-                                          n_probabirity_functions, &
-                                          probabirity_functions)
+                                          n_probability_functions, &
+                                          probability_functions)
         !! Add probability boundaries to the simulator.
 
         type(t_BoundaryList), intent(inout) :: boundaries
             !! Boundary list
         integer, intent(in) :: ispec
             !! Species index
-        integer, intent(inout) :: n_probabirity_functions
+        integer, intent(inout) :: n_probability_functions
             !! Number of probability functions
-        type(tp_Probabirity), intent(inout) :: probabirity_functions(:)
+        type(tp_Probability), intent(inout) :: probability_functions(:)
             !! Array of probability functions
 
         call add_external_boundaries
@@ -337,15 +337,15 @@ contains
             vmean(:) = vdri_vector(ispec)
             vthermal(:) = vth_vector(ispec)
 
-            allocate (probabirity_functions(n_probabirity_functions + 1)%ref, &
-                      source=new_ZeroProbabirity())
-            n_probabirity_functions = n_probabirity_functions + 1
-            tag_zero = n_probabirity_functions
+            allocate (probability_functions(n_probability_functions + 1)%ref, &
+                      source=new_ZeroProbability())
+            n_probability_functions = n_probability_functions + 1
+            tag_zero = n_probability_functions
 
-            allocate (probabirity_functions(n_probabirity_functions + 1)%ref, &
-                      source=new_MaxwellianProbabirity(vmean, vthermal))
-            n_probabirity_functions = n_probabirity_functions + 1
-            tag_vdist = n_probabirity_functions
+            allocate (probability_functions(n_probability_functions + 1)%ref, &
+                      source=new_MaxwellianProbability(vmean, vthermal))
+            n_probability_functions = n_probability_functions + 1
+            tag_vdist = n_probability_functions
 
             if (npbnd(1, ispec) == 2) then ! X-Boundary
                 ! X lower boundary

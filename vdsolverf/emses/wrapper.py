@@ -32,7 +32,7 @@ def get_backtrace(
     dt: float,
     max_step: int,
     use_adaptive_dt: bool = False,
-    max_probabirity_types: int = 100,
+    max_probability_types: int = 100,
     os: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
 ):
@@ -59,7 +59,7 @@ def get_backtrace(
         dt=dt,
         max_step=max_step,
         use_adaptive_dt=use_adaptive_dt,
-        max_probabirity_types=max_probabirity_types,
+        max_probability_types=max_probability_types,
         dll=dll,
     )
 
@@ -83,7 +83,7 @@ def get_backtrace_dll(
     dt: float,
     max_step: int,
     use_adaptive_dt: bool,
-    max_probabirity_types: int,
+    max_probability_types: int,
     dll: Union[CDLL, "WinDLL"],
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     dll.get_backtrace.argtypes = [
@@ -99,13 +99,13 @@ def get_backtrace_dll(
         c_double,  # dt
         c_int,  # max_step
         c_int,  # use_adaptive_dt
-        c_int,  # max_probabirity_types
+        c_int,  # max_probability_types
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_ts
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_positions
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_velocities
         POINTER(c_int),  # return_last_step
     ]
-    dll.get_probabirities.restype = None
+    dll.get_probabilities.restype = None
 
     data = emout.Emout(directory)
 
@@ -131,7 +131,7 @@ def get_backtrace_dll(
         _dt = c_double(dt)
         _max_step = c_int(max_step)
         _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
-        _max_probabirity_types = c_int(max_probabirity_types)
+        _max_probability_types = c_int(max_probability_types)
         _return_last_index = c_int()
 
         dll.get_backtrace(
@@ -147,7 +147,7 @@ def get_backtrace_dll(
             _dt,
             _max_step,
             _use_adaptive_dt,
-            _max_probabirity_types,
+            _max_probability_types,
             return_ts,
             return_positions,
             return_velocities,
@@ -162,7 +162,7 @@ def get_backtrace_dll(
     return ts, positions, velocities
 
 
-def get_probabirities(
+def get_probabilities(
     directory: PathLike,
     ispec: int,
     istep: int,
@@ -170,7 +170,7 @@ def get_probabirities(
     dt: float,
     max_step: int,
     use_adaptive_dt: bool = False,
-    max_probabirity_types: int = 100,
+    max_probability_types: int = 100,
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
@@ -192,7 +192,7 @@ def get_probabirities(
     else:
         raise RuntimeError(f"This platform is not supported: {system}")
 
-    result = get_probabirities_dll(
+    result = get_probabilities_dll(
         directory=directory,
         ispec=ispec,
         istep=istep,
@@ -200,7 +200,7 @@ def get_probabirities(
         dt=dt,
         max_step=max_step,
         use_adaptive_dt=use_adaptive_dt,
-        max_probabirity_types=max_probabirity_types,
+        max_probability_types=max_probability_types,
         dll=dll,
         n_threads=n_threads,
     )
@@ -217,7 +217,7 @@ def get_probabirities(
     return result
 
 
-def get_probabirities_dll(
+def get_probabilities_dll(
     directory: PathLike,
     ispec: int,
     istep: int,
@@ -225,11 +225,11 @@ def get_probabirities_dll(
     dt: float,
     max_step: int,
     use_adaptive_dt: bool,
-    max_probabirity_types: int,
+    max_probability_types: int,
     dll: Union[CDLL, "WinDLL"],
     n_threads: int = 1,
 ) -> Tuple[np.ndarray, List[Particle]]:
-    dll.get_probabirities.argtypes = [
+    dll.get_probabilities.argtypes = [
         c_char_p,  # inppath
         c_int,  # length
         c_int,  # lx
@@ -243,19 +243,19 @@ def get_probabirities_dll(
         c_double,  # dt
         c_int,  # max_step
         c_int,  # use_adaptive_dt
-        c_int,  # max_probabirity_types
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_probabirities
+        c_int,  # max_probability_types
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_probabilities
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_positions
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_velocities
         POINTER(c_int),  # n_threads
     ]
-    dll.get_probabirities.restype = None
+    dll.get_probabilities.restype = None
 
     data = emout.Emout(directory)
 
     ebvalues = create_relocated_ebvalues(data, istep)
 
-    return_probabirities = np.empty(len(particles), dtype=np.float64)
+    return_probabilities = np.empty(len(particles), dtype=np.float64)
     return_positions = np.empty((len(particles), 3), dtype=np.float64)
     return_velocities = np.empty((len(particles), 3), dtype=np.float64)
 
@@ -276,10 +276,10 @@ def get_probabirities_dll(
         _dt = c_double(dt)
         _max_step = c_int(max_step)
         _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
-        _max_probabirity_types = c_int(max_probabirity_types)
+        _max_probability_types = c_int(max_probability_types)
         _n_threads = c_int(n_threads)
 
-        dll.get_probabirities(
+        dll.get_probabilities(
             _inppath,
             _length,
             _nx,
@@ -293,8 +293,8 @@ def get_probabirities_dll(
             _dt,
             _max_step,
             _use_adaptive_dt,
-            _max_probabirity_types,
-            return_probabirities,
+            _max_probability_types,
+            return_probabilities,
             return_positions,
             return_velocities,
             byref(_n_threads),
@@ -304,9 +304,9 @@ def get_probabirities_dll(
         Particle(pos, vel) for pos, vel in zip(return_positions, return_velocities)
     ]
 
-    return_probabirities[return_probabirities == -1] = np.nan
+    return_probabilities[return_probabilities == -1] = np.nan
 
-    return return_probabirities, return_particles
+    return return_probabilities, return_particles
 
 
 def create_relocated_ebvalues(data: emout.Emout, istep: int) -> np.ndarray:
