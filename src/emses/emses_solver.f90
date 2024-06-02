@@ -10,15 +10,13 @@ module m_emses_solver
     use m_vector, only: rot3d_y, rot3d_z
     use finbound, only: t_Boundary, t_BoundaryList, &
                         t_PlaneXYZ, &
-                        new_PlaneX, new_PlaneY, new_PlaneZ
+                        new_PlaneX, new_PlaneY, new_PlaneZ, &
+                        t_RectangleXYZ, &
+                        new_RectangleX, new_RectangleY, new_RectangleZ
     use forbear, only: bar_object
 
     use m_vdsolverf_core
-    use allcom, only: npbnd, phiz, phixy, &
-                      nx, ny, nz, &
-                      zssurf, &
-                      peth, path, vdri, vdthz, vdthxy, &
-                      qm, wc
+    use allcom
     use m_namelist
     use emses_boundaries
 
@@ -318,6 +316,7 @@ contains
             !! Array of probability functions
 
         call add_external_boundaries
+        call add_emission_surface(priority=1)
 
     contains
 
@@ -400,32 +399,65 @@ contains
             end if
         end subroutine
 
+        subroutine add_emission_surface(priority)
+            integer, intent(in) :: priority
+
+            integer :: iepl_start, iepl_end
+            integer :: iepl
+            integer :: tag_vdist
+
+            if (nepl(ispec) == 0) then
+                return
+            end if
+
+            if (ispec == 1) then
+                iepl_start = 1
+            else
+                iepl_start = sum(nepl(1:ispec - 1)) + 1
+            end if
+
+            iepl_end = sum(nepl(1:ispec))
+
+            do iepl = iepl_start, iepl_end
+                block
+                    double precision :: vmean(3)
+                    double precision :: vthermal(3)
+
+                    vmean = emission_vdri_vector(ispec, iepl)
+                    vthermal = emission_vth_vector(ispec, iepl)
+
+                    allocate (probability_functions(n_probability_functions + 1)%ref, &
+                              source=new_MaxwellianProbability(vmean, vthermal))
+                    n_probability_functions = n_probability_functions + 1
+                    tag_vdist = n_probability_functions
+                end block
+
+                block
+                    class(t_RectangleXYZ), pointer :: prect
+                    class(t_Boundary), pointer :: pbound
+                    double precision :: origin(3), wx, wy, wz
+
+                    origin(:) = [xmine(iepl), ymine(iepl), zmine(iepl)]
+                    wx = xmaxe(iepl) - xmine(iepl)
+                    wy = ymaxe(iepl) - ymine(iepl)
+                    wz = zmaxe(iepl) - zmine(iepl)
+
+                    if (abs(nemd(iepl)) == 1) then
+                        allocate (prect, source=new_RectangleX(origin, wy, wz))
+                    else if (abs(nemd(iepl)) == 2) then
+                        allocate (prect, source=new_RectangleY(origin, wy, wz))
+                    else if (abs(nemd(iepl)) == 3) then
+                        allocate (prect, source=new_RectangleZ(origin, wy, wz))
+                    end if
+                    prect%priority = priority
+
+                    pbound => prect
+                    pbound%material%tag = tag_vdist
+                    call boundaries%add_boundary(pbound)
+                end block
+            end do
+        end subroutine
+
     end subroutine
-
-    function vdri_vector(ispec) result(ret)
-        !! Calculate the drift velocity vector.
-
-        integer, intent(in) :: ispec
-            !! Species index
-        double precision :: ret(3)
-            !! Resulting drift velocity vector
-
-        ret(:) = [0d0, 0d0, vdri(ispec)]
-        ret(:) = rot3d_y(ret, vdthz(ispec))
-        ret(:) = rot3d_z(ret, vdthxy(ispec))
-    end function
-
-    function vth_vector(ispec) result(ret)
-        !! Calculate the thermal velocity vector.
-
-        integer, intent(in) :: ispec
-            !! Species index
-        double precision :: ret(3)
-            !! Resulting thermal velocity vector
-
-        ret(:) = [peth(ispec), peth(ispec), path(ispec)]
-        ret(:) = rot3d_y(ret, phiz)
-        ret(:) = rot3d_z(ret, phixy)
-    end function
 
 end module

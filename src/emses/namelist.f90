@@ -17,7 +17,8 @@ module m_namelist
 
     namelist /system/ nspec, npbnd
 
-    namelist /intp/ qm, path, peth, vdri, vdthz, vdthxy
+    namelist /intp/ qm, path, peth, vdri, vdthz, vdthxy, &
+        spa, spe, speth
 
     namelist /ptcond/ boundary_type, boundary_types, &
         zssurf, &
