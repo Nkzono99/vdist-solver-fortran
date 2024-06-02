@@ -81,12 +81,14 @@ contains
             !! Last step index
 
         type(t_ESSimulator) :: simulator
+        type(t_Solver) :: solver
 
         simulator = create_simulator(inppath, length, &
                                      lx, ly, lz, &
                                      ebvalues, &
                                      ispec, &
                                      max_probability_types)
+        solver = new_Solver(simulator)
 
         block
             type(t_Particle) :: particle
@@ -95,9 +97,9 @@ contains
             type(t_Particle) :: trace
 
             particle = new_Particle(qm(ispec), position(:), velocity(:))
-            record = simulator%backtrace(particle, &
-                                         dt, max_step, &
-                                         use_adaptive_dt == 1)
+            record = solver%backtrace(particle, &
+                                      dt, max_step, &
+                                      use_adaptive_dt == 1)
 
             do istep = 1, record%last_step
                 trace = record%traces(istep)
@@ -170,6 +172,8 @@ contains
             !! Number of threads for parallel computation
 
         type(t_ESSimulator) :: simulator
+        type(t_Solver) :: solver
+
         type(bar_object) :: bar
         integer :: ipcl
 
@@ -180,6 +184,7 @@ contains
                                      ebvalues, &
                                      ispec, &
                                      max_probability_types)
+        solver = new_Solver(simulator)
 
         call bar%initialize(filled_char_string='+', &
                             prefix_string='progress |', &
@@ -217,7 +222,7 @@ contains
                 type(t_Particle) :: particle
 
                 particle = new_Particle(qm(ispec), positions(:, ipcl), velocities(:, ipcl))
-                record = simulator%calculate_probability(particle, dt, max_step, use_adaptive_dt == 1)
+                record = solver%calculate_probability(particle, dt, max_step, use_adaptive_dt == 1)
 
                 if (record%is_valid) then
                     return_probabilities(ipcl) = record%probability
