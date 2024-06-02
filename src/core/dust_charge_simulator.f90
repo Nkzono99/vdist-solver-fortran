@@ -36,7 +36,7 @@ module m_dust_charge_simulator
             !! Number of grid cells in the z direction
         integer :: nspec
         double precision, allocatable :: temperatures(:)
-        type(t_VectorFieldGrid), allocatable :: currents(:)
+        class(t_VectorField), allocatable :: currents(:)
 
         double precision :: jph0 = 0d0
 
@@ -91,7 +91,7 @@ contains
             !! Number of grid points in the z direction
         integer, intent(in) :: nspec
         double precision, intent(in) :: temperatures(nspec)
-        double precision, intent(in) :: currents(3, nx, ny, nz, nspec)
+        class(t_VectorField), intent(in) :: currents(nspec)
         double precision, intent(in), optional :: jph0
 
         type(t_DustChargeSimulator) :: obj
@@ -105,9 +105,7 @@ contains
 
         obj%temperatures = temperatures(:)
 
-        do ispec = 1, nspec
-            obj%currents(ispec) = new_VectorFieldGrid(3, nx, ny, nz, currents(:, :, :, :, ispec))
-        end do
+        obj%currents = currents
 
         if (present(jph0)) then
             obj%jph0 = jph0

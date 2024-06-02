@@ -13,6 +13,7 @@ module m_solver
     public new_Solver
     public t_BacktraceRecord
     public t_ProbabilityRecord
+    public t_DustBacktraceRecord
 
     type t_BacktraceRecord
         !! Record for storing backtrace information
