@@ -53,6 +53,12 @@ module allcom
         !! Drift velocity angle from z-axis
     double precision :: vdthxy(max_nspec)
         !! Drift velocity angle in XY plane
+    double precision :: spa(max_nspec) = 0d0
+        !! Drift velocity along the background magnetic field for each species
+    double precision :: spe(max_nspec) = 0d0
+        !! Drift velocity perpendicular to the background magnetic field for each species
+    double precision :: speth(max_nspec) = 0d0
+        !! The angle of drift velocity perpendicular to the background magnetic field for each species
 
     ! /ptcond/
     real(kind=8) :: zssurf = -9999.0d0

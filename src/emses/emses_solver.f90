@@ -17,12 +17,19 @@ module m_emses_solver
     use allcom, only: npbnd, phiz, phixy, &
                       nx, ny, nz, &
                       zssurf, &
-                      peth, path, vdri, vdthz, vdthxy, &
+                      peth, path, &
+                      vdri, vdthz, vdthxy, &
+                      spa, spe, speth, &
                       qm, wc
     use m_namelist
     use emses_boundaries
 
     implicit none
+
+    double precision, parameter :: pi = acos(-1.0d0)
+        !! The mathematical constant pi
+    double precision, parameter :: DEG2RAD = pi/180d0
+        !! Coefficient to convert from degrees to radians
 
     private
     public get_probabilities
@@ -410,9 +417,19 @@ contains
         double precision :: ret(3)
             !! Resulting drift velocity vector
 
-        ret(:) = [0d0, 0d0, vdri(ispec)]
-        ret(:) = rot3d_y(ret, vdthz(ispec))
-        ret(:) = rot3d_z(ret, vdthxy(ispec))
+        double precision :: vdri_from_spa(3)
+        double precision :: vdri_from_vdri(3)
+
+        vdri_from_spa(:) = [spe(ispec), 0d0, spa(ispec)]
+        vdri_from_spa(:) = rot3d_z(vdri_from_spa, speth(ispec))
+        vdri_from_spa(:) = rot3d_y(vdri_from_spa, phiz*DEG2RAD)
+        vdri_from_spa(:) = rot3d_z(vdri_from_spa, phixy*DEG2RAD)
+
+        vdri_from_vdri(:) = [0d0, 0d0, vdri(ispec)]
+        vdri_from_vdri(:) = rot3d_y(vdri_from_vdri, vdthz(ispec)*DEG2RAD)
+        vdri_from_vdri(:) = rot3d_z(vdri_from_vdri, vdthxy(ispec)*DEG2RAD)
+
+        ret(:) = vdri_from_spa + vdri_from_vdri
     end function
 
     function vth_vector(ispec) result(ret)
@@ -424,8 +441,8 @@ contains
             !! Resulting thermal velocity vector
 
         ret(:) = [peth(ispec), peth(ispec), path(ispec)]
-        ret(:) = rot3d_y(ret, phiz)
-        ret(:) = rot3d_z(ret, phixy)
+        ret(:) = rot3d_y(ret, phiz*DEG2RAD)
+        ret(:) = rot3d_z(ret, phixy*DEG2RAD)
     end function
 
 end module

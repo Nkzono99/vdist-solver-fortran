@@ -8,7 +8,7 @@ TMP_INP_KEYS = {
     "plasma": ["wp", "wc", "phixy", "phiz"],
     "tmgrid": ["dt", "nx", "ny", "nz"],
     "system": ["nspec", "npbnd"],
-    "intp": ["qm", "path", "peth", "vdri", "vdthz", "vdthxy"],
+    "intp": ["qm", "path", "peth", "vdri", "vdthz", "vdthxy", "spa", "spe", "speth"],
     "ptcond": [
         "zssurf",
         "xlrechole",
