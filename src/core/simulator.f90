@@ -13,30 +13,6 @@ module m_simulator
     private
     public t_ESSimulator
     public new_ESSimulator
-    public t_BacktraceRecord
-    public t_ProbabilityRecord
-
-    type t_BacktraceRecord
-        !! Record for storing backtrace information
-        type(t_Particle), allocatable :: traces(:)
-            !! Array of particle traces
-        double precision, allocatable :: ts(:)
-            !! Array of time steps
-        integer :: last_step
-            !! Last step in the backtrace
-    end type
-
-    type t_ProbabilityRecord
-        !! Record for storing probability calculation results
-        logical :: is_valid = .false.
-            !! Flag indicating if the record is valid (If .false., probability calculation is not completed within max_step)
-        double precision :: t
-            !! Time at which the probability is calculated since the start of the simulation
-        double precision :: probability
-            !! Calculated probability
-        type(t_Particle) :: particle
-            !! Particle state at the time of calculation probability
-    end type
 
     type t_ESSimulator
         !! Electric static simulator for particle dynamics
