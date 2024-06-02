@@ -55,14 +55,10 @@ module m_simulator
         type(tp_Probability), allocatable :: probability_functions(:)
             !! Array of probability functions
     contains
-        procedure :: backtrace => esSimulator_backtrace
-            !! Perform a backtrace of a particle
-        procedure :: calculate_probability => esSimulator_calculate_probability
-            !! Calculate the probability for a particle
-        procedure :: backward => esSimulator_backward
-            !! Perform a backward step for a particle
         procedure :: update => esSimulator_update
             !! Update the state of a particle
+        procedure :: backward => esSimulator_backward
+            !! Perform a backward step for a particle
         procedure :: apply_boundary_condition => esSimulator_apply_boundary_condition
             !! Apply boundary conditions to a particle
     end type
@@ -111,92 +107,6 @@ contains
         end block
     end function
 
-    function esSimulator_backtrace(self, particle, dt, max_step, use_adaptive_dt) result(ret)
-        !! Perform a backtrace of a particle.
-
-        class(t_ESSimulator), intent(in) :: self
-            !! Instance of the ES simulator
-        class(t_Particle), intent(in) :: particle
-            !! Particle to backtrace
-        double precision, intent(in) :: dt
-            !! Time step width for backtracing
-        integer, intent(in) :: max_step
-            !! Maximum number of steps
-        logical, intent(in) :: use_adaptive_dt
-            !! Flag to use adaptive time step
-        type(t_BacktraceRecord) :: ret
-            !! Backtrace record
-
-        integer :: istep
-        type(t_Particle) :: pcl
-
-        pcl = particle
-        call self%apply_boundary_condition(pcl)
-
-        allocate (ret%traces(max_step))
-        allocate (ret%ts(max_step))
-        ret%traces(1) = pcl
-
-        do istep = 2, max_step
-            block
-                type(t_CollisionRecord) :: record
-                pcl = self%update(pcl, dt, use_adaptive_dt, record)
-
-                ret%traces(istep) = pcl
-                ret%ts(istep) = pcl%t
-
-                if (record%is_collided) then
-                    ret%last_step = istep
-                    return
-                end if
-            end block
-        end do
-
-        ret%last_step = max_step
-    end function
-
-    function esSimulator_calculate_probability(self, particle, dt, max_step, use_adaptive_dt) result(ret)
-        !! Calculate the probability for a particle.
-
-        class(t_ESSimulator), intent(in) :: self
-            !! Instance of the ES simulator
-        class(t_Particle), intent(in) :: particle
-            !! Particle for which to calculate the probability
-        double precision, intent(in) :: dt
-            !! Time step for the calculation
-        integer, intent(in) :: max_step
-            !! Maximum number of steps
-        logical, intent(in) :: use_adaptive_dt
-            !! Flag to use adaptive time step
-        type(t_ProbabilityRecord) :: ret
-            !! Probability record
-
-        integer :: i
-        type(t_Particle) :: pcl
-
-        pcl = particle
-        call self%apply_boundary_condition(pcl)
-
-        do i = 1, max_step
-            block
-                type(t_CollisionRecord) :: record
-                type(tp_Probability), allocatable :: probability_function
-                pcl = self%update(pcl, dt, use_adaptive_dt, record)
-
-                if (record%is_collided) then
-                    ret%is_valid = .true.
-                    ret%particle = pcl
-
-                    probability_function = self%probability_functions(record%material%tag)
-                    ret%probability = probability_function%at(pcl%position, pcl%velocity)
-                    return
-                end if
-            end block
-        end do
-
-        ret%is_valid = .false.
-    end function
-
     function esSimulator_update(self, pcl, dt, use_adaptive_dt, record) result(pcl_new)
         !! Update the state of a particle.
 
@@ -241,32 +151,6 @@ contains
 
         call self%apply_boundary_condition(pcl_new)
     end function
-
-    subroutine esSimulator_apply_boundary_condition(self, particle)
-        !! Apply boundary conditions to a particle.
-
-        class(t_ESSimulator), intent(in) :: self
-            !! Instance of the ES simulator
-        class(t_Particle), intent(inout) :: particle
-            !! Particle to apply boundary conditions to
-
-        integer :: i
-        double precision :: nxyz(3)
-
-        nxyz(1) = self%nx
-        nxyz(2) = self%ny
-        nxyz(3) = self%nz
-
-        do i = 1, 3
-            if (self%boundary_conditions(i) == 0) then
-                ! Periodic boundary condition
-                particle%position(i) = modulo(particle%position(i), nxyz(i))
-            else if (self%boundary_conditions(i) == 1) then
-                ! Reflective boundary condition
-                particle%position(i) = modulo(2*nxyz(i) - particle%position(i), nxyz(i))
-            end if
-        end do
-    end subroutine
 
     function esSimulator_backward(self, particle, dt) result(ret)
         !! Perform a backward step for a particle.
@@ -318,5 +202,31 @@ contains
         ret%position = position_new
         ret%velocity = velocity_new
     end function
+
+    subroutine esSimulator_apply_boundary_condition(self, particle)
+        !! Apply boundary conditions to a particle.
+
+        class(t_ESSimulator), intent(in) :: self
+            !! Instance of the ES simulator
+        class(t_Particle), intent(inout) :: particle
+            !! Particle to apply boundary conditions to
+
+        integer :: i
+        double precision :: nxyz(3)
+
+        nxyz(1) = self%nx
+        nxyz(2) = self%ny
+        nxyz(3) = self%nz
+
+        do i = 1, 3
+            if (self%boundary_conditions(i) == 0) then
+                ! Periodic boundary condition
+                particle%position(i) = modulo(particle%position(i), nxyz(i))
+            else if (self%boundary_conditions(i) == 1) then
+                ! Reflective boundary condition
+                particle%position(i) = modulo(2*nxyz(i) - particle%position(i), nxyz(i))
+            end if
+        end do
+    end subroutine
 
 end module
