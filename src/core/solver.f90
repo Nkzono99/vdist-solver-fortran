@@ -60,7 +60,16 @@ contains
         do istep = 2, max_step
             block
                 type(t_CollisionRecord) :: record
-                pcl = self%simulator%update(pcl, dt, use_adaptive_dt, record)
+
+                double precision :: tmp_dt
+
+                if (use_adaptive_dt) then
+                    tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
+                else
+                    tmp_dt = dt
+                end if
+
+                pcl = self%simulator%update(pcl, tmp_dt, record)
 
                 ret%traces(istep) = pcl
                 ret%ts(istep) = pcl%t
@@ -101,7 +110,16 @@ contains
             block
                 type(t_CollisionRecord) :: record
                 type(tp_Probability), allocatable :: probability_function
-                pcl = self%simulator%update(pcl, dt, use_adaptive_dt, record)
+
+                double precision :: tmp_dt
+
+                if (use_adaptive_dt) then
+                    tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
+                else
+                    tmp_dt = dt
+                end if
+
+                pcl = self%simulator%update(pcl, tmp_dt, record)
 
                 if (record%is_collided) then
                     ret%is_valid = .true.

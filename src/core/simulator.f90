@@ -107,7 +107,7 @@ contains
         end block
     end function
 
-    function esSimulator_update(self, pcl, dt, use_adaptive_dt, record) result(pcl_new)
+    function esSimulator_update(self, pcl, dt, record) result(pcl_new)
         !! Update the state of a particle.
 
         class(t_ESSimulator), intent(in) :: self
@@ -116,22 +116,12 @@ contains
             !! Particle to update
         double precision, intent(in) :: dt
             !! Time step for the update
-        logical, intent(in) :: use_adaptive_dt
-            !! Flag to use adaptive time step
         type(t_CollisionRecord), intent(out) :: record
             !! Collision record
         type(t_Particle) :: pcl_new
             !! Updated particle
 
-        double precision :: tmp_dt
-
-        if (use_adaptive_dt) then
-            tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
-        else
-            tmp_dt = dt
-        end if
-
-        pcl_new = self%backward(pcl, tmp_dt)
+        pcl_new = self%backward(pcl, dt)
 
         record = self%boundaries%check_collision(pcl%position, pcl_new%position)
 
