@@ -69,6 +69,7 @@ probabilities, ret_particles = get_probabilities(
         dt=0.002,
         max_step=100000,
         adaptive_dt=False,
+        n_threads=4,
     )
 
 print(probabilities)
