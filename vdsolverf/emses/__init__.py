@@ -1,1 +1,2 @@
-from .wrapper import get_probabilities, get_backtrace
+from .wrapper import (DustParticle, get_backtrace, get_dust_backtrace,
+                      get_probabilities)

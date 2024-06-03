@@ -279,7 +279,7 @@ contains
             !! Number of species
         real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
             !! Electric and magnetic field values
-        real(c_double), intent(in) :: current_values(6, lx + 1, ly + 1, lz + 1, nspec)
+        real(c_double), intent(in) :: current_values(3*nspec, lx + 1, ly + 1, lz + 1)
             !! Current field values
         real(c_double), value, intent(in) :: charge
             !! Initial dust charge
@@ -328,7 +328,7 @@ contains
             integer :: istep
             type(t_DustParticle) :: trace
 
-            dust = new_DustParticle(charge, mass, radius, position(:), velocity(:))
+            dust = new_DustParticle(charge, mass, radius, position(:), velocity(:), 0d0)
             record = solver%backtrace_dust(dust, &
                                            dt, max_step, &
                                            use_adaptive_dt == 1)
@@ -586,7 +586,7 @@ contains
             !! Number of grid cells in the z direction
         integer(c_int), value, intent(in) :: nspecies
             !! Number of species
-        real(c_double), intent(in) :: current_values(3, lx + 1, ly + 1, lz + 1, nspecies)
+        real(c_double), intent(in) :: current_values(3*nspecies, lx + 1, ly + 1, lz + 1)
             !! Electric and magnetic field values
         type(t_DustChargeSimulator) :: simulator
             !! Simulator object
@@ -602,16 +602,13 @@ contains
 
         block
             double precision, allocatable :: temperatures(:)
-            type(t_VectorFieldGrid), allocatable :: currents(:)
+            type(t_VectorFieldGrid) :: currents
             integer :: ispec
 
             allocate (temperatures(nspecies))
-            temperatures = sqrt(path(1:nspec)*path(1:nspec)/abs(qm(1:nspec))) ! [eV in EMSES-U]
+            temperatures = path(1:nspec)*path(1:nspec)/abs(qm(1:nspec)) ! [eV in EMSES-U]
 
-            allocate (currents(nspec))
-            do ispec = 1, nspec
-                currents(ispec) = new_VectorFieldGrid(3, nx, ny, nz, current_values(:, :, :, :, ispec))
-            end do
+            currents = new_VectorFieldGrid(3*nspecies, nx, ny, nz, current_values(:, :, :, :))
 
             simulator = new_DustChargeSimulator(lx, ly, lz, nspecies, temperatures, currents, curf)
         end block

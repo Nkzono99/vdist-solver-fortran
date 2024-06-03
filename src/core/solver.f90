@@ -197,6 +197,13 @@ contains
         integer :: istep
         type(t_DustParticle) :: dust_tmp
 
+        double precision :: j(3)
+
+        type(t_CollisionRecord) :: record
+
+        double precision :: tmp_dt
+        type(t_Particle) :: pcl
+
         dust_tmp = dust
         call self%simulator%apply_boundary_condition(dust_tmp%particle)
 
@@ -205,33 +212,27 @@ contains
         ret%traces(1) = dust_tmp
 
         do istep = 2, max_step
-            block
-                type(t_CollisionRecord) :: record
+            pcl = dust_tmp%particle
 
-                double precision :: tmp_dt
-                type(t_Particle) :: pcl
+            if (use_adaptive_dt) then
+                tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
+            else
+                tmp_dt = dt
+            end if
 
-                pcl = dust_tmp%particle
+            pcl = self%simulator%update(pcl, tmp_dt, record)
 
-                if (use_adaptive_dt) then
-                    tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
-                else
-                    tmp_dt = dt
-                end if
+            dust_tmp%particle = pcl
 
-                pcl = self%simulator%update(pcl, tmp_dt, record)
+            dust_tmp = self%charging_simulator%update(dust_tmp, tmp_dt)
 
-                dust_tmp = self%charging_simulator%update(dust_tmp, tmp_dt)
-                dust_tmp%particle = pcl
+            ret%traces(istep) = dust_tmp
+            ret%ts(istep) = pcl%t
 
-                ret%traces(istep) = dust_tmp
-                ret%ts(istep) = pcl%t
-
-                if (record%is_collided) then
-                    ret%last_step = istep
-                    return
-                end if
-            end block
+            if (record%is_collided) then
+                ret%last_step = istep
+                return
+            end if
         end do
 
         ret%last_step = max_step

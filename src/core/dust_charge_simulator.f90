@@ -36,7 +36,7 @@ module m_dust_charge_simulator
             !! Number of grid cells in the z direction
         integer :: nspec
         double precision, allocatable :: temperatures(:)
-        class(t_VectorField), allocatable :: currents(:)
+        class(t_VectorField), allocatable :: currents
 
         double precision :: jph0 = 0d0
 
@@ -48,7 +48,7 @@ module m_dust_charge_simulator
 
 contains
 
-    function new_DustParticle(charge, mass, radius, position, velocity) result(obj)
+    function new_DustParticle(charge, mass, radius, position, velocity, t) result(obj)
         !! Create a new particle object with specified properties.
         double precision, intent(in) :: charge
             !! Charge
@@ -60,6 +60,8 @@ contains
             !! Position in 3D space
         double precision, intent(in) :: velocity(3)
             !! Velocity in 3D space
+        double precision, intent(in) :: t
+            !! Time
         type(t_DustParticle) :: obj
             !! A new dust particle object with specified properties
 
@@ -67,6 +69,7 @@ contains
         obj%mass = mass
         obj%radius = radius
         obj%particle = new_Particle(charge/mass, position, velocity)
+        obj%particle%t = t
     end function
 
     function dustParticle_potential(self) result(ret)
@@ -91,12 +94,10 @@ contains
             !! Number of grid points in the z direction
         integer, intent(in) :: nspec
         double precision, intent(in) :: temperatures(nspec)
-        class(t_VectorField), intent(in) :: currents(nspec)
+        class(t_VectorField), intent(in) :: currents
         double precision, intent(in), optional :: jph0
 
         type(t_DustChargeSimulator) :: obj
-
-        integer :: ispec
 
         obj%nx = nx
         obj%ny = ny
@@ -122,9 +123,17 @@ contains
         double precision :: net_current
         double precision :: dust_potential
 
+        double precision, allocatable :: currents(:)
+
+        double precision :: area
+
+        area = 4*pi*dust%radius*dust%radius
+
         dust_potential = dust%potential()
 
         net_current = 0d0
+
+        currents = self%currents%at(dust%particle%position)
 
         ispec = 1
         if (ispec <= self%nspec) then
@@ -132,7 +141,7 @@ contains
                 double precision :: current(3), j0
                 double precision :: temperature
 
-                current = self%currents(ispec)%at(dust%particle%position)
+                current = currents((ispec - 1)*3 + 1:ispec*3)
                 j0 = norm2(current)
 
                 temperature = self%temperatures(ispec)
@@ -147,7 +156,7 @@ contains
                 double precision :: current(3), j0
                 double precision :: temperature
 
-                current = self%currents(ispec)%at(dust%particle%position)
+                current = currents((ispec - 1)*3 + 1:ispec*3)
                 j0 = norm2(current)
 
                 temperature = self%temperatures(ispec)
@@ -162,24 +171,34 @@ contains
                 double precision :: current(3), j0
                 double precision :: temperature
 
-                current = self%currents(ispec)%at(dust%particle%position)
+                current = currents((ispec - 1)*3 + 1:ispec*3)
                 j0 = norm2(current)
 
                 temperature = self%temperatures(ispec)
 
-                net_current = net_current + calculate_photoelectron_current(dust_potential, self%jph0, j0, temperature)
+                net_current = net_current + calculate_photoelectron_current(dust_potential, &
+                                                                            self%jph0, &
+                                                                            j0, &
+                                                                            temperature)
             end block
         end if
 
         block
             double precision :: charge_new
 
-            charge_new = dust%charge + net_current*dt
+            charge_new = dust%charge + net_current*area*(-dt)
 
             dust_new = new_DustParticle(charge_new, dust%mass, &
                                         dust%radius, &
                                         dust%particle%position, &
-                                        dust%particle%velocity)
+                                        dust%particle%velocity, &
+                                        dust%particle%t)
+        end block
+
+        block
+            double precision :: g = 2.6703601345286842e-09
+            ! double precision :: g = 8.901200448428947e-10
+            dust_new%particle%velocity(3) = dust_new%particle%velocity(3) - g*(-dt)
         end block
     end function
 
@@ -190,9 +209,9 @@ contains
         double precision :: ret
 
         if (phid >= 0) then
-            ret = je0*(1 + phid/Te)
+            ret = -je0*(1 + phid/Te)
         else
-            ret = je0*(1 - phid/Te)
+            ret = -je0*(1 + phid/Te)
         end if
     end function
 
@@ -217,9 +236,9 @@ contains
         double precision :: ret
 
         if (phid >= 0) then
-            ret = jph0*exp(-phid/Tph)*(1 + phid/Tph) + jphc0*(1 + phid/Tph)
+            ret = jph0*exp(-phid/Tph)*(1 + phid/Tph) - jphc0*(1 + phid/Tph)
         else
-            ret = jph0 + jphc0*(1 - phid/Tph)
+            ret = jph0 - jphc0*(1 + phid/Tph)
         end if
     end function
 
