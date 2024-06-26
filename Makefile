@@ -16,9 +16,8 @@ else
 endif
 
 export FPM_FC := gfortran
-export FPM_FFLAGS := -Ofast -m64 -fPIC -fopenmp -lgomp
+export FPM_FFLAGS := -Ofast -m64 -fPIC -fopenmp
 export FPM_FFLAGS := $(FPM_FFLAGS) -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow
-
 BUILD_DIR=./build
 
 all: $(LIBNAME)
@@ -26,8 +25,16 @@ all: $(LIBNAME)
 $(LIBNAME): build copy_static shared copy_shared
 
 .PHONY: build
-build:
-	fpm build --profile=release --verbose
+build: build_$(PLATFORM)
+
+build_linux:
+	fpm build --profile=release
+
+build_darwin:
+	fpm build --profile=release --archiver /usr/bin/ar
+
+build_windows:
+	fpm build --profile=release
 
 copy_static:
 	cp $(shell find ./build/*/ -type f -name lib$(LIBNAME).a) $(BUILD_DIR)
