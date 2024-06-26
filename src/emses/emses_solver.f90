@@ -242,6 +242,112 @@ contains
         call simulator%boundaries%destroy
     end subroutine
 
+    subroutine get_backtrace_dust(inppath, &
+                                  length, &
+                                  lx, ly, lz, &
+                                  nspec, &
+                                  ebvalues, &
+                                  current_values, &
+                                  charge, &
+                                  mass, &
+                                  radius, &
+                                  position, &
+                                  velocity, &
+                                  dt, &
+                                  max_step, &
+                                  use_adaptive_dt, &
+                                  max_probability_types, &
+                                  return_ts, &
+                                  return_charges, &
+                                  return_positions, &
+                                  return_velocities, &
+                                  return_last_step &
+                                  ) bind(c)
+        !! Perform backtrace of a dust particle and return the trace data.
+
+        character(1, c_char), intent(in) :: inppath(*)
+            !! Path to the input file
+        integer(c_int), value, intent(in) :: length
+            !! Length of the input path
+        integer(c_int), value, intent(in) :: lx
+            !! Number of grid cells in the x direction
+        integer(c_int), value, intent(in) :: ly
+            !! Number of grid cells in the y direction
+        integer(c_int), value, intent(in) :: lz
+            !! Number of grid cells in the z direction
+        integer(c_int), value, intent(in) :: nspec
+            !! Number of species
+        real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
+            !! Electric and magnetic field values
+        real(c_double), intent(in) :: current_values(3*nspec, lx + 1, ly + 1, lz + 1)
+            !! Current field values
+        real(c_double), value, intent(in) :: charge
+            !! Initial dust charge
+        real(c_double), value, intent(in) :: mass
+            !! Dust mass
+        real(c_double), value, intent(in) :: radius
+            !! Dust radius
+        real(c_double), intent(in) :: position(3)
+            !! Initial position of the particle
+        real(c_double), intent(in) :: velocity(3)
+            !! Initial velocity of the particle
+        real(c_double), value, intent(in) :: dt
+            !! Time step width (Distance moving in one step (x += v/abs(v)*dt) when use_adaptive_dt is .true.)
+        integer(c_int), value, intent(in) :: max_step
+            !! Maximum number of steps
+        integer(c_int), value, intent(in) :: use_adaptive_dt
+            !! Flag to use adaptive time step
+        integer(c_int), value, intent(in) :: max_probability_types
+            !! Maximum number of probability types
+        real(c_double), intent(out) :: return_ts(max_step)
+            !! Array to store time steps
+        real(c_double), intent(out) :: return_charges(max_step)
+            !! Array to store charges
+        real(c_double), intent(out) :: return_positions(3, max_step)
+            !! Array to store positions
+        real(c_double), intent(out) :: return_velocities(3, max_step)
+            !! Array to store velocities
+        integer(c_int), intent(out) :: return_last_step
+            !! Last step index
+
+        type(t_ESSimulator) :: simulator
+        type(t_DustChargeSimulator) :: charge_simulator
+        type(t_Solver) :: solver
+
+        simulator = create_simulator(inppath, length, &
+                                     lx, ly, lz, &
+                                     ebvalues, &
+                                     1, &
+                                     max_probability_types)
+        charge_simulator = create_dust_charge_simulator(inppath, length, lx, ly, lz, nspec, current_values)
+        solver = new_Solver(simulator, charge_simulator)
+
+        block
+            type(t_DustParticle) :: dust
+            type(t_DustBacktraceRecord) :: record
+            integer :: istep
+            type(t_DustParticle) :: trace
+
+            dust = new_DustParticle(charge, mass, radius, position(:), velocity(:), 0d0)
+            record = solver%backtrace_dust(dust, &
+                                           dt, max_step, &
+                                           use_adaptive_dt == 1)
+
+            do istep = 1, record%last_step
+                trace = record%traces(istep)
+
+                return_ts(istep) = trace%particle%t
+                return_charges(istep) = trace%charge
+                return_positions(:, istep) = trace%particle%position(:)
+                return_velocities(:, istep) = trace%particle%velocity(:)
+            end do
+
+            return_last_step = record%last_step
+        end block
+
+        call simulator%boundaries%destroy
+    end subroutine
+
     function create_simulator(inppath, length, lx, ly, lz, ebvalues, ispec, max_probability_types) result(simulator)
         !! Create and initialize a new ES simulator object.
 
@@ -464,5 +570,48 @@ contains
         end subroutine
 
     end subroutine
+
+    function create_dust_charge_simulator(inppath, length, lx, ly, lz, nspecies, current_values) result(simulator)
+        !! Create and initialize a new ES simulator object.
+
+        character(1, c_char), intent(in) :: inppath(*)
+            !! Path to the input file
+        integer(c_int), value, intent(in) :: length
+            !! Length of the input path
+        integer(c_int), value, intent(in) :: lx
+            !! Number of grid cells in the x direction
+        integer(c_int), value, intent(in) :: ly
+            !! Number of grid cells in the y direction
+        integer(c_int), value, intent(in) :: lz
+            !! Number of grid cells in the z direction
+        integer(c_int), value, intent(in) :: nspecies
+            !! Number of species
+        real(c_double), intent(in) :: current_values(3*nspecies, lx + 1, ly + 1, lz + 1)
+            !! Electric and magnetic field values
+        type(t_DustChargeSimulator) :: simulator
+            !! Simulator object
+
+        block
+            character(length) :: s
+            integer :: i
+            do i = 1, length
+                s(i:i) = inppath(i)
+            end do
+            call read_namelist(s)
+        end block
+
+        block
+            double precision, allocatable :: temperatures(:)
+            type(t_VectorFieldGrid) :: currents
+            integer :: ispec
+
+            allocate (temperatures(nspecies))
+            temperatures = path(1:nspec)*path(1:nspec)/abs(qm(1:nspec)) ! [eV in EMSES-U]
+
+            currents = new_VectorFieldGrid(3*nspecies, nx, ny, nz, current_values(:, :, :, :))
+
+            simulator = new_DustChargeSimulator(lx, ly, lz, nspecies, temperatures, currents, curf)
+        end block
+    end function
 
 end module

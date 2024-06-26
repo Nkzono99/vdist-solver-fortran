@@ -8,15 +8,16 @@ else
     UNAME_OS := $(shell uname -s)
     ifeq ($(UNAME_OS),Linux)
         PLATFORM := linux
+export FPM_FFLAGS := -Ofast -m64 -fPIC -fopenmp
     else ifeq ($(UNAME_OS),Darwin)
         PLATFORM := darwin
+export FPM_FFLAGS := -Ofast -fPIC -fopenmp
     else
         PLATFORM:=unknown
     endif
 endif
 
 export FPM_FC := gfortran
-export FPM_FFLAGS := -Ofast -m64 -fPIC -fopenmp
 export FPM_FFLAGS := $(FPM_FFLAGS) -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow
 
 BUILD_DIR=./build
@@ -38,7 +39,7 @@ shared_linux:
 	gfortran -shared -o $(BUILD_DIR)/lib$(LIBNAME).so -Wl,--whole-archive $(BUILD_DIR)/lib$(LIBNAME).a -Wl,--no-whole-archive
 
 shared_darwin: 
-	gfortran -dynamiclib -install_name ${BUILD_DIR}/lib$(LIBNAME).dylib -static-libgfortran -static-libquadmath -static-libgcc -o $(BUILD_DIR)/lib$(LIBNAME).dylib -Wl,-all_load $(BUILD_DIR)/lib$(LIBNAME).a -Wl,-noall_load
+	gfortran ${BUILD_DIR}/lib$(LIBNAME).a -dynamiclib -install_name ${BUILD_DIR}/lib$(LIBNAME).dylib -static-libgfortran -static-libquadmath -static-libgcc -o $(BUILD_DIR)/lib$(LIBNAME).dylib -Wl,-all_load $(BUILD_DIR)/lib$(LIBNAME).a -Wl,-noall_load
 
 shared_windows: 
 	gfortran -shared -static -o $(BUILD_DIR)/lib$(LIBNAME).dll -Wl,--out-implib=$(BUILD_DIR)/lib$(LIBNAME).dll.a,--export-all-symbols,--enable-auto-import,--whole-archive $(BUILD_DIR)/lib$(LIBNAME).a -Wl,--no-whole-archive
@@ -58,7 +59,6 @@ copy_shared_windows:
 clean: clean_$(PLATFORM)
 	fpm clean --skip
 	rm ${BUILD_DIR}/lib${LIBNAME}.a
-	rm ${BUILD_DIR}/lib${LIBNAME}.so
 
 clean_linux:
 	rm vdsolverf/lib${LIBNAME}.so

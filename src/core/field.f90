@@ -83,12 +83,18 @@ contains
         double precision :: p(3)
         integer :: ip(3), ip1(3)
         double precision :: rp(3), rp1(3)
-        double precision :: u00(6), u01(6), u10(6), u11(6), u0(6), u1(6)
+        double precision :: u00(self%n_elements), u01(self%n_elements)
+        double precision :: u10(self%n_elements), u11(self%n_elements)
+        double precision :: u0(self%n_elements), u1(self%n_elements)
 
         ! Linear interpolation
         p(:) = position(:)
         ip(:) = int(p(:))
         ip1(:) = ip(:) + 1
+
+        ip1(1) = modulo(ip1(1), self%nx)
+        ip1(2) = modulo(ip1(2), self%ny)
+        ip1(3) = modulo(ip1(3), self%nz)
 
         rp(:) = p(:) - ip(:)
         rp1(:) = 1 - rp(:)

@@ -13,30 +13,6 @@ module m_simulator
     private
     public t_ESSimulator
     public new_ESSimulator
-    public t_BacktraceRecord
-    public t_ProbabilityRecord
-
-    type t_BacktraceRecord
-        !! Record for storing backtrace information
-        type(t_Particle), allocatable :: traces(:)
-            !! Array of particle traces
-        double precision, allocatable :: ts(:)
-            !! Array of time steps
-        integer :: last_step
-            !! Last step in the backtrace
-    end type
-
-    type t_ProbabilityRecord
-        !! Record for storing probability calculation results
-        logical :: is_valid = .false.
-            !! Flag indicating if the record is valid (If .false., probability calculation is not completed within max_step)
-        double precision :: t
-            !! Time at which the probability is calculated since the start of the simulation
-        double precision :: probability
-            !! Calculated probability
-        type(t_Particle) :: particle
-            !! Particle state at the time of calculation probability
-    end type
 
     type t_ESSimulator
         !! Electric static simulator for particle dynamics
@@ -107,7 +83,7 @@ contains
         end block
     end function
 
-    function esSimulator_update(self, pcl, dt, use_adaptive_dt, record) result(pcl_new)
+    function esSimulator_update(self, pcl, dt, record) result(pcl_new)
         !! Update the state of a particle.
 
         class(t_ESSimulator), intent(in) :: self
@@ -116,22 +92,12 @@ contains
             !! Particle to update
         double precision, intent(in) :: dt
             !! Time step for the update
-        logical, intent(in) :: use_adaptive_dt
-            !! Flag to use adaptive time step
         type(t_CollisionRecord), intent(out) :: record
             !! Collision record
         type(t_Particle) :: pcl_new
             !! Updated particle
 
-        double precision :: tmp_dt
-
-        if (use_adaptive_dt) then
-            tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
-        else
-            tmp_dt = dt
-        end if
-
-        pcl_new = self%backward(pcl, tmp_dt)
+        pcl_new = self%backward(pcl, dt)
 
         record = self%boundaries%check_collision(pcl%position, pcl_new%position)
 

@@ -24,6 +24,22 @@ VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS = (
 )
 
 
+class DustParticle:
+    def __init__(
+        self,
+        charge: float,
+        mass: float,
+        radius: float,
+        pos: np.ndarray,
+        vel: np.ndarray,
+    ):
+        self.charge = charge
+        self.mass = mass
+        self.radius = radius
+        self.pos = pos
+        self.vel = vel
+
+
 def get_backtrace(
     directory: PathLike,
     ispec: int,
@@ -35,7 +51,7 @@ def get_backtrace(
     max_probability_types: int = 100,
     os: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
-):
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     if os == "auto":
         os = platform.system().lower()
 
@@ -174,7 +190,7 @@ def get_probabilities(
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
-):
+) -> Tuple[np.ndarray, List[Particle]]:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
     if system == "auto":
@@ -307,6 +323,157 @@ def get_probabilities_dll(
     return_probabilities[return_probabilities == -1] = np.nan
 
     return return_probabilities, return_particles
+
+
+def get_dust_backtrace(
+    directory: PathLike,
+    istep: int,
+    dust: DustParticle,
+    dt: float,
+    max_step: int,
+    use_adaptive_dt: bool = False,
+    max_probability_types: int = 100,
+    os: Literal["auto", "linux", "darwin", "windows"] = "auto",
+    library_path: PathLike = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if os == "auto":
+        os = platform.system().lower()
+
+    if os == "linux":
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
+        dll = CDLL(library_path)
+    elif os == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
+        dll = CDLL(library_path)
+    elif os == "windows":  # TODO: 実際に動作するのかは未検証
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
+        dll = WinDLL(library_path)
+    else:
+        raise RuntimeError(f"This platform is not supported: {os}")
+
+    result = get_dust_backtrace_dll(
+        directory=directory,
+        istep=istep,
+        dust=dust,
+        dt=dt,
+        max_step=max_step,
+        use_adaptive_dt=use_adaptive_dt,
+        max_probability_types=max_probability_types,
+        dll=dll,
+    )
+
+    handle = dll._handle
+
+    if os == "linux":
+        cdll.LoadLibrary("libdl.so").dlclose(handle)
+    elif os == "darwin":
+        cdll.LoadLibrary("libdl.so").dlclose(handle)
+    elif os == "windows":
+        windll.kernel32.FreeLibrary(handle)
+
+    return result
+
+
+def get_dust_backtrace_dll(
+    directory: PathLike,
+    istep: int,
+    dust: DustParticle,
+    dt: float,
+    max_step: int,
+    use_adaptive_dt: bool,
+    max_probability_types: int,
+    dll: Union[CDLL, "WinDLL"],
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    dll.get_backtrace_dust.argtypes = [
+        c_char_p,  # inppath
+        c_int,  # length
+        c_int,  # lx
+        c_int,  # ly
+        c_int,  # lz
+        c_int,  # nspec
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=4),  # ebvalues
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=4),  # current_values
+        c_double,  # charge
+        c_double,  # mass
+        c_double,  # radius
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # positions
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # velocities
+        c_double,  # dt
+        c_int,  # max_step
+        c_int,  # use_adaptive_dt
+        c_int,  # max_probability_types
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_ts
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_charges
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_positions
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_velocities
+        POINTER(c_int),  # return_last_step
+    ]
+    dll.get_probabilities.restype = None
+
+    data = emout.Emout(directory)
+
+    ebvalues = create_relocated_ebvalues(data, istep)
+    current_values = create_relocated_current_values(data, istep)
+    
+    return_ts = np.empty(max_step, dtype=np.float64)
+    return_charges = np.empty(max_step, dtype=np.float64)
+    return_positions = np.empty((max_step, 3), dtype=np.float64)
+    return_velocities = np.empty((max_step, 3), dtype=np.float64)
+
+    position = np.array(dust.pos, dtype=np.float64)
+    velocity = np.array(dust.vel, dtype=np.float64)
+
+    with TempolaryInput(data) as tmpinp:
+        inppath = tmpinp.tmppath
+        inppath_str = str(inppath.resolve())
+
+        _inppath = create_string_buffer(inppath_str.encode())
+        _length = c_int(len(inppath_str))
+        _nx = c_int(data.inp.nx)
+        _ny = c_int(data.inp.ny)
+        _nz = c_int(data.inp.nz)
+        _nspec = c_int(data.inp.nspec)
+        _charge = c_double(dust.charge)
+        _mass = c_double(dust.mass)
+        _radius = c_double(dust.radius)
+        _dt = c_double(dt)
+        _max_step = c_int(max_step)
+        _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
+        _max_probability_types = c_int(max_probability_types)
+        _return_last_index = c_int()
+
+        dll.get_backtrace_dust(
+            _inppath,
+            _length,
+            _nx,
+            _ny,
+            _nz,
+            _nspec,
+            ebvalues,
+            current_values,
+            _charge,
+            _mass,
+            _radius,
+            position,
+            velocity,
+            _dt,
+            _max_step,
+            _use_adaptive_dt,
+            _max_probability_types,
+            return_ts,
+            return_charges,
+            return_positions,
+            return_velocities,
+            byref(_return_last_index),
+        )
+        return_last_index = _return_last_index.value
+
+    ts = return_ts[:return_last_index].copy()
+    charges = return_charges[:return_last_index].copy()
+    positions = return_positions[:return_last_index].copy()
+    velocities = return_velocities[:return_last_index].copy()
+
+    return ts, charges, positions, velocities
 
 
 def create_relocated_ebvalues(data: emout.Emout, istep: int) -> np.ndarray:
@@ -446,3 +613,52 @@ def create_relocated_ebvalues(data: emout.Emout, istep: int) -> np.ndarray:
     bze = None
 
     return ebvalues
+
+
+def create_relocated_current_values(data: emout.Emout, istep: int) -> np.ndarray:
+    current_values = np.zeros(
+        (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1, 3*data.inp.nspec),
+        dtype=np.float64,
+    )
+
+    for ispec in range(data.inp.nspec):
+        # EX
+        ielem = 0
+        jx = getattr(data, f"j{ispec+1}x")[istep]
+        current_values[:, :, 1:-1, ispec * 3 + ielem] = 0.5 * (
+            jx[:, :, :-2] + jx[:, :, 1:-1]
+        )
+        if data.inp.mtd_vbnd[0] in [0, 2]:
+            current_values[:, :, 0, ispec * 3 + ielem] = 0
+            current_values[:, :, -1, ispec * 3 + ielem] = 0
+        else:
+            current_values[:, :, 0, ispec * 3 + ielem] = jx[:, :, 0]
+            current_values[:, :, -1, ispec * 3 + ielem] = jx[:, :, -1]
+
+        # EY
+        ielem = 1
+        jy = getattr(data, f"j{ispec+1}y")[istep]
+        current_values[:, 1:-1, :, ispec * 3 + ielem] = 0.5 * (
+            jy[:, :-2, :] + jy[:, 1:-1, :]
+        )
+        if data.inp.mtd_vbnd[0] in [0, 2]:
+            current_values[:, 0, :, ispec * 3 + ielem] = 0
+            current_values[:, -1, :, ispec * 3 + ielem] = 0
+        else:
+            current_values[:, 0, :, ispec * 3 + ielem] = jy[:, 0, :]
+            current_values[:, -1, :, ispec * 3 + ielem] = jy[:, -1, :]
+
+        # EZ
+        ielem = 2
+        jz = getattr(data, f"j{ispec+1}z")[istep]
+        current_values[1:-1, :, :, ispec * 3 + ielem] = 0.5 * (
+            jz[:-2, :, :] + jz[1:-1, :, :]
+        )
+        if data.inp.mtd_vbnd[0] in [0, 2]:
+            current_values[0, :, :, ispec * 3 + ielem] = 0
+            current_values[-1, :, :, ispec * 3 + ielem] = 0
+        else:
+            current_values[0, :, :, ispec * 3 + ielem] = jz[0, :, :]
+            current_values[-1, :, :, ispec * 3 + ielem] = jz[-1, :, :]
+
+    return current_values
