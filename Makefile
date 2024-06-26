@@ -27,7 +27,7 @@ $(LIBNAME): build copy_static shared copy_shared
 
 .PHONY: build
 build:
-	fpm build --profile=release
+	fpm build --profile=release --verbose
 
 copy_static:
 	cp $(shell find ./build/*/ -type f -name lib$(LIBNAME).a) $(BUILD_DIR)
