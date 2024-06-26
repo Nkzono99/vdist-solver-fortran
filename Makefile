@@ -8,16 +8,15 @@ else
     UNAME_OS := $(shell uname -s)
     ifeq ($(UNAME_OS),Linux)
         PLATFORM := linux
-export FPM_FFLAGS := -Ofast -m64 -fPIC -fopenmp
     else ifeq ($(UNAME_OS),Darwin)
         PLATFORM := darwin
-export FPM_FFLAGS := -Ofast -fPIC -fopenmp
     else
-        PLATFORM:=unknown
+        PLATFORM := unknown
     endif
 endif
 
 export FPM_FC := gfortran
+export FPM_FFLAGS := -Ofast -m64 -fPIC -fopenmp
 export FPM_FFLAGS := $(FPM_FFLAGS) -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow
 
 BUILD_DIR=./build
