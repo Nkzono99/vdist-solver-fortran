@@ -1,12 +1,13 @@
+import os
 import platform
 from ctypes import *
-import os
 from os import PathLike
 from pathlib import Path
 from typing import List, Literal, Tuple, Union
 
 import emout
 import numpy as np
+from scipy.spatial.transform import Rotation
 from vdsolver.core import Particle
 
 from .tmpolary_input import TempolaryInput
@@ -414,7 +415,7 @@ def get_dust_backtrace_dll(
 
     ebvalues = create_relocated_ebvalues(data, istep)
     current_values = create_relocated_current_values(data, istep)
-    
+
     return_ts = np.empty(max_step, dtype=np.float64)
     return_charges = np.empty(max_step, dtype=np.float64)
     return_positions = np.empty((max_step, 3), dtype=np.float64)
@@ -612,12 +613,33 @@ def create_relocated_ebvalues(data: emout.Emout, istep: int) -> np.ndarray:
     )
     bze = None
 
+    b0x, b0y, b0z = background_magnetic_field(data)
+
+    ebvalues[3] += b0x
+    ebvalues[4] += b0y
+    ebvalues[5] += b0z
+
     return ebvalues
+
+
+def background_magnetic_field(data: emout.Emout) -> np.ndarray:
+    if "wc" not in data.inp:
+        return np.zeros(3)
+
+    b0 = data.inp.wc / data.inp.qm[0]
+
+    return rotate(np.array([0.0, 0.0, b0]), data.inp.phiz, data.inp.phixy)
+
+
+def rotate(vec: np.ndarray, phiz_deg: float, phixy_deg: float) -> np.ndarray:
+    rot = Rotation.from_euler("yz", [phiz_deg, phixy_deg], degrees=True)
+
+    return rot.apply(vec)
 
 
 def create_relocated_current_values(data: emout.Emout, istep: int) -> np.ndarray:
     current_values = np.zeros(
-        (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1, 3*data.inp.nspec),
+        (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1, 3 * data.inp.nspec),
         dtype=np.float64,
     )
 
