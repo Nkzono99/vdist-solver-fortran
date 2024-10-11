@@ -37,7 +37,7 @@ velocity = [0, 0, -10]
 
 particle = Particle(position, velocity)
 
-ts, probabirity, positions, velocities = get_backtrace(
+ts, probability, positions, velocities = get_backtrace(
     directory="EMSES-simulation-directory",
     ispec=0,
     istep=-1,
@@ -80,7 +80,7 @@ for phase in phases.reshape(-1, phases.shape[-1]):
     pcl = Particle(pos, vel)
     particles.append(pcl)
 
-ts, probabirities, positions, velocities = get_backtraces(
+ts, probabilities, positions, velocities = get_backtraces(
     directory="EMSES-simulation-directory",
     ispec=0,
     istep=-1,
@@ -95,11 +95,11 @@ plt.figure(figsize=(15, 15))
 
 data.phisp[-1, :, int(data.inp.ny//2), :].val_si.plot(use_si=False)
 
-maxp = np.array(probabirities).max()
-for probabirity, positions in zip(probabirities, positions_list):
-    if np.isnan(probabirity):
+maxp = np.array(probabilities).max()
+for probability, positions in zip(probabilities, positions_list):
+    if np.isnan(probability):
         continue
-    alpha = min(1.0, probabirity / maxp)
+    alpha = min(1.0, probability / maxp)
 
     plt.scatter(positions[:, 0], positions[:, 2], s=0.1, color='black', alpha=alpha)
 

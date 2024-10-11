@@ -82,7 +82,7 @@ def get_backtrace(
         n_threads=1,
     )
 
-    ts, probabirities, positions_list, velocities_list, last_indexes = result
+    ts, probabilities, positions_list, velocities_list, last_indexes = result
 
     # For some reason, it crashes when I try to close it.
     # handle = dll._handle
@@ -96,7 +96,7 @@ def get_backtrace(
 
     return (
         ts[0, :last_indexes[0]],
-        probabirities[0],
+        probabilities[0],
         positions_list[0, :last_indexes[0], :].copy(),
         velocities_list[0, :last_indexes[0], :].copy(),
     )
