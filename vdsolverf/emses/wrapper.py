@@ -50,60 +50,127 @@ def get_backtrace(
     max_step: int,
     use_adaptive_dt: bool = False,
     max_probability_types: int = 100,
-    os: Literal["auto", "linux", "darwin", "windows"] = "auto",
+    system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    if os == "auto":
-        os = platform.system().lower()
 
-    if os == "linux":
+    if system == "auto":
+        system = platform.system().lower()
+
+    if system == "linux":
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
         dll = CDLL(library_path)
-    elif os == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
+    elif system == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
         dll = CDLL(library_path)
-    elif os == "windows":  # TODO: 実際に動作するのかは未検証
+    elif system == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
         dll = WinDLL(library_path)
     else:
-        raise RuntimeError(f"This platform is not supported: {os}")
+        raise RuntimeError(f"This platform is not supported: {system}")
 
-    result = get_backtrace_dll(
+    result = get_backtraces_dll(
         directory=directory,
         ispec=ispec,
         istep=istep,
-        particle=particle,
+        particles=[particle],
         dt=dt,
         max_step=max_step,
         use_adaptive_dt=use_adaptive_dt,
         max_probability_types=max_probability_types,
         dll=dll,
+        n_threads=1,
     )
 
-    handle = dll._handle
+    ts, probabirities, positions_list, velocities_list, last_indexes = result
 
-    if os == "linux":
-        cdll.LoadLibrary("libdl.so").dlclose(handle)
-    elif os == "darwin":
-        cdll.LoadLibrary("libdl.so").dlclose(handle)
-    elif os == "windows":
-        windll.kernel32.FreeLibrary(handle)
+    # For some reason, it crashes when I try to close it.
+    # handle = dll._handle
+
+    # if os == "linux":
+    #     cdll.LoadLibrary("libdl.so").dlclose(handle)
+    # elif os == "darwin":
+    #     cdll.LoadLibrary("libdl.so").dlclose(handle)
+    # elif os == "windows":
+    #     windll.kernel32.FreeLibrary(handle)
+
+    return (
+        ts[0, :last_indexes[0]],
+        probabirities[0],
+        positions_list[0, :last_indexes[0], :].copy(),
+        velocities_list[0, :last_indexes[0], :].copy(),
+    )
+
+
+def get_backtraces(
+    directory: PathLike,
+    ispec: int,
+    istep: int,
+    particles: List[Particle],
+    dt: float,
+    max_step: int,
+    use_adaptive_dt: bool = False,
+    max_probability_types: int = 100,
+    system: Literal["auto", "linux", "darwin", "windows"] = "auto",
+    library_path: PathLike = None,
+    n_threads: Union[int, None] = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
+
+    if system == "auto":
+        system = platform.system().lower()
+
+    if system == "linux":
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
+        dll = CDLL(library_path)
+    elif system == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
+        dll = CDLL(library_path)
+    elif system == "windows":  # TODO: 実際に動作するのかは未検証
+        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
+        dll = WinDLL(library_path)
+    else:
+        raise RuntimeError(f"This platform is not supported: {system}")
+
+    result = get_backtraces_dll(
+        directory=directory,
+        ispec=ispec,
+        istep=istep,
+        particles=particles,
+        dt=dt,
+        max_step=max_step,
+        use_adaptive_dt=use_adaptive_dt,
+        max_probability_types=max_probability_types,
+        dll=dll,
+        n_threads=n_threads,
+    )
+
+    # For some reason, it crashes when I try to close it.
+    # handle = dll._handle
+
+    # if os == "linux":
+    #     cdll.LoadLibrary("libdl.so").dlclose(handle)
+    # elif os == "darwin":
+    #     cdll.LoadLibrary("libdl.so").dlclose(handle)
+    # elif os == "windows":
+    #     windll.kernel32.FreeLibrary(handle)
 
     return result
 
 
-def get_backtrace_dll(
+def get_backtraces_dll(
     directory: PathLike,
     ispec: int,
     istep: int,
-    particle: Particle,
+    particles: List[Particle],
     dt: float,
     max_step: int,
     use_adaptive_dt: bool,
     max_probability_types: int,
     dll: Union[CDLL, "WinDLL"],
+    n_threads: Union[int, None] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    dll.get_backtrace.argtypes = [
+    dll.get_backtraces.argtypes = [
         c_char_p,  # inppath
         c_int,  # length
         c_int,  # lx
@@ -111,16 +178,19 @@ def get_backtrace_dll(
         c_int,  # lz
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=4),  # ebvalues
         c_int,  # ispec
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # positions
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # velocities
+        c_int,  # npcls
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # positions
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # velocities
         c_double,  # dt
         c_int,  # max_step
         c_int,  # use_adaptive_dt
         c_int,  # max_probability_types
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_ts
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_positions
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_velocities
-        POINTER(c_int),  # return_last_step
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_ts
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_probability
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # return_positions
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # return_velocities
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_last_step
+        POINTER(c_int),  # n_threads
     ]
     dll.get_probabilities.restype = None
 
@@ -128,12 +198,15 @@ def get_backtrace_dll(
 
     ebvalues = create_relocated_ebvalues(data, istep)
 
-    return_ts = np.empty(max_step, dtype=np.float64)
-    return_positions = np.empty((max_step, 3), dtype=np.float64)
-    return_velocities = np.empty((max_step, 3), dtype=np.float64)
+    npcls = len(particles)
+    return_ts = np.empty((npcls, max_step), dtype=np.float64)
+    return_probabilities = np.empty(npcls, dtype=np.float64)
+    return_positions = np.empty((npcls, max_step, 3), dtype=np.float64)
+    return_velocities = np.empty((npcls, max_step, 3), dtype=np.float64)
+    return_last_indexes = np.empty(npcls, dtype=np.int32)
 
-    position = np.array(particle.pos, dtype=np.float64)
-    velocity = np.array(particle.vel, dtype=np.float64)
+    positions = np.array([particle.pos for particle in particles], dtype=np.float64)
+    velocities = np.array([particle.vel for particle in particles], dtype=np.float64)
 
     with TempolaryInput(data) as tmpinp:
         inppath = tmpinp.tmppath
@@ -145,13 +218,14 @@ def get_backtrace_dll(
         _ny = c_int(data.inp.ny)
         _nz = c_int(data.inp.nz)
         _ispec = c_int(ispec + 1)
+        _npcls = c_int(npcls)
         _dt = c_double(dt)
         _max_step = c_int(max_step)
         _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
         _max_probability_types = c_int(max_probability_types)
-        _return_last_index = c_int()
+        _n_threads = c_int(n_threads)
 
-        dll.get_backtrace(
+        dll.get_backtraces(
             _inppath,
             _length,
             _nx,
@@ -159,24 +233,30 @@ def get_backtrace_dll(
             _nz,
             ebvalues,
             _ispec,
-            position,
-            velocity,
+            _npcls,
+            positions,
+            velocities,
             _dt,
             _max_step,
             _use_adaptive_dt,
             _max_probability_types,
             return_ts,
+            return_probabilities,
             return_positions,
             return_velocities,
-            byref(_return_last_index),
+            return_last_indexes,
+            byref(_n_threads),
         )
-        return_last_index = _return_last_index.value
 
-    ts = return_ts[:return_last_index].copy()
-    positions = return_positions[:return_last_index].copy()
-    velocities = return_velocities[:return_last_index].copy()
+    return_probabilities[return_probabilities == -1] = np.nan
 
-    return ts, positions, velocities
+    return (
+        return_ts,
+        return_probabilities,
+        return_positions,
+        return_velocities,
+        return_last_indexes,
+    )
 
 
 def get_probabilities(
@@ -222,14 +302,15 @@ def get_probabilities(
         n_threads=n_threads,
     )
 
-    handle = dll._handle
+    # For some reason, it crashes when I try to close it.
+    # handle = dll._handle
 
-    if system == "linux":
-        cdll.LoadLibrary("libdl.so").dlclose(handle)
-    elif system == "darwin":
-        cdll.LoadLibrary("libdl.so").dlclose(handle)
-    elif system == "windows":
-        windll.kernel32.FreeLibrary(handle)
+    # if system == "linux":
+    #     cdll.LoadLibrary("libdl.so").dlclose(handle)
+    # elif system == "darwin":
+    #     cdll.LoadLibrary("libdl.so").dlclose(handle)
+    # elif system == "windows":
+    #     windll.kernel32.FreeLibrary(handle)
 
     return result
 
@@ -272,13 +353,13 @@ def get_probabilities_dll(
 
     ebvalues = create_relocated_ebvalues(data, istep)
 
-    return_probabilities = np.empty(len(particles), dtype=np.float64)
-    return_positions = np.empty((len(particles), 3), dtype=np.float64)
-    return_velocities = np.empty((len(particles), 3), dtype=np.float64)
+    npcls = len(particles)
+    return_probabilities = np.empty(npcls, dtype=np.float64)
+    return_positions = np.empty((npcls, 3), dtype=np.float64)
+    return_velocities = np.empty((npcls, 3), dtype=np.float64)
 
     positions = np.array([particle.pos for particle in particles], dtype=np.float64)
     velocities = np.array([particle.vel for particle in particles], dtype=np.float64)
-
     with TempolaryInput(data) as tmpinp:
         inppath = tmpinp.tmppath
         inppath_str = str(inppath.resolve())
@@ -289,7 +370,7 @@ def get_probabilities_dll(
         _ny = c_int(data.inp.ny)
         _nz = c_int(data.inp.nz)
         _ispec = c_int(ispec + 1)
-        _nparticles = c_int(len(particles))
+        _nparticles = c_int(npcls)
         _dt = c_double(dt)
         _max_step = c_int(max_step)
         _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
@@ -363,14 +444,15 @@ def get_dust_backtrace(
         dll=dll,
     )
 
-    handle = dll._handle
+    # For some reason, it crashes when I try to close it.
+    # handle = dll._handle
 
-    if os == "linux":
-        cdll.LoadLibrary("libdl.so").dlclose(handle)
-    elif os == "darwin":
-        cdll.LoadLibrary("libdl.so").dlclose(handle)
-    elif os == "windows":
-        windll.kernel32.FreeLibrary(handle)
+    # if os == "linux":
+    #     cdll.LoadLibrary("libdl.so").dlclose(handle)
+    # elif os == "darwin":
+    #     cdll.LoadLibrary("libdl.so").dlclose(handle)
+    # elif os == "windows":
+    #     windll.kernel32.FreeLibrary(handle)
 
     return result
 

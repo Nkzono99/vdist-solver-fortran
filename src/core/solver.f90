@@ -23,6 +23,8 @@ module m_solver
             !! Array of time steps
         integer :: last_step
             !! Last step in the backtrace
+        double precision :: probability
+            !! Calculated probability
     end type
 
     type t_DustBacktraceRecord
@@ -33,6 +35,8 @@ module m_solver
             !! Array of time steps
         integer :: last_step
             !! Last step in the backtrace
+        double precision :: probability
+            !! Calculated probability
     end type
 
     type t_ProbabilityRecord
@@ -103,6 +107,7 @@ contains
         do istep = 2, max_step
             block
                 type(t_CollisionRecord) :: record
+                type(tp_Probability), allocatable :: probability_function
 
                 double precision :: tmp_dt
 
@@ -119,6 +124,9 @@ contains
 
                 if (record%is_collided) then
                     ret%last_step = istep
+
+                    probability_function = self%simulator%probability_functions(record%material%tag)
+                    ret%probability = probability_function%at(pcl%position, pcl%velocity)
                     return
                 end if
             end block
@@ -201,9 +209,6 @@ contains
 
         type(t_CollisionRecord) :: record
 
-        double precision :: tmp_dt
-        type(t_Particle) :: pcl
-
         dust_tmp = dust
         call self%simulator%apply_boundary_condition(dust_tmp%particle)
 
@@ -212,27 +217,36 @@ contains
         ret%traces(1) = dust_tmp
 
         do istep = 2, max_step
-            pcl = dust_tmp%particle
+            block
+                type(t_Particle) :: pcl
+                type(tp_Probability), allocatable :: probability_function
 
-            if (use_adaptive_dt) then
-                tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
-            else
-                tmp_dt = dt
-            end if
+                double precision :: tmp_dt
+                pcl = dust_tmp%particle
 
-            pcl = self%simulator%update(pcl, tmp_dt, record)
+                if (use_adaptive_dt) then
+                    tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
+                else
+                    tmp_dt = dt
+                end if
 
-            dust_tmp%particle = pcl
+                pcl = self%simulator%update(pcl, tmp_dt, record)
 
-            dust_tmp = self%charging_simulator%update(dust_tmp, tmp_dt)
+                dust_tmp%particle = pcl
 
-            ret%traces(istep) = dust_tmp
-            ret%ts(istep) = pcl%t
+                dust_tmp = self%charging_simulator%update(dust_tmp, tmp_dt)
 
-            if (record%is_collided) then
-                ret%last_step = istep
-                return
-            end if
+                ret%traces(istep) = dust_tmp
+                ret%ts(istep) = pcl%t
+
+                if (record%is_collided) then
+                    ret%last_step = istep
+
+                    probability_function = self%simulator%probability_functions(record%material%tag)
+                    ret%probability = probability_function%at(pcl%position, pcl%velocity)
+                    return
+                end if
+            end block
         end do
 
         ret%last_step = max_step

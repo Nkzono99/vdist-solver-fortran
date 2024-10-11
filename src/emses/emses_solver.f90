@@ -24,25 +24,30 @@ module m_emses_solver
 
     private
     public get_probabilities
+    public get_backtraces
 
 contains
 
-    subroutine get_backtrace(inppath, &
-                             length, &
-                             lx, ly, lz, &
-                             ebvalues, &
-                             ispec, &
-                             position, &
-                             velocity, &
-                             dt, &
-                             max_step, &
-                             use_adaptive_dt, &
-                             max_probability_types, &
-                             return_ts, &
-                             return_positions, &
-                             return_velocities, &
-                             return_last_step &
-                             ) bind(c)
+    subroutine get_backtraces( &
+        inppath, &
+        length, &
+        lx, ly, lz, &
+        ebvalues, &
+        ispec, &
+        npcls, &
+        positions, &
+        velocities, &
+        dt, &
+        max_step, &
+        use_adaptive_dt, &
+        max_probability_types, &
+        return_ts, &
+        return_probabilities, &
+        return_positions, &
+        return_velocities, &
+        return_last_steps, &
+        n_threads &
+        ) bind(c)
         !! Perform backtrace of a particle and return the trace data.
 
         character(1, c_char), intent(in) :: inppath(*)
@@ -59,9 +64,11 @@ contains
             !! Electric and magnetic field values
         integer(c_int), value, intent(in) :: ispec
             !! Species index
-        real(c_double), intent(in) :: position(3)
+        integer(c_int), value, intent(in) :: npcls
+            !! Number of particles
+        real(c_double), intent(in) :: positions(3, npcls)
             !! Initial position of the particle
-        real(c_double), intent(in) :: velocity(3)
+        real(c_double), intent(in) :: velocities(3, npcls)
             !! Initial velocity of the particle
         real(c_double), value, intent(in) :: dt
             !! Time step width (Distance moving in one step (x += v/abs(v)*dt) when use_adaptive_dt is .true.)
@@ -71,17 +78,25 @@ contains
             !! Flag to use adaptive time step
         integer(c_int), value, intent(in) :: max_probability_types
             !! Maximum number of probability types
-        real(c_double), intent(out) :: return_ts(max_step)
+        real(c_double), intent(out) :: return_ts(max_step, npcls)
             !! Array to store time steps
-        real(c_double), intent(out) :: return_positions(3, max_step)
+        real(c_double), intent(out) :: return_probabilities(npcls)
+        real(c_double), intent(out) :: return_positions(3, max_step, npcls)
             !! Array to store positions
-        real(c_double), intent(out) :: return_velocities(3, max_step)
+        real(c_double), intent(out) :: return_velocities(3, max_step, npcls)
             !! Array to store velocities
-        integer(c_int), intent(out) :: return_last_step
+        integer(c_int), intent(out) :: return_last_steps(npcls)
             !! Last step index
+        integer(c_int), optional, intent(in) :: n_threads
+        !! Number of threads for parallel computation
 
         type(t_ESSimulator) :: simulator
         type(t_Solver) :: solver
+
+        type(bar_object) :: bar
+        integer :: ipcl
+
+!$      integer :: ithread
 
         simulator = create_simulator(inppath, length, &
                                      lx, ly, lz, &
@@ -90,48 +105,89 @@ contains
                                      max_probability_types)
         solver = new_Solver(simulator)
 
-        block
-            type(t_Particle) :: particle
-            type(t_BacktraceRecord) :: record
-            integer :: istep
-            type(t_Particle) :: trace
+        call bar%initialize(filled_char_string='+', &
+                            prefix_string='progress |', &
+                            suffix_string='| ', &
+                            add_progress_percent=.true.)
+        call bar%start
 
-            particle = new_Particle(qm(ispec), position(:), velocity(:))
-            record = solver%backtrace(particle, &
-                                      dt, max_step, &
-                                      use_adaptive_dt == 1)
+!$      if (present(n_threads)) then
+!$          call omp_set_num_threads(n_threads)
+!$      end if
 
-            do istep = 1, record%last_step
-                trace = record%traces(istep)
+        !$omp parallel
 
-                return_ts(istep) = trace%t
-                return_positions(:, istep) = trace%position(:)
-                return_velocities(:, istep) = trace%velocity(:)
-            end do
+!$      ithread = omp_get_thread_num()
 
-            return_last_step = record%last_step
-        end block
+        ! Note: Reason for using the "omp do schedule(static, 1)" statement
+        !     Particles are often passed sorted by position and velocity.
+        !     Particles with similar phase values tend to follow similar trajectories.
+        !     This results in similar computation times.
+        !
+        !     Using the typical omp do method to divide particles evenly can cause an unbalanced load on each thread.
+        !     This imbalance means parallelization does not improve speedup.
+        !
+        !     Therefore, this process samples every chunk size (= 1) from the particle list.
+        !$omp do schedule(static, 1)        
+        do ipcl = 1, npcls
+!$          if (ithread == 0) then
+                ! When you print a progress bar to 100%, the opening is printed.
+                ! Therefore, it is modified to print 99% until the last particle is processed.
+                call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
+!$          end if
 
+            block
+                type(t_BacktraceRecord) :: record
+                type(t_Particle) :: particle
+
+                type(t_Particle) :: trace
+                integer :: istep
+
+                particle = new_Particle(qm(ispec), positions(:, ipcl), velocities(:, ipcl))
+                record = solver%backtrace(particle, &
+                                          dt, &
+                                          max_step, &
+                                          use_adaptive_dt == 1)
+
+                do istep = 1, record%last_step
+                    trace = record%traces(istep)
+
+                    return_ts(istep, ipcl) = trace%t
+                    return_positions(:, istep, ipcl) = trace%position(:)
+                    return_velocities(:, istep, ipcl) = trace%velocity(:)
+                end do
+
+                return_last_steps(ipcl) = record%last_step
+                return_probabilities(ipcl) = record%probability
+            end block
+        end do
+        !$omp end do
+        !$omp end parallel
+
+        call bar%update(current=1d0)
+
+        call bar%destroy
         call simulator%boundaries%destroy
     end subroutine
 
-    subroutine get_probabilities(inppath, &
-                                 length, &
-                                 lx, ly, lz, &
-                                 ebvalues, &
-                                 ispec, &
-                                 npcls, &
-                                 positions, &
-                                 velocities, &
-                                 dt, &
-                                 max_step, &
-                                 use_adaptive_dt, &
-                                 max_probability_types, &
-                                 return_probabilities, &
-                                 return_positions, &
-                                 return_velocities, &
-                                 n_threads &
-                                 ) bind(c)
+    subroutine get_probabilities( &
+        inppath, &
+        length, &
+        lx, ly, lz, &
+        ebvalues, &
+        ispec, &
+        npcls, &
+        positions, &
+        velocities, &
+        dt, &
+        max_step, &
+        use_adaptive_dt, &
+        max_probability_types, &
+        return_probabilities, &
+        return_positions, &
+        return_velocities, &
+        n_threads &
+        ) bind(c)
         !! Calculate probabilities for multiple particles and return the results.
 
         character(1, c_char), intent(in) :: inppath(*)
@@ -222,7 +278,10 @@ contains
                 type(t_Particle) :: particle
 
                 particle = new_Particle(qm(ispec), positions(:, ipcl), velocities(:, ipcl))
-                record = solver%calculate_probability(particle, dt, max_step, use_adaptive_dt == 1)
+                record = solver%calculate_probability(particle, &
+                                                      dt, &
+                                                      max_step, &
+                                                      use_adaptive_dt == 1)
 
                 if (record%is_valid) then
                     return_probabilities(ipcl) = record%probability
