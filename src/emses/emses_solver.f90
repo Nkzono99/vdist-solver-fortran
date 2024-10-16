@@ -503,6 +503,10 @@ contains
             integer :: tag_vdist
                 !! Tag for maxwellian velocity distribution boundary
 
+            if (nflag_emit(ispec) /= 0) then
+                return
+            end if
+
             vmean(:) = vdri_vector(ispec)
             vthermal(:) = vth_vector(ispec)
 
