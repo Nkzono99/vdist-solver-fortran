@@ -39,7 +39,6 @@
 !>
 module emses_boundaries
     use finbound
-
     use allcom, only: xlrechole, ylrechole, zlrechole, &
                       xurechole, yurechole, zurechole, &
                       zssurf, &
@@ -51,15 +50,17 @@ module emses_boundaries
                       sphere_origin, sphere_radius, &
                       circle_origin, circle_radius, &
                       cuboid_shape, &
-                      disk_origin, disk_height, disk_radius, disk_inner_radius
-
+                      disk_origin, disk_height, disk_radius, disk_inner_radius, &
+                      plane_with_circle_hole_zlower, &
+                      plane_with_circle_hole_height, &
+                      plane_with_circle_hole_radius
     implicit none
-
-    private
-    public create_simple_collision_boundaries
 
     double precision, parameter :: extent(2, 3) = &
         reshape([[1.0d0, 1.0d0], [1.0d0, 1.0d0], [1.0d0, 1.0d0]]*2, [2, 3])
+
+    private
+    public create_simple_collision_boundaries
 
 contains
 
@@ -127,6 +128,8 @@ contains
                 else if (boundary_types(itype) == "flat-surface") then
                     call add_flat_surface
                     is_possible_to_be_covered = .true.
+                else if (boundary_types(itype) == 'plane-with-circle-hole') then
+                    call add_plane_with_circle_hole
                 else if (boundary_types(itype) == 'rectangle') then
                     call add_rectangle
                 else if (boundary_types(itype) == 'sphere') then
@@ -866,6 +869,7 @@ contains
             double precision :: origin(3)
             double precision :: rnx, rny
             integer :: iboundary, nboundaries_init
+double precision :: xmin, ymin, xmax, ymax
 
             nboundaries_init = boundaries%nboundaries
             rnx = nx
@@ -882,54 +886,100 @@ contains
                 deallocate (prect)
             end if
 
-            ! 1. -X boundary
-            origin = [0d0, 0d0, 0d0]
-            allocate (prect)
-            prect = new_rectangleX(origin, rny, zu)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
+            ! ! 1. -X boundary
+! origin = [0d0, 0d0, 0d0]
+! allocate (prect)
+            ! prect = new_rectangleX(origin, rny, zu)
+            ! pbound => prect
+            ! if (pbound%is_overlap(sdoms, extent=extent)) then
+            !     call boundaries%add_boundary(pbound)
+            ! else
+            !     deallocate (prect)
+! end if
 
-            ! 2. +X boundary
-            origin = [rnx, 0d0, 0d0]
-            allocate (prect)
-            prect = new_rectangleX(origin, rny, zu)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
+            ! ! 2. +X boundary
+            ! origin = [rnx, 0d0, 0d0]
+            ! allocate (prect)
+            ! prect = new_rectangleX(origin, rny, zu)
+! pbound => prect
+            ! if (pbound%is_overlap(sdoms, extent=extent)) then
+            !     call boundaries%add_boundary(pbound)
+            ! else
+            !     deallocate (prect)
+            ! end if
 
-            ! 3. -Y boundary
-            origin = [0d0, 0d0, 0d0]
-            allocate (prect)
-            prect = new_rectangleY(origin, zu, rnx)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
+            ! ! 3. -Y boundary
+            ! origin = [0d0, 0d0, 0d0]
+            ! allocate (prect)
+            ! prect = new_rectangleY(origin, zu, rnx)
+            ! pbound => prect
+            ! if (pbound%is_overlap(sdoms, extent=extent)) then
+            !     call boundaries%add_boundary(pbound)
+            ! else
+            !     deallocate (prect)
+            ! end if
 
-            ! 4. +Y boundary
-            origin = [0d0, rny, 0d0]
-            allocate (prect)
-            prect = new_rectangleY(origin, zu, rnx)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
+            ! ! 4. +Y boundary
+            ! origin = [0d0, rny, 0d0]
+            ! allocate (prect)
+            ! prect = new_rectangleY(origin, zu, rnx)
+            ! pbound => prect
+            ! if (pbound%is_overlap(sdoms, extent=extent)) then
+            !     call boundaries%add_boundary(pbound)
+            ! else
+            !     deallocate (prect)
+            ! end if
 
             ! Tag to indicate no photoelectron emission.
             do iboundary = nboundaries_init + 1, boundaries%nboundaries
                 boundaries%boundaries(iboundary)%ref%material%tag = -1
             end do
+        end subroutine
+
+        subroutine add_plane_with_circle_hole
+            class(t_Boundary), pointer :: pbound
+            type(t_PlaneXYZWithCircleHole), pointer :: pplane
+            type(t_CylinderXYZ), pointer :: pcylinder
+
+            double precision :: origin(3), origin_bottom(3)
+            double precision :: radius, height
+
+            height = plane_with_circle_hole_height(itype)
+
+            origin_bottom(1:3) = [0.5d0*nx, 0.5d0*ny, plane_with_circle_hole_zlower(itype)]
+            origin(1:2) = origin_bottom(1:2)
+            origin(3) = origin_bottom(3) + height
+            radius = plane_with_circle_hole_radius(itype)
+
+            ! Upper surface
+            allocate (pplane)
+            pplane = new_planeXYZWithCircleHoleZ(origin, radius)
+            pbound => pplane
+            if (pbound%is_overlap(sdoms, extent=extent)) then
+                call boundaries%add_boundary(pbound)
+            else
+                deallocate (pplane)
+            end if
+
+            ! Wall surface
+            allocate (pcylinder)
+            pcylinder = new_cylinderZ(origin_bottom, radius, height)
+            pbound => pcylinder
+            if (pbound%is_overlap(sdoms, extent=extent)) then
+                call boundaries%add_boundary(pbound)
+            else
+                deallocate (pcylinder)
+            end if
+
+            ! Lower surface
+            allocate (pplane)
+            pplane = new_planeXYZWithCircleHoleZ(origin_bottom, radius)
+            pbound => pplane
+            if (pbound%is_overlap(sdoms, extent=extent)) then
+                call boundaries%add_boundary(pbound)
+            else
+                deallocate (pplane)
+            end if
         end subroutine
 
         subroutine add_disk(axis)
