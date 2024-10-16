@@ -174,3 +174,71 @@ plt.pcolormesh(VX, VZ, probs, shading="auto")
 plt.colorbar()
 plt.show()
 ```
+
+### NOTE: Placement of internal boundary objects (collision detection)
+
+There are various methods to set internal boundaries for EMSES parameters, but this solver supports the following options. Please add these settings to the plasma.inp file.
+
+First, specify the inner boundary type in the boundary_type or boundary_types(itype) field, and then configure the associated parameters.
+
+#### Namelist Parameters
+```
+&ptcond
+  boundary_type = 'none'|
+                  'flat-surface'|
+                  'rectangle-hole'|'cylinder-hole'|'hyperboloid-hole'|'ellipsoid-hole'|
+                  'rectangle[xyz]'|'circle[x/y/z]'|'cuboid'|'disk[x/y/z]
+                  'complex'
+
+  ! Use if boundary_type is '****-surface' or '****-hole'.
+  zssurf = Surface Height [grid]
+
+  ! Use if boundary_type is '****-hole'.
+  [x/y/z][l/u]pc = Hole [lower/upper] limit grid（[x/y/z] coordinate) [grid]
+
+  ! Use if boundary_type is 'complex'
+  boundary_types(ntypes) = <boundary_type>|
+
+  ! Use if boundary_types(itype) is 'rectangle'
+  rectangle_shape(ntypes, 6) = Rectangle location (xmin, xmax, ymin, ymax, zmin, zmax)
+
+  ! Use if boundary_types is 'circle[x/y/z]'
+  circle_origin(ntypes, 3) = Circle center coordinates
+  circle_radius(ntypes) = Circle radius
+
+  ! Use if boundary_types(itype) is 'cuboid'
+  cuboid_shape(ntypes, 6) = Cuboid location (xmin, xmax, ymin, ymax, zmin, zmax)
+
+  ! Use if boundary_types(itype) is 'disk[x/y/z]
+  disk_origin(ntypes, 3) = Disk center bottom coordinates
+  disk_height(ntypes) = Disk height (= thickness)
+  disk_radius(ntypes) = Disk outer radius
+  disk_inner_radius(ntypes) = Disk inner radius
+
+  ! Rotation angle of all boundaries [deg].
+  boundary_rotation_deg(3) = 0d0, 0d0, 0d0
+&
+```
+
+### NOTE: Setting the particle emission surface
+
+EMSES offers various settings for emission surfaces, and this solver supports the following options. Please add these settings to the plasma.inp file.
+
+```
+&emissn
+    curf(nspec) = Current density corresponding to particle species (has not been supported)
+
+    curfs(nepl) = Current density corresponding to the emitting surface (this has priority over curf) (has not been supported)
+
+    nflag_emit(nspec) = For non-zero numbers, the emission surface setting works
+
+    nepl(nspec) = Number of emission surfaces of each particle species
+
+    nemd(nepl) = Normal direction of emission surface (-: - direction, +: + direction, 1: x direction, 2: y direction, 3: z direction)
+
+    xmine(nepl), xmaxe(nepl), ymine(nepl), ymaxe(nepl), zmine(nepl), zmaxe(nepl)
+        = Range of emission surfaces
+
+    thetaz, thetaxy = Angle with magnetic field related to thermal velocity of emitted particles [deg]
+&
+```
