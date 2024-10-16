@@ -28,7 +28,10 @@ module m_namelist
         sphere_origin, sphere_radius, &
         circle_origin, circle_radius, &
         cuboid_shape, &
-        disk_origin, disk_height, disk_radius, disk_inner_radius
+        disk_origin, disk_height, disk_radius, disk_inner_radius, &
+        plane_with_circle_hole_zlower, &
+        plane_with_circle_hole_height, &
+        plane_with_circle_hole_radius
 
     namelist /emissn/ nflag_emit, &
         nepl, curf, nemd, curfs, &

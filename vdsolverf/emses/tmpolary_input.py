@@ -33,6 +33,9 @@ TMP_INP_KEYS = {
         "disk_height",
         "disk_radius",
         "disk_inner_raidus",
+        "plane_with_circle_hole_zlower",
+        "plane_with_circle_hole_height",
+        "plane_with_circle_hole_radius",
     ],
     "emissn": [
         "nflag_emit",
@@ -41,8 +44,10 @@ TMP_INP_KEYS = {
         "nemd",
         "curfs",
         "xmine",
-        "xmaxe" "ymine",
-        "ymaxe" "zmine",
+        "xmaxe",
+        "ymine",
+        "ymaxe",
+        "zmine",
         "zmaxe",
         "thetaz",
         "thetaxy",
@@ -68,6 +73,15 @@ class TempolaryInput(object):
                 dic[group][key] = getattr(data.inp, key)
 
         inp = f90nml.Namelist(dic)
+
+        # start_indexを追加する.
+        for group in TMP_INP_KEYS.keys():
+            start_indexes = data.inp.nml[group].start_index
+            for key in TMP_INP_KEYS[group]:
+                if key not in start_indexes:
+                    continue
+                inp[group].start_index[key] = start_indexes[key]
+
         inp.write(str(self.__tmppath.resolve()))
 
         return self

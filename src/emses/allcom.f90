@@ -120,13 +120,16 @@ module allcom
         !! Radius of disk boundaries
     double precision :: disk_inner_radius(nboundary_types) = 0.0d0
         !! Inner radius of disk boundaries
+    double precision :: plane_with_circle_hole_zlower(nboundary_types) = 0.0d0
+    double precision :: plane_with_circle_hole_height(nboundary_types) = 0.0d0
+    double precision :: plane_with_circle_hole_radius(nboundary_types) = 0.0d0
 
     ! /emissn/
     integer :: nflag_emit(max_nspec)
         !! Emission flags for each species
     integer :: nepl(max_nspec) = 0
         !! Number of emission surfaces for each species
-    double precision :: curf
+    double precision :: curf(max_nspec)
         !! Current from emission surfaces
     integer :: nemd(max_nepl)
         !! Emission directions

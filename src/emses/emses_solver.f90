@@ -8,7 +8,7 @@ module m_emses_solver
 !$  use omp_lib
 
     use m_vector, only: rot3d_y, rot3d_z
-    use finbound, only: t_Boundary, t_BoundaryList, &
+    use finbound, only: t_Boundary, t_BoundaryList, new_BoundaryList, &
                         t_PlaneXYZ, &
                         new_PlaneX, new_PlaneY, new_PlaneZ, &
                         t_RectangleXYZ, &
@@ -378,7 +378,7 @@ contains
                                      ebvalues, &
                                      1, &
                                      max_probability_types)
-        charge_simulator = create_dust_charge_simulator(inppath, length, lx, ly, lz, nspec, current_values)
+        charge_simulator = create_dust_charge_simulator(inppath, length, lx, ly, lz, nspec, current_values, curf(3))
         solver = new_Solver(simulator, charge_simulator)
 
         block
@@ -457,6 +457,8 @@ contains
             isdoms = reshape([[0, lx], [0, ly], [0, lz]], [2, 3])
             boundaries = create_simple_collision_boundaries(isdoms, tag=n_probability_functions)
 
+            ! boundaries = new_BoundaryList()
+
             eb = new_VectorFieldGrid(6, lx, ly, lz, ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1))
 
             call add_probability_boundaries(boundaries, ispec, n_probability_functions, probability_functions)
@@ -503,10 +505,6 @@ contains
             integer :: tag_vdist
                 !! Tag for maxwellian velocity distribution boundary
 
-            if (nflag_emit(ispec) /= 0) then
-                return
-            end if
-
             vmean(:) = vdri_vector(ispec)
             vthermal(:) = vth_vector(ispec)
 
@@ -515,10 +513,14 @@ contains
             n_probability_functions = n_probability_functions + 1
             tag_zero = n_probability_functions
 
-            allocate (probability_functions(n_probability_functions + 1)%ref, &
-                      source=new_MaxwellianProbability(vmean, vthermal))
-            n_probability_functions = n_probability_functions + 1
-            tag_vdist = n_probability_functions
+            if (nflag_emit(ispec) == 0) then
+                allocate (probability_functions(n_probability_functions + 1)%ref, &
+                        source=new_MaxwellianProbability(vmean, vthermal))
+                n_probability_functions = n_probability_functions + 1
+                tag_vdist = n_probability_functions
+            else
+                tag_vdist = tag_zero
+            end if
 
             if (npbnd(1, ispec) == 2) then ! X-Boundary
                 ! X lower boundary
@@ -619,9 +621,9 @@ contains
                     if (abs(nemd(iepl)) == 1) then
                         allocate (prect, source=new_RectangleX(origin, wy, wz))
                     else if (abs(nemd(iepl)) == 2) then
-                        allocate (prect, source=new_RectangleY(origin, wy, wz))
+                        allocate (prect, source=new_RectangleY(origin, wz, wx))
                     else if (abs(nemd(iepl)) == 3) then
-                        allocate (prect, source=new_RectangleZ(origin, wy, wz))
+                        allocate (prect, source=new_RectangleZ(origin, wx, wy))
                     end if
                     prect%priority = priority
 
@@ -634,7 +636,7 @@ contains
 
     end subroutine
 
-    function create_dust_charge_simulator(inppath, length, lx, ly, lz, nspecies, current_values) result(simulator)
+    function create_dust_charge_simulator(inppath, length, lx, ly, lz, nspecies, current_values, jph0) result(simulator)
         !! Create and initialize a new ES simulator object.
 
         character(1, c_char), intent(in) :: inppath(*)
@@ -651,6 +653,8 @@ contains
             !! Number of species
         real(c_double), intent(in) :: current_values(3*nspecies, lx + 1, ly + 1, lz + 1)
             !! Electric and magnetic field values
+        real(c_double), intent(in) :: jph0
+            !! Photoelectrons current
         type(t_DustChargeSimulator) :: simulator
             !! Simulator object
 
@@ -673,7 +677,7 @@ contains
 
             currents = new_VectorFieldGrid(3*nspecies, nx, ny, nz, current_values(:, :, :, :))
 
-            simulator = new_DustChargeSimulator(lx, ly, lz, nspecies, temperatures, currents, curf)
+            simulator = new_DustChargeSimulator(lx, ly, lz, nspecies, temperatures, currents, jph0)
         end block
     end function
 
