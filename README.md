@@ -180,6 +180,7 @@ plt.show()
 There are various methods to set internal boundaries for EMSES parameters, but this solver supports the following options. Please add these settings to the plasma.inp file.
 
 First, specify the inner boundary type in the boundary_type or boundary_types(itype) field, and then configure the associated parameters.
+Of course, it also supports the placement of objects via geotype.
 
 #### Namelist Parameters
 ```
@@ -217,6 +218,24 @@ First, specify the inner boundary type in the boundary_type or boundary_types(it
 
   ! Rotation angle of all boundaries [deg].
   boundary_rotation_deg(3) = 0d0, 0d0, 0d0
+
+  ! Geotype parameters
+  npc = Number of geotype objects.
+    geotype(npc) = Type of the object (0-1: cuboid, 2: cylinder, 3: sphere).
+
+  ! For cuboid:
+  xlpc(npc), xupc(npc), ylpc(npc), yupc(npc), zlpc(npc), zupc(npc) 
+    = Boundaries of the cuboid in each dimension (x, y, z).
+
+  ! For cylinder:
+  bdyalign(npc) = Axis alignment of the cylinder (1: x-axis, 2: y-axis, 3: z-axis).
+  bdyedge(1:2, npc) = Edge coordinates (lower and upper bounds).
+  bdyradius(npc) = Radius of the cylinder.
+  bdycoord(1:2, npc) = Center coordinates along the axis.
+
+  ! For sphere:
+  bdyradius(npc) = Radius of the sphere.
+  bdycoord(1:3, npc) = Center coordinates of the sphere.
 &
 ```
 
