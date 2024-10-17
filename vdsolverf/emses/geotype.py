@@ -1,3 +1,25 @@
+"""
+Support for defining geotype parameters.
+
+&ptcond
+    npc = Number of geotype objects.
+    geotype(npc) = Type of the object (0-1: cuboid, 2: cylinder, 3: sphere).
+
+    ! For cuboid:
+    xlpc(npc), xupc(npc), ylpc(npc), yupc(npc), zlpc(npc), zupc(npc) 
+        = Boundaries of the cuboid in each dimension (x, y, z).
+
+    ! For cylinder:
+    bdyalign(npc) = Axis alignment of the cylinder (1: x-axis, 2: y-axis, 3: z-axis).
+    bdyedge(1:2, npc) = Edge coordinates (lower and upper bounds).
+    bdyradius(npc) = Radius of the cylinder.
+    bdycoord(1:2, npc) = Center coordinates along the axis.
+
+    ! For sphere:
+    bdyradius(npc) = Radius of the sphere.
+    bdycoord(1:3, npc) = Center coordinates of the sphere.
+/
+"""
 import emout
 import f90nml
 import f90nml.namelist
