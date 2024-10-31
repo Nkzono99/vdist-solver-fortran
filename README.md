@@ -1,4 +1,5 @@
 # vdist-solver-fortran
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14018863.svg)](https://doi.org/10.5281/zenodo.14018863)
 
 Velocity distribution solver for python written in Fortran.
 
