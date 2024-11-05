@@ -1,7 +1,13 @@
 from pathlib import Path
+from typing import Any, List
 
 import emout
 import f90nml
+import f90nml.namelist
+import numpy as np
+
+from .geotype import (create_cylinder_boundary, create_rectangular_boundary,
+                      create_sphere_boundary)
 
 TMP_INP_KEYS = {
     "esorem": ["emflag"],
@@ -27,7 +33,7 @@ TMP_INP_KEYS = {
         "sphere_origin",
         "sphere_radius",
         "circle_origin",
-        "circle_raidus",
+        "circle_radius",
         "cuboid_shape",
         "disk_origin",
         "disk_height",
@@ -82,12 +88,42 @@ class TempolaryInput(object):
                     continue
                 inp[group].start_index[key] = start_indexes[key]
 
+        self.convert_from_geotype(inp)
+
         inp.write(str(self.__tmppath.resolve()))
 
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.__tmppath.unlink()
+
+    def convert_from_geotype(self, nml: f90nml.Namelist):
+        data = self.__data
+
+        if "geotype" not in data.inp:
+            return
+
+        if "boundary_type" in data.inp and data.inp.boundary_type != "complex":
+            nml["ptcond"]["boundary_types"] = [data.inp.boundary_type]
+            nml["ptcond"].start_index["boundary_types"] = [1]
+        
+        if "boundary_type" not in data.inp:
+            nml["ptcond"]["boundary_type"] = "complex"
+            nml["ptcond"]["boundary_types"] = []
+            nml["ptcond"].start_index["boundary_types"] = [1]
+
+        if "npc" not in data.inp:
+            return
+
+        for ipc in range(data.inp.npc):
+            if data.inp.geotype[ipc] in (0, 1):
+                create_rectangular_boundary(nml, data, ipc)
+            elif data.inp.geotype[ipc] == 2:
+                create_cylinder_boundary(nml, data, ipc)
+            elif data.inp.geotype[ipc] == 3:
+                create_sphere_boundary(nml, data, ipc)
+            else:
+                raise NotImplementedError()
 
     @property
     def tmppath(self):
