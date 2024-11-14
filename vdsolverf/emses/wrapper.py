@@ -564,142 +564,18 @@ def create_relocated_ebvalues(data: emout.Emout, istep: int) -> np.ndarray:
         (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1, 6), dtype=np.float64
     )
 
-    # EX
-    ielem = 0
-    ex = data.ex[istep]
-    ebvalues[:, :, 1:-1, ielem] = 0.5 * (ex[:, :, :-2] + ex[:, :, 1:-1])
-    if data.inp.mtd_vbnd[0] in [0, 2]:
-        ebvalues[:, :, 0, ielem] = 0
-        ebvalues[:, :, -1, ielem] = 0
-    else:
-        ebvalues[:, :, 0, ielem] = ex[:, :, 0]
-        ebvalues[:, :, -1, ielem] = ex[:, :, -1]
-
-    # EY
-    ielem = 1
-    ey = data.ey[istep]
-    ebvalues[:, 1:-1, :, ielem] = 0.5 * (ey[:, :-2, :] + ey[:, 1:-1, :])
-    if data.inp.mtd_vbnd[0] in [0, 2]:
-        ebvalues[:, 0, :, ielem] = 0
-        ebvalues[:, -1, :, ielem] = 0
-    else:
-        ebvalues[:, 0, :, ielem] = ey[:, 0, :]
-        ebvalues[:, -1, :, ielem] = ey[:, -1, :]
-
-    # EZ
-    ielem = 2
-    ez = data.ez[istep]
-    ebvalues[1:-1, :, :, ielem] = 0.5 * (ez[:-2, :, :] + ez[1:-1, :, :])
-    if data.inp.mtd_vbnd[0] in [0, 2]:
-        ebvalues[0, :, :, ielem] = 0
-        ebvalues[-1, :, :, ielem] = 0
-    else:
-        ebvalues[0, :, :, ielem] = ez[0, :, :]
-        ebvalues[-1, :, :, ielem] = ez[-1, :, :]
-
-    # BX
-    ielem = 3
-    bx = data.bx[istep]
-    # yz平面に1グリッド覆うように拡張する
-    bxe = np.empty(np.array(bx.shape) + np.array([1, 1, 0]))
-    bxe[1:-1, 1:-1, :] = bx[:-1, :-1, :]
-    if data.inp.mtd_vbnd[1] == 0:
-        bxe[1:-1, 0, :] = bxe[1:-1, -2, :]
-        bxe[1:-1, -1, :] = bxe[1:-1, 1, :]
-    elif data.inp.mtd_vbnd[1] == 1:
-        bxe[1:-1, 0, :] = -bxe[1:-1, 1, :]
-        bxe[1:-1, -1, :] = -bxe[1:-1, -2, :]
-    else:
-        bxe[1:-1, 0, :] = bxe[1:-1, 1, :]
-        bxe[1:-1, -1, :] = bxe[1:-1, -2, :]
-
-    if data.inp.mtd_vbnd[2] == 0:
-        bxe[0, :, :] = bxe[-2, :, :]
-        bxe[-1, :, :] = bxe[1, :, :]
-    elif data.inp.mtd_vbnd[2] == 1:
-        bxe[0, :, :] = -bxe[1, :, :]
-        bxe[-1, :, :] = -bxe[-2, :, :]
-    else:
-        bxe[0, :, :] = bxe[1, :, :]
-        bxe[-1, :, :] = bxe[-2, :, :]
-
-    ebvalues[:, :, :, ielem] = 0.25 * (
-        bxe[:-1, :-1, :] + bxe[1:, :-1, :] + bxe[:-1, 1:, :] + bxe[1:, 1:, :]
-    )
-    bxe = None  # to deallocate memory
-
-    # BY
-    ielem = 4
-    by = data.by[istep]
-    # yz平面に1グリッド覆うように拡張する
-    bye = np.empty(np.array(by.shape) + np.array([1, 0, 1]))
-    bye[1:-1, :, 1:-1] = by[:-1, :, :-1]
-    if data.inp.mtd_vbnd[2] == 0:
-        bye[0, :, 1:-1] = bye[-2, :, 1:-1]
-        bye[
-            -1,
-            :,
-            1:-1,
-        ] = bye[1, :, 1:-1]
-    elif data.inp.mtd_vbnd[2] == 1:
-        bye[0, :, 1:-1] = -bye[1, :, 1:-1]
-        bye[-1, :, 1:-1] = -bye[-2, :, 1:-1]
-    else:
-        bye[0, :, 1:-1] = bye[1, :, 1:-1]
-        bye[-1, :, 1:-1] = bye[-2, :, 1:-1]
-
-    if data.inp.mtd_vbnd[0] == 0:
-        bye[:, :, 0] = bye[:, :, -2]
-        bye[:, :, -1] = bye[:, :, 1]
-    elif data.inp.mtd_vbnd[0] == 1:
-        bye[:, :, 0] = -bye[:, :, 1]
-        bye[:, :, -1] = -bye[:, :, -2]
-    else:
-        bye[:, :, 0] = bye[:, :, 1]
-        bye[:, :, -1] = bye[:, :, -2]
-
-    ebvalues[:, :, :, ielem] = 0.25 * (
-        bye[:-1, :, :-1] + bye[1:, :, :-1] + bye[:-1, :, 1:] + bye[1:, :, 1:]
-    )
-    bye = None
-
-    # BZ
-    ielem = 5
-    bz = data.bz[istep]
-    # xy平面に1グリッド覆うように拡張する
-    bze = np.empty(np.array(bz.shape) + np.array([0, 1, 1]))
-    bze[:, 1:-1, 1:-1] = bz[:, :-1, :-1]
-
-    if data.inp.mtd_vbnd[0] == 0:
-        bze[:, 1:-1, 0] = bze[:, 1:-1, -2]
-        bze[:, 1:-1, -1] = bze[:, 1:-1, 1]
-    elif data.inp.mtd_vbnd[0] == 1:
-        bze[:, 1:-1, 0] = -bze[:, 1:-1, 1]
-        bze[:, 1:-1, -1] = -bze[:, 1:-1, -2]
-    else:
-        bze[:, 1:-1, 0] = bze[:, 1:-1, 1]
-        bze[:, 1:-1, -1] = bze[:, 1:-1, -2]
-
-    if data.inp.mtd_vbnd[1] == 0:
-        bze[:, 0, :] = bze[:, -2, :]
-        bze[:, -1, :] = bze[:, 1, :]
-    elif data.inp.mtd_vbnd[1] == 1:
-        bze[:, 0, :] = -bze[:, 1, :]
-        bze[:, -1, :] = -bze[:, -2, :]
-    else:
-        bze[:, 0, :] = bze[:, 1, :]
-        bze[:, -1, :] = bze[:, -2, :]
-
-    ebvalues[:, :, :, ielem] = 0.25 * (
-        bze[:, :-1, :-1] + bze[:, 1:, :-1] + bze[:, :-1, 1:] + bze[:, 1:, 1:]
-    )
-    bze = None
+    ebvalues[:, :, :, 0] = data.rex[istep, :, :, :]
+    ebvalues[:, :, :, 1] = data.rey[istep, :, :, :]
+    ebvalues[:, :, :, 2] = data.rez[istep, :, :, :]
+    ebvalues[:, :, :, 3] = data.rbx[istep, :, :, :]
+    ebvalues[:, :, :, 4] = data.rby[istep, :, :, :]
+    ebvalues[:, :, :, 5] = data.rbz[istep, :, :, :]
 
     b0x, b0y, b0z = background_magnetic_field(data)
 
-    ebvalues[3] += b0x
-    ebvalues[4] += b0y
-    ebvalues[5] += b0z
+    ebvalues[:, :, :, 3] += b0x
+    ebvalues[:, :, :, 4] += b0y
+    ebvalues[:, :, :, 5] += b0z
 
     return ebvalues
 
