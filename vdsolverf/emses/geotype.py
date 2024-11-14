@@ -75,7 +75,7 @@ def create_sphere_boundary(nml: f90nml.Namelist, data: emout.Emout, ipc: int) ->
     bdyradius = fetch_from_inp(data, "ptcond", "bdyradius", default=0.0)
 
     origin = bdycoord[ipc, :].tolist()
-    radius = bdyradius[ipc]
+    radius = bdyradius[ipc].tolist()
 
     append_sphere_to_namelist(nml, origin, radius)
 
