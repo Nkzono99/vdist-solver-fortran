@@ -1,5 +1,5 @@
 name = "vdist-solver-fortran"
-version = "0.2.0"
+version = "1.0.0"
 license = "Apache License Version 2.0"
 author = "Nkzono99"
 maintainer = "210x218x@stu.kobe-u.ac.jp"
