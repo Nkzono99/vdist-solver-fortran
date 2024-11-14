@@ -92,10 +92,6 @@ contains
         ip(:) = int(p(:))
         ip1(:) = ip(:) + 1
 
-        ip1(1) = modulo(ip1(1), self%nx)
-        ip1(2) = modulo(ip1(2), self%ny)
-        ip1(3) = modulo(ip1(3), self%nz)
-
         rp(:) = p(:) - ip(:)
         rp1(:) = 1 - rp(:)
 
