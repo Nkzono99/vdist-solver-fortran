@@ -6,8 +6,11 @@ import f90nml
 import f90nml.namelist
 import numpy as np
 
-from .geotype import (create_cylinder_boundary, create_rectangular_boundary,
-                      create_sphere_boundary)
+from .geotype import (
+    create_cylinder_boundary,
+    create_rectangular_boundary,
+    create_sphere_boundary,
+)
 
 TMP_INP_KEYS = {
     "esorem": ["emflag"],
@@ -64,7 +67,7 @@ TMP_INP_KEYS = {
 class TempolaryInput(object):
     def __init__(self, data: emout.Emout):
         self.__data = data
-        self.__tmppath: Path = data.directory / f"plasma.inp.{hash(str(data.inp))}"
+        self.__tmppath: Path = data.directory / f"plasma-vdsolverf.inp"
 
     def __enter__(self) -> "TempolaryInput":
         data = self.__data
@@ -95,7 +98,7 @@ class TempolaryInput(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.__tmppath.unlink()
+        pass
 
     def convert_from_geotype(self, nml: f90nml.Namelist):
         data = self.__data
@@ -106,7 +109,7 @@ class TempolaryInput(object):
         if "boundary_type" in data.inp and data.inp.boundary_type != "complex":
             nml["ptcond"]["boundary_types"] = [data.inp.boundary_type]
             nml["ptcond"].start_index["boundary_types"] = [1]
-        
+
         if "boundary_type" not in data.inp:
             nml["ptcond"]["boundary_type"] = "complex"
             nml["ptcond"]["boundary_types"] = []
