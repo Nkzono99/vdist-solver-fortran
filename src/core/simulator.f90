@@ -190,7 +190,12 @@ contains
                 particle%position(i) = modulo(particle%position(i), nxyz(i))
             else if (self%boundary_conditions(i) == 1) then
                 ! Reflective boundary condition
+                if (0 <= particle%position(i) .and. particle%position(i) <= nxyz(i)) then
+                    cycle
+                end if
+
                 particle%position(i) = modulo(2*nxyz(i) - particle%position(i), nxyz(i))
+                particle%velocity(i) = -particle%velocity(i)
             end if
         end do
     end subroutine
