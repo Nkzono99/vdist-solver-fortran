@@ -93,7 +93,7 @@ class TempolaryInput(object):
 
         self.convert_from_geotype(inp)
 
-        inp.write(str(self.__tmppath.resolve()))
+        inp.write(str(self.__tmppath.resolve()), force=True)
 
         return self
 
