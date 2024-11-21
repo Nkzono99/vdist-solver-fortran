@@ -169,15 +169,15 @@ probabilities, ret_particles = get_probabilities(
         particles=particles,
         dt=data.inp.dt,
         max_step=30000,
-        adaptive_dt=False,
+        use_adaptive_dt=False,
         n_threads=4,
     )
 
 phases = phases.reshape(NVZ, NVX, 6)
 VX = phases[:, :, 3]
 VZ = phases[:, :, 5]
-probs = probs.reshape(NVZ, -1)
-plt.pcolormesh(VX, VZ, probs, shading="auto")
+probabilities = probabilities.reshape(NVZ, -1)
+plt.pcolormesh(VX, VZ, probabilities, shading="auto")
 plt.colorbar()
 plt.show()
 ```
