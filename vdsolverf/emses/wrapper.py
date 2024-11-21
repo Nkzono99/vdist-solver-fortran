@@ -8,8 +8,8 @@ from typing import List, Literal, Tuple, Union
 import emout
 import numpy as np
 from scipy.spatial.transform import Rotation
-from vdsolver.core import Particle
 
+from ..core import DustParticle, Particle
 from .tmpolary_input import TempolaryInput
 
 VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX = (
@@ -23,22 +23,6 @@ VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN = (
 VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS = (
     Path(__file__).parent.parent / "libvdist-solver-fortran.dll"
 )
-
-
-class DustParticle:
-    def __init__(
-        self,
-        charge: float,
-        mass: float,
-        radius: float,
-        pos: np.ndarray,
-        vel: np.ndarray,
-    ):
-        self.charge = charge
-        self.mass = mass
-        self.radius = radius
-        self.pos = pos
-        self.vel = vel
 
 
 def get_backtrace(
@@ -95,10 +79,10 @@ def get_backtrace(
     #     windll.kernel32.FreeLibrary(handle)
 
     return (
-        ts[0, :last_indexes[0]],
+        ts[0, : last_indexes[0]],
         probabilities[0],
-        positions_list[0, :last_indexes[0], :].copy(),
-        velocities_list[0, :last_indexes[0], :].copy(),
+        positions_list[0, : last_indexes[0], :].copy(),
+        velocities_list[0, : last_indexes[0], :].copy(),
     )
 
 
