@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Tuple, Union
 
 import numpy as np
-from vdsolver.core import Particle
+from .particles import Particle
 
 
 @dataclass
