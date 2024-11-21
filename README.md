@@ -29,21 +29,25 @@ pip install git+https://github.com/Nkzono99/vdist-solver-fortran.git
 ### Backtrace
 
 ```python
+import emout
 import matplotlib.pyplot as plt
-from vdsolver.core import Particle
+from vdsolverf.core import Particle
 from vdsolverf.emses import get_backtrace
+
+data = emout.Emout("EMSES-simulation-directory")
 
 position = [32, 32, 400]
 velocity = [0, 0, -10]
 
+ispec = 0 # 0: electron, 1: ion, 2: photoelectron
 particle = Particle(position, velocity)
 
 ts, probability, positions, velocities = get_backtrace(
-    directory="EMSES-simulation-directory",
-    ispec=0,
+    directory=data.directory,
+    ispec=ispec,
     istep=-1,
     particle=particle,
-    dt=0.002,
+    dt=data.inp.dt,
     max_step=300000,
     use_adaptive_dt=False,
 )
@@ -57,13 +61,18 @@ plt.gcf().savefig("backtrace.png")
 ### Multiple Backtrace
 
 ```python
+import emout
 import matplotlib.pyplot as plt
 import numpy as np
-from vdsolver.core import Particle, PhaseGrid
+from vdsolverf.core import Particle, PhaseGrid
 from vdsolverf.emses import get_backtraces
+
+data = emout.Emout("EMSES-simulation-directory")
 
 NVX = 50
 NVZ = 50
+
+ispec = 0 # 0: electron, 1: ion, 2: photoelectron
 phase_grid = PhaseGrid(
     x=32,
     y=32,
@@ -74,19 +83,14 @@ phase_grid = PhaseGrid(
 )
 
 phases = phase_grid.create_grid()
-particles = []
-for phase in phases.reshape(-1, phases.shape[-1]):
-    pos = phase[:3].copy()
-    vel = phase[3:].copy()
-    pcl = Particle(pos, vel)
-    particles.append(pcl)
+particles = phase_grid.create_particles()
 
 ts, probabilities, positions, velocities = get_backtraces(
-    directory="EMSES-simulation-directory",
-    ispec=0,
+    directory=data.directory,
+    ispec=ispec,
     istep=-1,
     particles=particles,
-    dt=0.002,
+    dt=data.inp.dt,
     max_step=10000,
     use_adaptive_dt=False,
     n_threads=4,
@@ -110,20 +114,24 @@ plt.gcf().savefig("backtraces.png")
 ### Phase Probability Distribution Solver
 
 ```python
-from vdsolver.core import Particle
+import emout
+from vdsolverf.core import Particle
 from vdsolverf.emses import get_probabilities
 
+data = emout.Emout("EMSES-simulation-directory")
+
+ispec = 0 # 0: electron, 1: ion, 2: photoelectron
 particles = [
     Particle([16, 16, 400], [0, 0, -20]),
     Particle([16, 16, 400], [0, 0, -30]),
     ]
 
 probabilities, ret_particles = get_probabilities(
-        directory="EMSES-simulation-directory",
-        ispec=0, # 0: electron, 1: ion, 2: photoelectron(not supported yet)
+        directory=data.directory,
+        ispec=ispec,
         istep=-1,
         particles=particles,
-        dt=0.002,
+        dt=data.inp.dt,
         max_step=30000,
         adaptive_dt=False,
         n_threads=4,
@@ -134,8 +142,11 @@ print(ret_particles)
 ```
 
 ```python
+import emout
 from vdsolver.core import Particle
 from vdsolverf.emses import get_probabilities
+
+data = emout.Emout("EMSES-simulation-directory")
 
 NVX = 50
 NVZ = 50
@@ -149,19 +160,14 @@ phase_grid = PhaseGrid(
 )
 
 phases = phase_grid.create_grid()
-particles = []
-for phase in phases.reshape(-1, phases.shape[-1]):
-    pos = phase[:3].copy()
-    vel = phase[3:].copy()
-    pcl = Particle(pos, vel)
-    particles.append(pcl)
+particles = phase_grid.create_particles()
 
 probabilities, ret_particles = get_probabilities(
-        directory="EMSES-simulation-directory",
+        directory=data.directory,
         ispec=0, # 0: electron, 1: ion, 2: photoelectron(not supported yet)
         istep=-1,
         particles=particles,
-        dt=0.002,
+        dt=data.inp.dt,
         max_step=30000,
         adaptive_dt=False,
         n_threads=4,
