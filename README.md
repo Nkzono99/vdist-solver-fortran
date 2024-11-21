@@ -85,7 +85,7 @@ phase_grid = PhaseGrid(
 phases = phase_grid.create_grid()
 particles = phase_grid.create_particles()
 
-ts, probabilities, positions, velocities = get_backtraces(
+ts, probabilities, positions_list, velocities_list, last_indexes = get_backtraces(
     directory=data.directory,
     ispec=ispec,
     istep=-1,
