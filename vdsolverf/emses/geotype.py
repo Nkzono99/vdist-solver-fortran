@@ -20,11 +20,13 @@ Support for defining geotype parameters.
     bdycoord(1:3, npc) = Center coordinates of the sphere.
 /
 """
+
+from typing import List
+
 import emout
 import f90nml
 import f90nml.namelist
 import numpy as np
-from typing import List
 
 
 def create_rectangular_boundary(
