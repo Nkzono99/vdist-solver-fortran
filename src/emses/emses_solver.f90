@@ -434,13 +434,17 @@ contains
         type(t_BoundaryList) :: boundaries
 
         type(tp_Probability), allocatable :: probability_functions(:)
-        integer :: n_probability_functions = 0
+
+        integer :: n_probability_functions
+        
+        n_probability_functions = 0
 
         allocate (probability_functions(max_probability_types))
 
         block
             character(length) :: s
             integer :: i
+
             do i = 1, length
                 s(i:i) = inppath(i)
             end do
