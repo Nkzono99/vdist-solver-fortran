@@ -49,6 +49,7 @@ ts, probability, positions, velocities = get_backtrace(
     particle=particle,
     dt=data.inp.dt,
     max_step=300000,
+    output_interval=1,
     use_adaptive_dt=False,
 )
 
@@ -92,6 +93,7 @@ ts, probabilities, positions_list, velocities_list, last_indexes = get_backtrace
     particles=particles,
     dt=data.inp.dt,
     max_step=10000,
+    output_interval=1,
     use_adaptive_dt=False,
     n_threads=4,
 )
@@ -101,12 +103,17 @@ plt.figure(figsize=(15, 15))
 data.phisp[-1, :, int(data.inp.ny//2), :].val_si.plot(use_si=False)
 
 maxp = np.array(probabilities).max()
-for probability, positions in zip(probabilities, positions_list):
+for probability, positions, last_index in zip(probabilities, positions_list, last_indexes):
     if np.isnan(probability):
         continue
     alpha = min(1.0, probability / maxp)
 
-    plt.scatter(positions[:, 0], positions[:, 2], s=0.1, color='black', alpha=alpha)
+    plt.scatter(positions[:last_index, 0], positions[:last_index, 2], s=0.1, color='black', alpha=alpha)
+
+    # The final particle position is always stored in positions[-1].
+    # Depending on output interval, positions[-1] may not be positions[last_index].
+    #
+    # last_position = positions[-1, :]
 
 plt.gcf().savefig("backtraces.png")
 ```
