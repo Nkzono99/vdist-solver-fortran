@@ -39,6 +39,7 @@ contains
         velocities, &
         dt, &
         max_step, &
+        output_interval, &
         use_adaptive_dt, &
         max_probability_types, &
         return_ts, &
@@ -74,16 +75,18 @@ contains
             !! Time step width (Distance moving in one step (x += v/abs(v)*dt) when use_adaptive_dt is .true.)
         integer(c_int), value, intent(in) :: max_step
             !! Maximum number of steps
+        integer(c_int), value, intent(in) :: output_interval
+            !! Output Interval
         integer(c_int), value, intent(in) :: use_adaptive_dt
             !! Flag to use adaptive time step
         integer(c_int), value, intent(in) :: max_probability_types
             !! Maximum number of probability types
-        real(c_double), intent(out) :: return_ts(max_step, npcls)
+        real(c_double), intent(out) :: return_ts((max_step - 1)/output_interval + 2, npcls)
             !! Array to store time steps
         real(c_double), intent(out) :: return_probabilities(npcls)
-        real(c_double), intent(out) :: return_positions(3, max_step, npcls)
+        real(c_double), intent(out) :: return_positions(3, (max_step - 1)/output_interval + 2, npcls)
             !! Array to store positions
-        real(c_double), intent(out) :: return_velocities(3, max_step, npcls)
+        real(c_double), intent(out) :: return_velocities(3, (max_step - 1)/output_interval + 2, npcls)
             !! Array to store velocities
         integer(c_int), intent(out) :: return_last_steps(npcls)
             !! Last step index
@@ -95,8 +98,11 @@ contains
 
         type(bar_object) :: bar
         integer :: ipcl
+        integer :: max_output_steps
 
 !$      integer :: ithread
+
+        max_output_steps = (max_step - 1)/output_interval + 2
 
         simulator = create_simulator(inppath, length, &
                                      lx, ly, lz, &
@@ -115,7 +121,7 @@ contains
 !$          call omp_set_num_threads(n_threads)
 !$      end if
 
-        !$omp parallel
+        !$omp parallel private(ithread)
 
 !$      ithread = omp_get_thread_num()
 
@@ -147,6 +153,7 @@ contains
                 record = solver%backtrace(particle, &
                                           dt, &
                                           max_step, &
+                                          output_interval, &
                                           use_adaptive_dt == 1)
 
                 do istep = 1, record%last_step
@@ -156,6 +163,12 @@ contains
                     return_positions(:, istep, ipcl) = trace%position(:)
                     return_velocities(:, istep, ipcl) = trace%velocity(:)
                 end do
+
+                istep = max_output_steps
+                trace = record%traces(istep)
+                return_ts(istep, ipcl) = trace%t
+                return_positions(:, istep, ipcl) = trace%position(:)
+                return_velocities(:, istep, ipcl) = trace%velocity(:)
 
                 return_last_steps(ipcl) = record%last_step
                 return_probabilities(ipcl) = record%probability
@@ -252,7 +265,7 @@ contains
 !$          call omp_set_num_threads(n_threads)
 !$      end if
 
-        !$omp parallel
+        !$omp parallel private(ithread)
 
 !$      ithread = omp_get_thread_num()
 

@@ -32,6 +32,7 @@ def get_backtrace(
     particle: Particle,
     dt: float,
     max_step: int,
+    output_interval: int = 1,
     use_adaptive_dt: bool = False,
     max_probability_types: int = 100,
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
@@ -60,6 +61,7 @@ def get_backtrace(
         particles=[particle],
         dt=dt,
         max_step=max_step,
+        output_interval=output_interval,
         use_adaptive_dt=use_adaptive_dt,
         max_probability_types=max_probability_types,
         dll=dll,
@@ -93,6 +95,7 @@ def get_backtraces(
     particles: List[Particle],
     dt: float,
     max_step: int,
+    output_interval: int = 1,
     use_adaptive_dt: bool = False,
     max_probability_types: int = 100,
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
@@ -123,6 +126,7 @@ def get_backtraces(
         particles=particles,
         dt=dt,
         max_step=max_step,
+        output_interval=output_interval,
         use_adaptive_dt=use_adaptive_dt,
         max_probability_types=max_probability_types,
         dll=dll,
@@ -149,6 +153,7 @@ def get_backtraces_dll(
     particles: List[Particle],
     dt: float,
     max_step: int,
+    output_interval: int,
     use_adaptive_dt: bool,
     max_probability_types: int,
     dll: Union[CDLL, "WinDLL"],
@@ -167,6 +172,7 @@ def get_backtraces_dll(
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # velocities
         c_double,  # dt
         c_int,  # max_step
+        c_int,  # output_interval
         c_int,  # use_adaptive_dt
         c_int,  # max_probability_types
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_ts
@@ -183,10 +189,12 @@ def get_backtraces_dll(
     ebvalues = create_relocated_ebvalues(data, istep)
 
     npcls = len(particles)
-    return_ts = np.empty((npcls, max_step), dtype=np.float64)
+
+    max_output_steps = int((max_step - 1)/output_interval + 2)
+    return_ts = np.empty((npcls, max_output_steps), dtype=np.float64)
     return_probabilities = np.empty(npcls, dtype=np.float64)
-    return_positions = np.empty((npcls, max_step, 3), dtype=np.float64)
-    return_velocities = np.empty((npcls, max_step, 3), dtype=np.float64)
+    return_positions = np.empty((npcls, max_output_steps, 3), dtype=np.float64)
+    return_velocities = np.empty((npcls, max_output_steps, 3), dtype=np.float64)
     return_last_indexes = np.empty(npcls, dtype=np.int32)
 
     positions = np.array([particle.pos for particle in particles], dtype=np.float64)
@@ -205,6 +213,7 @@ def get_backtraces_dll(
         _npcls = c_int(npcls)
         _dt = c_double(dt)
         _max_step = c_int(max_step)
+        _output_interval = c_int(output_interval)
         _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
         _max_probability_types = c_int(max_probability_types)
         _n_threads = c_int(n_threads)
@@ -222,6 +231,7 @@ def get_backtraces_dll(
             velocities,
             _dt,
             _max_step,
+            _output_interval,
             _use_adaptive_dt,
             _max_probability_types,
             return_ts,

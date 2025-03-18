@@ -78,7 +78,7 @@ contains
         end if
     end function
 
-    function solver_backtrace(self, particle, dt, max_step, use_adaptive_dt) result(ret)
+    function solver_backtrace(self, particle, dt, max_step, output_interval, use_adaptive_dt) result(ret)
         !! Perform a backtrace of a particle.
 
         class(t_Solver), intent(in) :: self
@@ -89,6 +89,8 @@ contains
             !! Time step width for backtracing
         integer, intent(in) :: max_step
             !! Maximum number of steps
+        integer, value, intent(in) :: output_interval
+            !! Output Interval
         logical, intent(in) :: use_adaptive_dt
             !! Flag to use adaptive time step
         type(t_BacktraceRecord) :: ret
@@ -96,12 +98,15 @@ contains
 
         integer :: istep
         type(t_Particle) :: pcl
+        integer :: max_output_steps
+
+        max_output_steps = (max_step - 1)/output_interval + 2
 
         pcl = particle
         call self%simulator%apply_boundary_condition(pcl)
 
-        allocate (ret%traces(max_step))
-        allocate (ret%ts(max_step))
+        allocate (ret%traces(max_output_steps))
+        allocate (ret%ts(max_output_steps))
         ret%traces(1) = pcl
 
         do istep = 2, max_step
@@ -119,20 +124,27 @@ contains
 
                 pcl = self%simulator%update(pcl, tmp_dt, record)
 
-                ret%traces(istep) = pcl
-                ret%ts(istep) = pcl%t
+                if (mod(istep - 1, output_interval) == 0) then
+                    ret%traces((istep - 1)/output_interval + 1) = pcl
+                    ret%ts((istep - 1)/output_interval + 1) = pcl%t
+                end if
 
                 if (record%is_collided) then
-                    ret%last_step = istep
+                    ret%last_step = (istep - 1)/output_interval + 1
 
                     probability_function = self%simulator%probability_functions(record%material%tag)
                     ret%probability = probability_function%at(pcl%position, pcl%velocity)
+
+                    ret%traces(max_output_steps) = pcl
+                    ret%ts(max_output_steps) = pcl%t
                     return
                 end if
             end block
         end do
 
-        ret%last_step = max_step
+        ret%last_step = (istep - 1)/output_interval + 1
+        ret%traces(max_output_steps) = pcl
+        ret%ts(max_output_steps) = pcl%t
     end function
 
     function solver_calculate_probability(self, particle, dt, max_step, use_adaptive_dt) result(ret)

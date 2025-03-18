@@ -1,10 +1,16 @@
 {
-    "fortran.fortls.extraArgs": [
-        "--include-dirs .lint",
-        "-nofpp"
+    // "fortran.fortls.extraArgs": [
+    //     "--include-dirs .lint",
+    //     "-nofpp"
+    // ],
+    // "fortran.linter.modOutput": "${workspaceFolder}/.lint",
+    "fortran.fortls.path": "fortls",
+    "fortran-ls.executablePath": "fortls",
+    "makefile.configureOnOpen": false,
+    "fortran.linter.extraArgs": [
+        "-Wall"
     ],
-    "fortran.linter.modOutput": "${workspaceFolder}/.lint",
-    "fortran.linter.includePaths": [
-        "${workspaceFolder}/.lint"
-    ]
+    // "fortran.linter.includePaths": [
+    //     "${workspaceFolder}/.lint"
+    // ]
 }
