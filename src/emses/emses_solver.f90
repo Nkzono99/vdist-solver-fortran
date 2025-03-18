@@ -115,7 +115,7 @@ contains
 !$          call omp_set_num_threads(n_threads)
 !$      end if
 
-        !$omp parallel
+        !$omp parallel private(ithread)
 
 !$      ithread = omp_get_thread_num()
 
@@ -252,7 +252,7 @@ contains
 !$          call omp_set_num_threads(n_threads)
 !$      end if
 
-        !$omp parallel
+        !$omp parallel private(ithread)
 
 !$      ithread = omp_get_thread_num()
 
