@@ -100,8 +100,6 @@ contains
         integer :: ipcl
         integer :: max_output_steps
 
-!$      integer :: ithread
-
         max_output_steps = (max_step - 1)/output_interval + 2
 
         simulator = create_simulator(inppath, length, &
@@ -121,10 +119,6 @@ contains
 !$          call omp_set_num_threads(n_threads)
 !$      end if
 
-        !$omp parallel private(ithread)
-
-!$      ithread = omp_get_thread_num()
-
         ! Note: Reason for using the "omp do schedule(static, 1)" statement
         !     Particles are often passed sorted by position and velocity.
         !     Particles with similar phase values tend to follow similar trajectories.
@@ -134,9 +128,9 @@ contains
         !     This imbalance means parallelization does not improve speedup.
         !
         !     Therefore, this process samples every chunk size (= 1) from the particle list.
-        !$omp do schedule(static, 1)        
+        !$omp parallel do schedule(dynamic, 1)
         do ipcl = 1, npcls
-!$          if (ithread == 0) then
+!$          if (omp_get_thread_num() == 0) then
                 ! When you print a progress bar to 100%, the opening is printed.
                 ! Therefore, it is modified to print 99% until the last particle is processed.
                 call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
@@ -174,11 +168,9 @@ contains
                 return_probabilities(ipcl) = record%probability
             end block
         end do
-        !$omp end do
-        !$omp end parallel
+        !$omp end parallel do
 
         call bar%update(current=1d0)
-
         call bar%destroy
         call simulator%boundaries%destroy
     end subroutine
@@ -246,8 +238,6 @@ contains
         type(bar_object) :: bar
         integer :: ipcl
 
-!$      integer :: ithread
-
         simulator = create_simulator(inppath, length, &
                                      lx, ly, lz, &
                                      ebvalues, &
@@ -265,10 +255,6 @@ contains
 !$          call omp_set_num_threads(n_threads)
 !$      end if
 
-        !$omp parallel private(ithread)
-
-!$      ithread = omp_get_thread_num()
-
         ! Note: Reason for using the "omp do schedule(static, 1)" statement
         !     Particles are often passed sorted by position and velocity.
         !     Particles with similar phase values tend to follow similar trajectories.
@@ -278,9 +264,9 @@ contains
         !     This imbalance means parallelization does not improve speedup.
         !
         !     Therefore, this process samples every chunk size (= 1) from the particle list.
-        !$omp do schedule(static, 1)
+        !$omp parallel do schedule(dynamic, 1)
         do ipcl = 1, npcls
-!$          if (ithread == 0) then
+!$          if (omp_get_thread_num() == 0) then
                 ! When you print a progress bar to 100%, the opening is printed.
                 ! Therefore, it is modified to print 99% until the last particle is processed.
                 call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
@@ -305,8 +291,7 @@ contains
                 end if
             end block
         end do
-        !$omp end do
-        !$omp end parallel
+        !$omp end parallel do
 
         call bar%update(current=1d0)
 
@@ -449,7 +434,7 @@ contains
         type(tp_Probability), allocatable :: probability_functions(:)
 
         integer :: n_probability_functions
-        
+
         n_probability_functions = 0
 
         allocate (probability_functions(max_probability_types))
@@ -532,7 +517,7 @@ contains
 
             if (nflag_emit(ispec) == 0) then
                 allocate (probability_functions(n_probability_functions + 1)%ref, &
-                        source=new_MaxwellianProbability(vmean, vthermal))
+                          source=new_MaxwellianProbability(vmean, vthermal))
                 n_probability_functions = n_probability_functions + 1
                 tag_vdist = n_probability_functions
             else
