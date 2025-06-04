@@ -87,10 +87,22 @@ contains
         double precision :: u10(self%n_elements), u11(self%n_elements)
         double precision :: u0(self%n_elements), u1(self%n_elements)
 
+        integer :: i
+
         ! Linear interpolation
         p(:) = position(:)
-        ip(:) = int(p(:))
-        ip1(:) = ip(:) + 1
+         do i = 1, 3
+            ! ip(i) を [0 … n_dim–1] の範囲に制限する
+            ! もし position(i) < 0    → 0 に丸め込む
+            !    position(i) ≥ n_dim → n_dim–1 に丸め込む
+            ip(i) = int(p(i))
+            if (ip(i) < 0)         ip(i) = 0
+            if (ip(i) > self%nx-1 .and. i == 1) ip(i) = self%nx - 1
+            if (ip(i) > self%ny-1 .and. i == 2) ip(i) = self%ny - 1
+            if (ip(i) > self%nz-1 .and. i == 3) ip(i) = self%nz - 1
+
+            ip1(i) = ip(i) + 1
+        end do
 
         rp(:) = p(:) - ip(:)
         rp1(:) = 1 - rp(:)
