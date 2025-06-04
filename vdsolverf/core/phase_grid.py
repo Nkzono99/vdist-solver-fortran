@@ -26,6 +26,35 @@ class Lim:
 lim_like = Union[Lim, Tuple[float, float, int], float]
 
 
+class Phases(np.ndarray):
+    def __new__(cls, input_array):
+        return np.asarray(input_array).view(cls)
+
+    @property
+    def X(self):
+        return self[:, :, :, :, :, :, 0]
+
+    @property
+    def Y(self):
+        return self[:, :, :, :, :, :, 1]
+
+    @property
+    def Z(self):
+        return self[:, :, :, :, :, :, 2]
+
+    @property
+    def VX(self):
+        return self[:, :, :, :, :, :, 3]
+
+    @property
+    def VY(self):
+        return self[:, :, :, :, :, :, 4]
+
+    @property
+    def VZ(self):
+        return self[:, :, :, :, :, :, 5]
+
+
 @dataclass
 class PhaseGrid:
     x: lim_like
@@ -122,7 +151,7 @@ class PhaseGrid:
         grd[:, :, :, :, :, :, 4] = VY
         grd[:, :, :, :, :, :, 5] = VZ
 
-        return grd
+        return Phases(grd)
 
     def create_particles(self) -> List[Particle]:
         """Create a list of particles.
