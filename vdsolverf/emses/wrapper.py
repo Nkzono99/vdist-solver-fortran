@@ -5,8 +5,8 @@ from os import PathLike
 from pathlib import Path
 from typing import List, Literal, Tuple, Union
 
+import emout
 import numpy as np
-from emout import Emout
 from scipy.spatial.transform import Rotation
 
 from ..core import DustParticle, Particle
@@ -26,7 +26,7 @@ VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS = (
 
 
 def get_backtrace(
-    data_or_directory: Emout | PathLike,
+    directory: PathLike,
     ispec: int,
     istep: int,
     particle: Particle,
@@ -50,17 +50,12 @@ def get_backtrace(
         dll = CDLL(library_path)
     elif system == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path)  # type:ignore
+        dll = WinDLL(library_path) # type:ignore
     else:
         raise RuntimeError(f"This platform is not supported: {system}")
 
-    if isinstance(data_or_directory, Emout):
-        data = data_or_directory
-    else:
-        data = Emout(data_or_directory)
-
     result = get_backtraces_dll(
-        data=data,
+        directory=directory,
         ispec=ispec,
         istep=istep,
         particles=[particle],
@@ -94,7 +89,7 @@ def get_backtrace(
 
 
 def get_backtraces(
-    data_or_directory: Emout | PathLike,
+    directory: PathLike,
     ispec: int,
     istep: int,
     particles: List[Particle],
@@ -120,17 +115,12 @@ def get_backtraces(
         dll = CDLL(library_path)
     elif system == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path)  # type:ignore
+        dll = WinDLL(library_path) # type:ignore
     else:
         raise RuntimeError(f"This platform is not supported: {system}")
 
-    if isinstance(data_or_directory, Emout):
-        data = data_or_directory
-    else:
-        data = Emout(data_or_directory)
-
     result = get_backtraces_dll(
-        data=data,
+        directory=directory,
         ispec=ispec,
         istep=istep,
         particles=particles,
@@ -157,7 +147,7 @@ def get_backtraces(
 
 
 def get_backtraces_dll(
-    data: Emout,
+    directory: PathLike,
     ispec: int,
     istep: int,
     particles: List[Particle],
@@ -194,11 +184,13 @@ def get_backtraces_dll(
     ]
     dll.get_probabilities.restype = None
 
+    data = emout.Emout(directory)
+
     ebvalues = create_relocated_ebvalues(data, istep)
 
     npcls = len(particles)
 
-    max_output_steps = int((max_step - 1) / output_interval + 2)
+    max_output_steps = int((max_step - 1)/output_interval + 2)
     return_ts = np.empty((npcls, max_output_steps), dtype=np.float64)
     return_probabilities = np.empty(npcls, dtype=np.float64)
     return_positions = np.empty((npcls, max_output_steps, 3), dtype=np.float64)
@@ -262,7 +254,7 @@ def get_backtraces_dll(
 
 
 def get_probabilities(
-    data_or_directory: PathLike,
+    directory: PathLike,
     ispec: int,
     istep: int,
     particles: List[Particle],
@@ -287,17 +279,12 @@ def get_probabilities(
         dll = CDLL(library_path)
     elif system == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path)  # type:ignore
+        dll = WinDLL(library_path) # type:ignore
     else:
         raise RuntimeError(f"This platform is not supported: {system}")
 
-    if isinstance(data_or_directory, Emout):
-        data = data_or_directory
-    else:
-        data = Emout(data_or_directory)
-
     result = get_probabilities_dll(
-        data=data,
+        directory=directory,
         ispec=ispec,
         istep=istep,
         particles=particles,
@@ -323,7 +310,7 @@ def get_probabilities(
 
 
 def get_probabilities_dll(
-    data: Emout,
+    directory: PathLike,
     ispec: int,
     istep: int,
     particles: List[Particle],
@@ -355,6 +342,8 @@ def get_probabilities_dll(
         POINTER(c_int),  # n_threads
     ]
     dll.get_probabilities.restype = None
+
+    data = emout.Emout(directory)
 
     ebvalues = create_relocated_ebvalues(data, istep)
 
@@ -413,7 +402,7 @@ def get_probabilities_dll(
 
 
 def get_dust_backtrace(
-    data_or_directory: Emout | PathLike,
+    directory: PathLike,
     istep: int,
     dust: DustParticle,
     dt: float,
@@ -434,17 +423,12 @@ def get_dust_backtrace(
         dll = CDLL(library_path)
     elif os == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path)  # type:ignore
+        dll = WinDLL(library_path) # type:ignore
     else:
         raise RuntimeError(f"This platform is not supported: {os}")
 
-    if isinstance(data_or_directory, Emout):
-        data = data_or_directory
-    else:
-        data = Emout(data_or_directory)
-
     result = get_dust_backtrace_dll(
-        data=data,
+        directory=directory,
         istep=istep,
         dust=dust,
         dt=dt,
@@ -468,7 +452,7 @@ def get_dust_backtrace(
 
 
 def get_dust_backtrace_dll(
-    data: Emout,
+    directory: PathLike,
     istep: int,
     dust: DustParticle,
     dt: float,
@@ -502,6 +486,8 @@ def get_dust_backtrace_dll(
         POINTER(c_int),  # return_last_step
     ]
     dll.get_probabilities.restype = None
+
+    data = emout.Emout(directory)
 
     ebvalues = create_relocated_ebvalues(data, istep)
     current_values = create_relocated_current_values(data, istep)
@@ -567,7 +553,7 @@ def get_dust_backtrace_dll(
     return ts, charges, positions, velocities
 
 
-def create_relocated_ebvalues(data: Emout, istep: int) -> np.ndarray:
+def create_relocated_ebvalues(data: emout.Emout, istep: int) -> np.ndarray:
     ebvalues = np.zeros(
         (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1, 6), dtype=np.float64
     )
@@ -588,7 +574,7 @@ def create_relocated_ebvalues(data: Emout, istep: int) -> np.ndarray:
     return ebvalues
 
 
-def background_magnetic_field(data: Emout) -> np.ndarray:
+def background_magnetic_field(data: emout.Emout) -> np.ndarray:
     if "wc" not in data.inp:
         return np.zeros(3)
 
@@ -603,7 +589,7 @@ def rotate(vec: np.ndarray, phiz_deg: float, phixy_deg: float) -> np.ndarray:
     return rot.apply(vec)
 
 
-def create_relocated_current_values(data: Emout, istep: int) -> np.ndarray:
+def create_relocated_current_values(data: emout.Emout, istep: int) -> np.ndarray:
     current_values = np.zeros(
         (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1, 3 * data.inp.nspec),
         dtype=np.float64,
