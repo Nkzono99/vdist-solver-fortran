@@ -575,6 +575,59 @@ contains
                 pbound%material%tag = tag_vdist
                 call boundaries%add_boundary(pbound)
             end if
+
+            
+            if (npbnd(1, ispec) == 3) then ! X-Boundary
+                ! X lower boundary
+                allocate (pplane)
+                pplane = new_PlaneX(0d0)
+                pbound => pplane
+                pbound%material%tag = tag_zero
+                call boundaries%add_boundary(pbound)
+
+                ! X higher boundary
+                allocate (pplane)
+                pplane = new_PlaneX(dble(nx))
+                pbound => pplane
+                pbound%material%tag = tag_zero
+                call boundaries%add_boundary(pbound)
+            end if
+
+            if (npbnd(2, ispec) == 3) then ! Y-Boundary
+                ! Y lower boundary
+                allocate (pplane)
+                pplane = new_PlaneY(0d0)
+                pbound => pplane
+                pbound%material%tag = tag_zero
+                call boundaries%add_boundary(pbound)
+
+                ! Y higher boundary
+                allocate (pplane)
+                pplane = new_PlaneY(dble(ny))
+                pbound => pplane
+                pbound%material%tag = tag_zero
+                call boundaries%add_boundary(pbound)
+            end if
+
+            if (npbnd(3, ispec) == 3) then ! Z-Boundary
+                ! Z lower boundary
+                allocate (pplane)
+                pplane = new_PlaneZ(0d0)
+                pbound => pplane
+                if (zssurf < 0d0) then
+                    pbound%material%tag = tag_zero
+                else
+                    pbound%material%tag = tag_zero
+                end if
+                call boundaries%add_boundary(pbound)
+
+                ! Z higher boundary
+                allocate (pplane)
+                pplane = new_PlaneZ(dble(nz))
+                pbound => pplane
+                pbound%material%tag = tag_zero
+                call boundaries%add_boundary(pbound)
+            end if
         end subroutine
 
         subroutine add_emission_surface(priority)
