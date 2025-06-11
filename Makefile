@@ -18,59 +18,60 @@ endif
 export FPM_FC := gfortran
 export FPM_FFLAGS := -Ofast -m64 -fPIC -fopenmp
 export FPM_FFLAGS := $(FPM_FFLAGS) -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow
-BUILD_DIR=./build
+BUILD_DIR=build
 
 all: $(LIBNAME)
 
-$(LIBNAME): build copy_static shared copy_shared
+$(LIBNAME): build shared copy_shared
 
 .PHONY: build
 build: build_$(PLATFORM)
 
 build_linux:
-	fpm build --profile=release
+	fpm install --profile=release --prefix ./
 
 build_darwin:
-	fpm build --profile=release --archiver /usr/bin/ar
+	fpm install --profile=release --archiver /usr/bin/ar --prefix ./
 
 build_windows:
-	fpm build --profile=release
-
-copy_static:
-	cp $(shell find ./build/*/ -type f -name lib$(LIBNAME).a) $(BUILD_DIR)
+	fpm install --profile=release --prefix ./
 
 shared: shared_$(PLATFORM)
 
 shared_linux:
-	gfortran -shared -o $(BUILD_DIR)/lib$(LIBNAME).so -Wl,--whole-archive $(BUILD_DIR)/lib$(LIBNAME).a -Wl,--no-whole-archive -fopenmp
+	gfortran -shared -o lib/lib$(LIBNAME).so -Wl,--whole-archive lib/lib$(LIBNAME).a -Wl,--no-whole-archive -fopenmp
 
 shared_darwin: 
-	gfortran ${BUILD_DIR}/lib$(LIBNAME).a -dynamiclib -install_name ${BUILD_DIR}/lib$(LIBNAME).dylib -static-libgfortran -static-libquadmath -static-libgcc -o $(BUILD_DIR)/lib$(LIBNAME).dylib -Wl,-all_load $(BUILD_DIR)/lib$(LIBNAME).a -Wl,-noall_load
+	gfortran lib/lib$(LIBNAME).a -dynamiclib -install_name lib/lib$(LIBNAME).dylib -static-libgfortran -static-libquadmath -static-libgcc -o lib/lib$(LIBNAME).dylib -Wl,-all_load lib/lib$(LIBNAME).a -Wl,-noall_load -fopenmp
 
 shared_windows: 
-	gfortran -shared -static -o $(BUILD_DIR)/lib$(LIBNAME).dll -Wl,--out-implib=$(BUILD_DIR)/lib$(LIBNAME).dll.a,--export-all-symbols,--enable-auto-import,--whole-archive $(BUILD_DIR)/lib$(LIBNAME).a -Wl,--no-whole-archive
+	gfortran -shared -static -o lib\\lib$(LIBNAME).dll -Wl,--out-implib=lib\\lib$(LIBNAME).dll,--export-all-symbols,--enable-auto-import,--whole-archive lib/lib$(LIBNAME).a -Wl,--no-whole-archive -fopenmp
 
 copy_shared: copy_shared_${PLATFORM}
 
 copy_shared_linux:
-	cp ${BUILD_DIR}/lib${LIBNAME}.so vdsolverf/
+	cp lib/lib${LIBNAME}.so vdsolverf/
 
 copy_shared_darwin:
-	cp ${BUILD_DIR}/lib${LIBNAME}.dylib vdsolverf/
+	cp lib/lib${LIBNAME}.dylib vdsolverf/
 
 copy_shared_windows:
-	cp ${BUILD_DIR}/lib${LIBNAME}.dll vdsolverf/
+	copy /y lib\\lib${LIBNAME}.dll vdsolverf\\lib${LIBNAME}.dll
 
 .PHONY: clean
 clean: clean_$(PLATFORM)
-	fpm clean --skip
-	rm ${BUILD_DIR}/lib${LIBNAME}.a
 
 clean_linux:
+	fpm clean --skip
+	rm lib/lib${LIBNAME}.a
 	rm vdsolverf/lib${LIBNAME}.so
 
 clean_darwin:
+	fpm clean --skip
+	rm lib/lib${LIBNAME}.a
 	rm vdsolverf/lib${LIBNAME}.dylib
 
 clean_windows:
-	rm vdsolverf/lib${LIBNAME}.dll
+	fpm clean --skip
+	del /Q lib/lib${LIBNAME}.a >NUL 2>NUL || echo ok
+	del /Q "vdsolverf/lib${LIBNAME}.dll" >NUL 2>NUL || echo ok

@@ -23,4 +23,3 @@ forbear = { git = "https://github.com/szaghi/forbear.git" }
 implicit-typing = false
 implicit-external = false
 source-form = "free"
-
