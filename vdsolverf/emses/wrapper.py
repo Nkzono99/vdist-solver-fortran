@@ -42,6 +42,9 @@ def get_backtrace(
     if system == "auto":
         system = platform.system().lower()
 
+    if library_path is not None:
+        library_path = Path(library_path)
+
     if system == "linux":
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
         dll = CDLL(library_path)
@@ -50,7 +53,7 @@ def get_backtrace(
         dll = CDLL(library_path)
     elif system == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path) # type:ignore
+        dll = WinDLL(str(library_path.resolve()))  # type:ignore
     else:
         raise RuntimeError(f"This platform is not supported: {system}")
 
@@ -107,6 +110,9 @@ def get_backtraces(
     if system == "auto":
         system = platform.system().lower()
 
+    if library_path is not None:
+        library_path = Path(library_path)
+
     if system == "linux":
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
         dll = CDLL(library_path)
@@ -115,7 +121,7 @@ def get_backtraces(
         dll = CDLL(library_path)
     elif system == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path) # type:ignore
+        dll = WinDLL(str(library_path.resolve()))  # type:ignore
     else:
         raise RuntimeError(f"This platform is not supported: {system}")
 
@@ -190,7 +196,7 @@ def get_backtraces_dll(
 
     npcls = len(particles)
 
-    max_output_steps = int((max_step - 1)/output_interval + 2)
+    max_output_steps = int((max_step - 1) / output_interval + 2)
     return_ts = np.empty((npcls, max_output_steps), dtype=np.float64)
     return_probabilities = np.empty(npcls, dtype=np.float64)
     return_positions = np.empty((npcls, max_output_steps, 3), dtype=np.float64)
@@ -271,6 +277,9 @@ def get_probabilities(
     if system == "auto":
         system = platform.system().lower()
 
+    if library_path is not None:
+        library_path = Path(library_path)
+
     if system == "linux":
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
         dll = CDLL(library_path)
@@ -279,7 +288,7 @@ def get_probabilities(
         dll = CDLL(library_path)
     elif system == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path) # type:ignore
+        dll = WinDLL(str(library_path.resolve()))  # type:ignore
     else:
         raise RuntimeError(f"This platform is not supported: {system}")
 
@@ -423,7 +432,7 @@ def get_dust_backtrace(
         dll = CDLL(library_path)
     elif os == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path) # type:ignore
+        dll = WinDLL(library_path)  # type:ignore
     else:
         raise RuntimeError(f"This platform is not supported: {os}")
 
