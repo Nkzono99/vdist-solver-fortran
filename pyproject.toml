@@ -23,7 +23,16 @@ maintainers = [{ name = "Nkzono99", email = "j-nakazono@stu.kobe-u.ac.jp" }]
 
 license = { file = "LICENSE" }
 
-dependencies = ["f90nml", "emout >= 2.0.4", "numpy", "scipy", "tqdm"]
+dependencies = [
+  "f90nml",
+  "emout >= 2.0.4",
+  "numpy",
+  "scipy",
+  "tqdm",
+  "jupyter",
+  "ipykernel",
+  "ipywidgets",
+]
 
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
