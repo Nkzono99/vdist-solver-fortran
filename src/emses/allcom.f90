@@ -163,7 +163,7 @@ contains
         vdri_from_spa(:) = rot3d_z(vdri_from_spa, phixy*DEG2RAD)
 
         vdri_from_vdri(:) = [0d0, 0d0, vdri(ispec)]
-        vdri_from_vdri(:) = rot3d_y(vdri_from_vdri, vdthz(ispec)*DEG2RAD)
+        vdri_from_vdri(:) = rot3d_y(vdri_from_vdri, -vdthz(ispec)*DEG2RAD)
         vdri_from_vdri(:) = rot3d_z(vdri_from_vdri, vdthxy(ispec)*DEG2RAD)
 
         ret(:) = vdri_from_spa + vdri_from_vdri
@@ -206,7 +206,7 @@ contains
             call nemd2angle(iepl, thz, thxy)
 
             vdri_from_vdri(:) = [0d0, 0d0, vdri(ispec)]
-            vdri_from_vdri(:) = rot3d_y(vdri_from_vdri, thz*DEG2RAD)
+            vdri_from_vdri(:) = rot3d_y(vdri_from_vdri, -thz*DEG2RAD)
             vdri_from_vdri(:) = rot3d_z(vdri_from_vdri, thxy*DEG2RAD)
         end block
 
