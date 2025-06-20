@@ -179,12 +179,12 @@ contains
             class(t_Boundary), pointer :: pbound
             type(t_RectangleXYZ), pointer :: prect
 
-            xmin = rectangle_shape(itype, 1)
-            xmax = rectangle_shape(itype, 2)
-            ymin = rectangle_shape(itype, 3)
-            ymax = rectangle_shape(itype, 4)
-            zmin = rectangle_shape(itype, 5)
-            zmax = rectangle_shape(itype, 6)
+            xmin = rectangle_shape(1, itype)
+            xmax = rectangle_shape(2, itype)
+            ymin = rectangle_shape(3, itype)
+            ymax = rectangle_shape(4, itype)
+            zmin = rectangle_shape(5, itype)
+            zmax = rectangle_shape(6, itype)
 
             allocate (prect)
             if (xmin == xmax) then
@@ -210,7 +210,7 @@ contains
             type(t_CircleXYZ), pointer :: pcircle
 
             allocate (pcircle)
-            pcircle = new_CircleXYZ(axis, circle_origin(itype, :), circle_radius(itype))
+            pcircle = new_CircleXYZ(axis, circle_origin(:, itype), circle_radius(itype))
             pbound => pcircle
 
             if (pbound%is_overlap(sdoms, extent=extent)) then
@@ -237,12 +237,12 @@ contains
             double precision :: xmin, xmax, ymin, ymax, zmin, zmax
             double precision :: wx, wy, wz
 
-            xmin = cuboid_shape(itype, 1)
-            xmax = cuboid_shape(itype, 2)
-            ymin = cuboid_shape(itype, 3)
-            ymax = cuboid_shape(itype, 4)
-            zmin = cuboid_shape(itype, 5)
-            zmax = cuboid_shape(itype, 6)
+            xmin = cuboid_shape(1, itype)
+            xmax = cuboid_shape(2, itype)
+            ymin = cuboid_shape(3, itype)
+            ymax = cuboid_shape(4, itype)
+            zmin = cuboid_shape(5, itype)
+            zmax = cuboid_shape(6, itype)
 
             wx = xmax - xmin
             wy = ymax - ymin
@@ -314,7 +314,7 @@ contains
             class(t_Boundary), pointer :: pbound
             type(t_Sphere), pointer :: pshere
 
-            origin(:) = sphere_origin(itype, :)
+            origin(:) = sphere_origin(:, itype)
             radius = sphere_radius(itype)
 
             allocate (pshere)
@@ -341,9 +341,9 @@ contains
             double precision :: radius
 
             height = cylinder_height(itype)
-            lower_origin(1:3) = cylinder_origin(itype, 1:3)
-            upper_origin(1:3) = cylinder_origin(itype, 1:3)
-            upper_origin(axis) = cylinder_origin(itype, axis) + height
+            lower_origin(1:3) = cylinder_origin(1:3, itype)
+            upper_origin(1:3) = cylinder_origin(1:3, itype)
+            upper_origin(axis) = cylinder_origin(axis, itype) + height
             radius = cylinder_radius(itype)
 
             ! Outer cylinder
@@ -998,8 +998,8 @@ double precision :: xmin, ymin, xmax, ymax
             double precision :: inner_radius
 
             height = disk_height(itype)
-            lower_origin(1:3) = disk_origin(itype, 1:3)
-            upper_origin(1:3) = disk_origin(itype, 1:3)
+            lower_origin(1:3) = disk_origin(1:3, itype)
+            upper_origin(1:3) = disk_origin(1:3, itype)
             upper_origin(axis) = upper_origin(axis) + height
             radius = disk_radius(itype)
             inner_radius = disk_inner_radius(itype)

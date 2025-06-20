@@ -90,7 +90,7 @@ module allcom
         !! Type of boundary condition
     character(len=30) :: boundary_types(nboundary_types) = "none"
         !! List of boundary types (activated when boundary_type = "complex")
-    double precision :: cylinder_origin(nboundary_types, 3) = 0.0d0
+    double precision :: cylinder_origin(3, nboundary_types) = 0.0d0
         !! Origins of cylinder boundaries
     double precision :: cylinder_radius(nboundary_types) = 0.0d0
         !! Radii of cylinder boundaries
@@ -100,19 +100,19 @@ module allcom
         !! Minimum radius relative to the entrance radius of the hyperbolic hole (r_min == rcurv*r_max). <br>
         !! If rcurv == 1.0d0, then r_min == r_max. <br>
         !! Else if rcurv == 0.5d0 then r_min == 0.5d0 * r_max
-    double precision :: rectangle_shape(nboundary_types, 6) = 0.0d0
+    double precision :: rectangle_shape(6, nboundary_types) = 0.0d0
         !! Shapes of rectangle boundaries
-    double precision :: sphere_origin(nboundary_types, 3) = 0.0d0
+    double precision :: sphere_origin(3, nboundary_types) = 0.0d0
         !! Origins of sphere boundaries
     double precision :: sphere_radius(nboundary_types) = 0.0d0
         !! Radius of sphere boundaries
-    double precision :: circle_origin(nboundary_types, 3) = 0.0d0
+    double precision :: circle_origin(3, nboundary_types) = 0.0d0
         !! Origins of circle boundaries
     double precision :: circle_radius(nboundary_types) = 0.0d0
         !! Radius of circle boundaries
-    double precision :: cuboid_shape(nboundary_types, 6) = 0.0d0
+    double precision :: cuboid_shape(6, nboundary_types) = 0.0d0
         !! Shapes of cuboid boundaries
-    double precision :: disk_origin(nboundary_types, 3) = 0.0d0
+    double precision :: disk_origin(3, nboundary_types) = 0.0d0
         !! Origins of disk boundaries
     double precision :: disk_height(nboundary_types) = 0.0d0
         !! Heights of disk boundaries
