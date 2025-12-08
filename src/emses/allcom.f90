@@ -133,7 +133,7 @@ module allcom
         !! Current from emission surfaces
     integer :: nemd(max_nepl)
         !! Emission directions
-    double precision :: curfs(max_nepl)
+    double precision :: curfs(max_nepl) = -9999d0
         !! Current from each emission surface
     double precision :: xmine(max_nepl), xmaxe(max_nepl)
         !! Minimum and maximum X-coordinates for each emission surface
@@ -195,22 +195,26 @@ contains
         double precision :: vdri_from_spa(3)
         double precision :: vdri_from_vdri(3)
 
+        integer :: axis0, axis1, axis2
+
         vdri_from_spa(:) = [spe(ispec), 0d0, spa(ispec)]
         vdri_from_spa(:) = rot3d_z(vdri_from_spa, speth(ispec))
         vdri_from_spa(:) = rot3d_y(vdri_from_spa, phiz*DEG2RAD)
         vdri_from_spa(:) = rot3d_z(vdri_from_spa, phixy*DEG2RAD)
 
-        block
-            double precision :: thz, thxy
+        axis0 = abs(nemd(iepl))
+        axis1 = mod(axis0, 3) + 1
+        axis2 = mod(axis0 + 1, 3) + 1
 
-            call nemd2angle(iepl, thz, thxy)
+        if (nemd(iepl) > 0) then
+            ret(axis0) = vdri_from_spa(3)
+        else
+            ret(axis0) = -vdri_from_spa(3)
+        end if
 
-            vdri_from_vdri(:) = [0d0, 0d0, vdri(ispec)]
-            vdri_from_vdri(:) = rot3d_y(vdri_from_vdri, -thz*DEG2RAD)
-            vdri_from_vdri(:) = rot3d_z(vdri_from_vdri, thxy*DEG2RAD)
-        end block
+        ret(axis1) = vdri_from_spa(1)
+        ret(axis2) = vdri_from_spa(2)
 
-        ret(:) = vdri_from_spa + vdri_from_vdri
     end function
 
     function emission_vth_vector(ispec, iepl) result(ret)
@@ -226,12 +230,28 @@ contains
         ret(:) = [peth(ispec), peth(ispec), path(ispec)]
         block
             double precision :: thz, thxy
+            double precision :: vth_vec(3)
+
+            integer :: axis0, axis1, axis2
 
             call nemd2angle(iepl, thz, thxy)
 
-            ret(:) = [peth(ispec), peth(ispec), path(ispec)]
-            ret(:) = rot3d_y(ret, thz*DEG2RAD)
-            ret(:) = rot3d_z(ret, thxy*DEG2RAD)
+            vth_vec(:) = [peth(ispec), peth(ispec), path(ispec)]
+            vth_vec(:) = rot3d_y(vth_vec, thz*DEG2RAD)
+            vth_vec(:) = rot3d_z(vth_vec, thxy*DEG2RAD)
+
+            axis0 = abs(nemd(iepl))
+            axis1 = mod(axis0, 3) + 1
+            axis2 = mod(axis0 + 1, 3) + 1
+
+            if (nemd(iepl) > 0) then
+                ret(axis0) = vth_vec(3)
+            else
+                ret(axis0) = -vth_vec(3)
+            end if
+
+            ret(axis1) = vth_vec(1)
+            ret(axis2) = vth_vec(2)
         end block
     end function
 
