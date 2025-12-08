@@ -20,6 +20,8 @@ module m_emses_solver
     use m_namelist
     use emses_boundaries
 
+    use m_maxwell_flux_erf, only: solve_density_from_flux_erf
+
     implicit none
 
     private
@@ -576,7 +578,6 @@ contains
                 call boundaries%add_boundary(pbound)
             end if
 
-            
             if (npbnd(1, ispec) == 3) then ! X-Boundary
                 ! X lower boundary
                 allocate (pplane)
@@ -653,12 +654,24 @@ contains
                 block
                     double precision :: vmean(3)
                     double precision :: vthermal(3)
+                    double precision :: density, flux
 
                     vmean = emission_vdri_vector(ispec, iepl)
                     vthermal = emission_vth_vector(ispec, iepl)
 
+                    flux = curf(ispec)
+                    if (curfs(iepl) >= 0d0) then
+                        flux = curfs(ispec)
+                    end if
+
+                    density = solve_density_from_flux_erf( &
+                              flux, &
+                              vmean(abs(nemd(iepl))), &
+                              vthermal(abs(nemd(iepl))) &
+                              )
+
                     allocate (probability_functions(n_probability_functions + 1)%ref, &
-                              source=new_MaxwellianProbability(vmean, vthermal))
+                              source=new_MaxwellianProbability(vmean, vthermal, density))
                     n_probability_functions = n_probability_functions + 1
                     tag_vdist = n_probability_functions
                 end block
