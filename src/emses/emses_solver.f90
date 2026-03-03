@@ -316,6 +316,7 @@ contains
                                   max_step, &
                                   use_adaptive_dt, &
                                   max_probability_types, &
+                                  gravity, &
                                   return_ts, &
                                   return_charges, &
                                   return_positions, &
@@ -358,6 +359,8 @@ contains
             !! Flag to use adaptive time step
         integer(c_int), value, intent(in) :: max_probability_types
             !! Maximum number of probability types
+        real(c_double), value, intent(in) :: gravity
+            !! Gravitational acceleration applied to dust velocity z component
         real(c_double), intent(out) :: return_ts(max_step)
             !! Array to store time steps
         real(c_double), intent(out) :: return_charges(max_step)
@@ -378,7 +381,7 @@ contains
                                      ebvalues, &
                                      1, &
                                      max_probability_types)
-        charge_simulator = create_dust_charge_simulator(inppath, length, lx, ly, lz, nspec, current_values, curf(3))
+        charge_simulator = create_dust_charge_simulator(inppath, length, lx, ly, lz, nspec, current_values, curf(3), gravity)
         solver = new_Solver(simulator, charge_simulator)
 
         block
@@ -704,7 +707,7 @@ contains
 
     end subroutine
 
-    function create_dust_charge_simulator(inppath, length, lx, ly, lz, nspecies, current_values, jph0) result(simulator)
+    function create_dust_charge_simulator(inppath, length, lx, ly, lz, nspecies, current_values, jph0, gravity) result(simulator)
         !! Create and initialize a new ES simulator object.
 
         character(1, c_char), intent(in) :: inppath(*)
@@ -723,6 +726,8 @@ contains
             !! Electric and magnetic field values
         real(c_double), intent(in) :: jph0
             !! Photoelectrons current
+        real(c_double), intent(in) :: gravity
+            !! Gravitational acceleration applied to dust velocity z component
         type(t_DustChargeSimulator) :: simulator
             !! Simulator object
 
@@ -745,7 +750,7 @@ contains
 
             currents = new_VectorFieldGrid(3*nspecies, nx, ny, nz, current_values(:, :, :, :))
 
-            simulator = new_DustChargeSimulator(lx, ly, lz, nspecies, temperatures, currents, jph0)
+            simulator = new_DustChargeSimulator(lx, ly, lz, nspecies, temperatures, currents, jph0, gravity)
         end block
     end function
 

@@ -39,6 +39,7 @@ module m_dust_charge_simulator
         class(t_VectorField), allocatable :: currents
 
         double precision :: jph0 = 0d0
+        double precision :: gravity = 2.6703601345286842e-09
 
     contains
 
@@ -84,7 +85,8 @@ contains
                                      nspec, &
                                      temperatures, &
                                      currents, &
-                                     jph0) result(obj)
+                                     jph0, &
+                                     gravity) result(obj)
 
         integer, intent(in) :: nx
             !! Number of grid points in the x direction
@@ -96,6 +98,7 @@ contains
         double precision, intent(in) :: temperatures(nspec)
         class(t_VectorField), intent(in) :: currents
         double precision, intent(in), optional :: jph0
+        double precision, intent(in), optional :: gravity
 
         type(t_DustChargeSimulator) :: obj
 
@@ -110,6 +113,10 @@ contains
 
         if (present(jph0)) then
             obj%jph0 = jph0
+        end if
+
+        if (present(gravity)) then
+            obj%gravity = gravity
         end if
     end function
 
@@ -196,9 +203,7 @@ contains
         end block
 
         block
-            double precision :: g = 2.6703601345286842e-09
-            ! double precision :: g = 8.901200448428947e-10
-            dust_new%particle%velocity(3) = dust_new%particle%velocity(3) - g*(-dt)
+            dust_new%particle%velocity(3) = dust_new%particle%velocity(3) - self%gravity*(-dt)
         end block
     end function
 
