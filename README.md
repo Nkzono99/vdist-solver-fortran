@@ -118,6 +118,36 @@ for probability, positions, last_index in zip(probabilities, positions_list, las
 plt.gcf().savefig("backtraces.png")
 ```
 
+
+### Dust Backtrace
+
+```python
+import emout
+from vdsolverf.core import DustParticle
+from vdsolverf.emses import get_dust_backtrace
+
+data = emout.Emout("EMSES-simulation-directory")
+
+dust = DustParticle(
+    charge=-1.0e-6,
+    mass=1.0e-12,
+    radius=1.0e-6,
+    pos=[32, 32, 400],
+    vel=[0, 0, -10],
+)
+
+# gravity is optional. default value keeps previous behavior.
+ts, charges, positions, velocities = get_dust_backtrace(
+    directory=data.directory,
+    istep=-1,
+    dust=dust,
+    dt=data.inp.dt,
+    max_step=10000,
+    use_adaptive_dt=False,
+    gravity=2.6703601345286842e-09,
+)
+```
+
 ### Phase Probability Distribution Solver
 
 ```python

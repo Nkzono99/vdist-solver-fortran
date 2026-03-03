@@ -418,23 +418,32 @@ def get_dust_backtrace(
     max_step: int,
     use_adaptive_dt: bool = False,
     max_probability_types: int = 100,
-    os: Literal["auto", "linux", "darwin", "windows"] = "auto",
+    system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
+    gravity: float = 2.6703601345286842e-09,
+    os: Union[Literal["auto", "linux", "darwin", "windows"], None] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    if os == "auto":
-        os = platform.system().lower()
+    # Backward compatibility: keep supporting the legacy `os` argument.
+    if os is not None:
+        system = os
 
-    if os == "linux":
+    if system == "auto":
+        system = platform.system().lower()
+
+    if library_path is not None:
+        library_path = Path(library_path)
+
+    if system == "linux":
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
         dll = CDLL(library_path)
-    elif os == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
+    elif system == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
         dll = CDLL(library_path)
-    elif os == "windows":  # TODO: 実際に動作するのかは未検証
+    elif system == "windows":  # TODO: 実際に動作するのかは未検証
         library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path)  # type:ignore
+        dll = WinDLL(str(library_path.resolve()))  # type:ignore
     else:
-        raise RuntimeError(f"This platform is not supported: {os}")
+        raise RuntimeError(f"This platform is not supported: {system}")
 
     result = get_dust_backtrace_dll(
         directory=directory,
@@ -444,6 +453,7 @@ def get_dust_backtrace(
         max_step=max_step,
         use_adaptive_dt=use_adaptive_dt,
         max_probability_types=max_probability_types,
+        gravity=gravity,
         dll=dll,
     )
 
@@ -468,8 +478,12 @@ def get_dust_backtrace_dll(
     max_step: int,
     use_adaptive_dt: bool,
     max_probability_types: int,
+    gravity: float,
     dll: Union[CDLL, "WinDLL"],
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if max_step <= 0:
+        raise ValueError("max_step must be greater than 0")
+
     dll.get_backtrace_dust.argtypes = [
         c_char_p,  # inppath
         c_int,  # length
@@ -488,13 +502,14 @@ def get_dust_backtrace_dll(
         c_int,  # max_step
         c_int,  # use_adaptive_dt
         c_int,  # max_probability_types
+        c_double,  # gravity
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_ts
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_charges
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_positions
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_velocities
         POINTER(c_int),  # return_last_step
     ]
-    dll.get_probabilities.restype = None
+    dll.get_backtrace_dust.restype = None
 
     data = emout.Emout(directory)
 
@@ -526,6 +541,7 @@ def get_dust_backtrace_dll(
         _max_step = c_int(max_step)
         _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
         _max_probability_types = c_int(max_probability_types)
+        _gravity = c_double(gravity)
         _return_last_index = c_int()
 
         dll.get_backtrace_dust(
