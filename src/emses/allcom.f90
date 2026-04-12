@@ -90,6 +90,8 @@ module allcom
         !! Type of boundary condition
     character(len=30) :: boundary_types(nboundary_types) = "none"
         !! List of boundary types (activated when boundary_type = "complex")
+    integer :: boundary_conductor_id(nboundary_types) = -1
+        !! Conductor ID assigned to each complex boundary
     double precision :: cylinder_origin(3, nboundary_types) = 0.0d0
         !! Origins of cylinder boundaries
     double precision :: cylinder_radius(nboundary_types) = 0.0d0
@@ -123,6 +125,38 @@ module allcom
     double precision :: plane_with_circle_hole_zlower(nboundary_types) = 0.0d0
     double precision :: plane_with_circle_hole_height(nboundary_types) = 0.0d0
     double precision :: plane_with_circle_hole_radius(nboundary_types) = 0.0d0
+    double precision :: plane_with_circle_origin(3, nboundary_types) = 0.0d0
+        !! Origins of planes with circular apertures
+    double precision :: plane_with_circle_radius(nboundary_types) = 0.0d0
+        !! Radii of circular apertures defined on planes
+    double precision :: conductivity = 0.0d0
+        !! Boundary conductivity
+    integer :: max_bounce_count = 3
+        !! Maximum number of repeated collisions treated on a boundary
+    double precision :: boundary_mirror_reflection_rate(nboundary_types, max_nspec) = 0.0d0
+        !! Mirror reflection rate for each boundary and species
+    double precision :: boundary_reversal_reflection_rate(nboundary_types, max_nspec) = 0.0d0
+        !! Reversal reflection rate for each boundary and species
+    double precision :: boundary_mirror_reflect_alpha(nboundary_types, max_nspec) = 0.0d0
+        !! Mirror reflection angular parameter for each boundary and species
+    double precision :: boundary_reversal_reflect_alpha(nboundary_types, max_nspec) = 0.0d0
+        !! Reversal reflection angular parameter for each boundary and species
+    double precision :: boundary_mirror_reflect_energy_loss_frac(nboundary_types, max_nspec) = 0.0d0
+        !! Energy loss fraction for mirror reflection
+    double precision :: boundary_reversal_reflect_energy_loss_frac(nboundary_types, max_nspec) = 0.0d0
+        !! Energy loss fraction for reversal reflection
+    logical :: enable_secondary_electron_emission(nboundary_types, max_nspec) = .false.
+        !! Flag to enable secondary electron emission on each boundary and species
+    integer :: boundary_se_model_type(nboundary_types, max_nspec) = 0
+        !! Secondary electron emission model for each boundary and species
+    double precision :: boundary_se_const_yield(nboundary_types, max_nspec) = 0.0d0
+        !! Constant SEE yield for each boundary and species
+    double precision :: boundary_se_yield_max(nboundary_types, max_nspec) = 0.0d0
+        !! Maximum SEE yield for each boundary and species
+    double precision :: boundary_se_energy_max(nboundary_types, max_nspec) = 300.0d0
+        !! Energy at which the SEE yield peaks
+    integer :: boundary_se_species_id(nboundary_types, max_nspec) = 1
+        !! Emitted species ID for secondary electron emission
 
     ! /emissn/
     integer :: nflag_emit(max_nspec)

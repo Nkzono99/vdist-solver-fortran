@@ -37,44 +37,40 @@
 !>   boundary_rotation_deg(3) = 0d0, 0d0, 0d0
 !> &
 !>
-module emses_boundaries
+module m_surfaces
     use finbound
     use allcom, only: xlrechole, ylrechole, zlrechole, &
                       xurechole, yurechole, zurechole, &
                       zssurf, &
                       nx, ny, nz, &
                       boundary_type, nboundary_types, boundary_types, &
-                      cylinder_origin, cylinder_radius, cylinder_height, &
                       rcurv, &
-                      rectangle_shape, &
-                      sphere_origin, sphere_radius, &
-                      circle_origin, circle_radius, &
-                      cuboid_shape, &
-                      disk_origin, disk_height, disk_radius, disk_inner_radius, &
                       plane_with_circle_hole_zlower, &
                       plane_with_circle_hole_height, &
                       plane_with_circle_hole_radius
+    use m_kinds, only: ip, lp, sp, dp
     implicit none
 
-    double precision, parameter :: extent(2, 3) = &
+    real(kind=dp), parameter :: extent(2, 3) = &
         reshape([[1.0d0, 1.0d0], [1.0d0, 1.0d0], [1.0d0, 1.0d0]]*2, [2, 3])
 
     private
-    public create_simple_collision_boundaries
+    public add_surfaces
+
+    real(kind=dp), parameter :: PLANE_PADDING = 99999
 
 contains
 
-    function create_simple_collision_boundaries(isdoms, cover_all, tag) result(boundaries)
-        integer, intent(in) :: isdoms(2, 3)
+    subroutine add_surfaces(boundaries, isdoms, cover_all)
+        type(t_BoundaryList), intent(inout) :: boundaries
+        integer(kind=ip), intent(in) :: isdoms(2, 3)
         logical, intent(in), optional :: cover_all
-        integer, intent(in), optional :: tag
-        type(t_BoundaryList) :: boundaries
 
-        double precision :: xl, yl, zl
-        double precision :: xu, yu, zu
+        real(kind=dp) :: xl, yl, zl
+        real(kind=dp) :: xu, yu, zu
 
-        double precision :: sdoms(2, 3)
-        integer :: itype
+        real(kind=dp) :: sdoms(2, 3)
+        integer(kind=ip) :: itype
 
         logical :: is_possible_to_be_covered
 
@@ -89,7 +85,7 @@ contains
         zl = zlrechole(2)
         zu = zssurf ! (= zurechole(1)) ! Use 'zssurf' instead of 'zurechole(1)' in case the hole parameter is not used.
 
-        boundaries = new_BoundaryList()
+        itype = 1
         if (boundary_type == "rectangle-hole") then
             call add_rectangle_hole_surface
             is_possible_to_be_covered = .true.
@@ -130,252 +126,16 @@ contains
                     is_possible_to_be_covered = .true.
                 else if (boundary_types(itype) == 'plane-with-circle-hole') then
                     call add_plane_with_circle_hole
-                else if (boundary_types(itype) == 'rectangle') then
-                    call add_rectangle
-                else if (boundary_types(itype) == 'sphere') then
-                    call add_sphere
-                else if (boundary_types(itype) == 'circlex') then
-                    call add_circleXYZ(1)
-                else if (boundary_types(itype) == 'circley') then
-                    call add_circleXYZ(2)
-                else if (boundary_types(itype) == 'circlez') then
-                    call add_circleXYZ(3)
-                else if (boundary_types(itype) == 'cuboid') then
-                    call add_cuboid
-                else if (boundary_types(itype) == 'cylinderx') then
-                    call add_cylinderXYZ(1)
-                else if (boundary_types(itype) == 'cylindery') then
-                    call add_cylinderXYZ(2)
-                else if (boundary_types(itype) == 'cylinderz') then
-                    call add_cylinderXYZ(3)
-                else if (boundary_types(itype) == 'diskx') then
-                    call add_disk(1)
-                else if (boundary_types(itype) == 'disky') then
-                    call add_disk(2)
-                else if (boundary_types(itype) == 'diskz') then
-                    call add_disk(3)
                 end if
             end do
         end if
 
         if (is_possible_to_be_covered .and. present(cover_all) .and. cover_all) then
+            itype = -1
             call add_cover_all
         end if
 
-        if (present(tag)) then
-            block
-                integer :: iboundary
-
-                do iboundary = 1, boundaries%nboundaries
-                    boundaries%boundaries(iboundary)%ref%material%tag = tag
-                end do
-            end block
-        end if
-
     contains
-
-        subroutine add_rectangle
-            double precision :: xmin, xmax, ymin, ymax, zmin, zmax
-            class(t_Boundary), pointer :: pbound
-            type(t_RectangleXYZ), pointer :: prect
-
-            xmin = rectangle_shape(1, itype)
-            xmax = rectangle_shape(2, itype)
-            ymin = rectangle_shape(3, itype)
-            ymax = rectangle_shape(4, itype)
-            zmin = rectangle_shape(5, itype)
-            zmax = rectangle_shape(6, itype)
-
-            allocate (prect)
-            if (xmin == xmax) then
-                prect = new_rectangleX([xmin, ymin, zmin], ymax - ymin, zmax - zmin)
-            else if (ymin == ymax) then
-                prect = new_rectangleY([xmin, ymin, zmin], zmax - zmin, xmax - xmin)
-            else if (zmin == zmax) then
-                prect = new_rectangleZ([xmin, ymin, zmin], xmax - xmin, ymax - ymin)
-            end if
-            pbound => prect
-
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
-        end subroutine
-
-        subroutine add_circleXYZ(axis)
-            integer, intent(in) :: axis
-
-            class(t_Boundary), pointer :: pbound
-            type(t_CircleXYZ), pointer :: pcircle
-
-            allocate (pcircle)
-            pcircle = new_CircleXYZ(axis, circle_origin(:, itype), circle_radius(itype))
-            pbound => pcircle
-
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (pcircle)
-            end if
-        end subroutine
-
-        !             ------------- (max)
-        !           / |           /
-        !          /  |    6     / |
-        !         /   |      5  /  |
-        !    z ^  -------------  4 |
-        !      | | 1   --------|---/  ^ y
-        !        |   /  2      |  /  /
-        !        |  /      3   | /
-        !        | /           |/
-        !  (min)  -------------/
-        !                      -> x
-        subroutine add_cuboid
-            class(t_Boundary), pointer :: pbound
-            type(t_RectangleXYZ), pointer :: prect
-            double precision :: xmin, xmax, ymin, ymax, zmin, zmax
-            double precision :: wx, wy, wz
-
-            xmin = cuboid_shape(1, itype)
-            xmax = cuboid_shape(2, itype)
-            ymin = cuboid_shape(3, itype)
-            ymax = cuboid_shape(4, itype)
-            zmin = cuboid_shape(5, itype)
-            zmax = cuboid_shape(6, itype)
-
-            wx = xmax - xmin
-            wy = ymax - ymin
-            wz = zmax - zmin
-
-            ! 1.
-            allocate (prect)
-            prect = new_rectangleX([xmin, ymin, zmin], wy, wz)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
-
-            ! 2.
-            allocate (prect)
-            prect = new_rectangleY([xmin, ymin, zmin], wz, wx)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
-
-            ! 3.
-            allocate (prect)
-            prect = new_rectangleZ([xmin, ymin, zmin], wx, wy)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
-
-            ! 4.
-            allocate (prect)
-            prect = new_rectangleX([xmax, ymin, zmin], wy, wz)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
-
-            ! 5.
-            allocate (prect)
-            prect = new_rectangleY([xmin, ymax, zmin], wz, wx)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
-
-            ! 6.
-            allocate (prect)
-            prect = new_rectangleZ([xmin, ymin, zmax], wx, wy)
-            pbound => prect
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (prect)
-            end if
-        end subroutine
-
-        subroutine add_sphere
-            double precision :: origin(3), radius
-            class(t_Boundary), pointer :: pbound
-            type(t_Sphere), pointer :: pshere
-
-            origin(:) = sphere_origin(:, itype)
-            radius = sphere_radius(itype)
-
-            allocate (pshere)
-            pshere = new_Sphere(origin, radius)
-            pbound => pshere
-
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (pshere)
-            end if
-        end subroutine
-
-        subroutine add_cylinderXYZ(axis)
-            integer, intent(in) :: axis
-
-            class(t_Boundary), pointer :: pbound
-            type(t_CylinderXYZ), pointer :: pcylinder
-            type(t_CircleXYZ), pointer :: pcircle
-
-            double precision :: height
-            double precision :: lower_origin(3)
-            double precision :: upper_origin(3)
-            double precision :: radius
-
-            height = cylinder_height(itype)
-            lower_origin(1:3) = cylinder_origin(1:3, itype)
-            upper_origin(1:3) = cylinder_origin(1:3, itype)
-            upper_origin(axis) = cylinder_origin(axis, itype) + height
-            radius = cylinder_radius(itype)
-
-            ! Outer cylinder
-            allocate (pcylinder)
-            pcylinder = new_cylinderXYZ(axis, lower_origin, radius, height)
-            pbound => pcylinder
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (pcylinder)
-            end if
-
-            ! Lower circle
-            allocate (pcircle)
-            pcircle = new_CircleXYZ(axis, lower_origin(:), radius)
-            pbound => pcircle
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (pcircle)
-            end if
-
-            ! Upper circle
-            allocate (pcircle)
-            pcircle = new_CircleXYZ(axis, upper_origin(:), radius)
-            pbound => pcircle
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (pcircle)
-            end if
-        end subroutine
 
         subroutine add_flat_surface
             class(t_Boundary), pointer :: pbound
@@ -384,6 +144,8 @@ contains
             allocate (pplane)
             pplane = new_planeZ(zssurf)
             pbound => pplane
+
+            pbound%material%tag = itype
 
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
@@ -404,10 +166,10 @@ contains
             class(t_Boundary), pointer :: pbound
             type(t_RectangleXYZ), pointer :: prect
 
-            double precision :: wx, wy, wz
-            double precision :: xmin, ymin, xmax, ymax
+            real(kind=dp) :: wx, wy, wz
+            real(kind=dp) :: xmin, ymin, xmax, ymax
 
-            double precision :: origin(3)
+            real(kind=dp) :: origin(3)
 
             wx = xu - xl
             wy = yu - yl
@@ -418,6 +180,7 @@ contains
             allocate (prect)
             prect = new_rectangleZ(origin, wx, wy)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -430,6 +193,7 @@ contains
             allocate (prect)
             prect = new_rectangleX(origin, wy, wz)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -441,6 +205,7 @@ contains
             allocate (prect)
             prect = new_rectangleY(origin, wz, wx)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -452,6 +217,7 @@ contains
             allocate (prect)
             prect = new_rectangleX(origin, wy, wz)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -463,6 +229,7 @@ contains
             allocate (prect)
             prect = new_rectangleY(origin, wz, wx)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -471,16 +238,17 @@ contains
 
             ! Add flat plane at zssurf(=zu1)
             ! Note: create the plane large enough to allow for particles to fly out of the simulation space
-            xmin = -10
-            ymin = -10
-            xmax = nx + 10
-            ymax = ny + 10
+            xmin = -PLANE_PADDING
+            ymin = -PLANE_PADDING
+            xmax = nx + PLANE_PADDING
+            ymax = ny + PLANE_PADDING
 
             ! 5.
             origin = [xmin, ymin, zu]
             allocate (prect)
             prect = new_rectangleZ(origin, xmax - xmin, yl - ymin)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -492,6 +260,7 @@ contains
             allocate (prect)
             prect = new_rectangleZ(origin, xl - xmin, wy)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -503,6 +272,7 @@ contains
             allocate (prect)
             prect = new_rectangleZ(origin, xmax - xu, wy)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -514,6 +284,7 @@ contains
             allocate (prect)
             prect = new_rectangleZ(origin, xmax - xmin, ymax - yu)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -534,11 +305,11 @@ contains
             type(t_RectangleXYZ), pointer :: prectxyz
             type(t_Rectangle), pointer :: prect
 
-            double precision :: wx, wy, wz
-            double precision :: xmin, ymin, xmax, ymax
-            double precision :: xmidl, xmidu, ymidl, ymidu, zmid
+            real(kind=dp) :: wx, wy, wz
+            real(kind=dp) :: xmin, ymin, xmax, ymax
+            real(kind=dp) :: xmidl, xmidu, ymidl, ymidu, zmid
 
-            double precision :: origin(3)
+            real(kind=dp) :: origin(3)
 
             wx = xu - xl
             wy = yu - yl
@@ -555,6 +326,7 @@ contains
             allocate (prectxyz)
             prectxyz = new_rectangleZ(origin, wx, wy)
             pbound => prectxyz
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -569,6 +341,7 @@ contains
                                            [xmidl, ymidl, zmid], &
                                            [xl, yl, zu]], [3, 4]))
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -582,6 +355,7 @@ contains
                                            [xmidu, ymidl, zmid], &
                                            [xu, yl, zu]], [3, 4]))
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -595,6 +369,7 @@ contains
                                            [xmidu, ymidu, zmid], &
                                            [xu, yu, zu]], [3, 4]))
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -608,6 +383,7 @@ contains
                                            [xmidl, ymidu, zmid], &
                                            [xl, yu, zu]], [3, 4]))
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -622,6 +398,7 @@ contains
                                            [xmidl, ymidl, zmid], &
                                            [xl, yl, zl]], [3, 4]))
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -635,6 +412,7 @@ contains
                                            [xmidu, ymidl, zmid], &
                                            [xu, yl, zl]], [3, 4]))
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -648,6 +426,7 @@ contains
                                            [xmidu, ymidu, zmid], &
                                            [xu, yu, zl]], [3, 4]))
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -661,6 +440,7 @@ contains
                                            [xmidl, ymidu, zmid], &
                                            [xl, yu, zl]], [3, 4]))
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -669,16 +449,17 @@ contains
 
             ! Add flat plane at zssurf(=zu1)
             ! Note: create the plane large enough to allow for particles to fly out of the simulation space
-            xmin = -10
-            ymin = -10
-            xmax = nx + 10
-            ymax = ny + 10
+            xmin = -PLANE_PADDING
+            ymin = -PLANE_PADDING
+            xmax = nx + PLANE_PADDING
+            ymax = ny + PLANE_PADDING
 
             ! 9.
             origin = [xmin, ymin, zu]
             allocate (prectxyz)
             prectxyz = new_rectangleZ(origin, xmax - xmin, yl - ymin)
             pbound => prectxyz
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -690,6 +471,7 @@ contains
             allocate (prectxyz)
             prectxyz = new_rectangleZ(origin, xl - xmin, wy)
             pbound => prectxyz
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -701,6 +483,7 @@ contains
             allocate (prectxyz)
             prectxyz = new_rectangleZ(origin, xmax - xu, wy)
             pbound => prectxyz
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -712,6 +495,7 @@ contains
             allocate (prectxyz)
             prectxyz = new_rectangleZ(origin, xmax - xmin, ymax - yu)
             pbound => prectxyz
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -725,8 +509,8 @@ contains
             type(t_CylinderXYZ), pointer :: pcylinder
             type(t_CircleXYZ), pointer :: pcircle
 
-            double precision :: origin(3), origin_bottom(3)
-            double precision :: radius, height
+            real(kind=dp) :: origin(3), origin_bottom(3)
+            real(kind=dp) :: radius, height
 
             origin(1:3) = [0.5d0*(xl + xu), 0.5d0*(yl + yu), zu]
             radius = 0.5d0*(xu - xl)
@@ -739,6 +523,7 @@ contains
             allocate (pplane)
             pplane = new_planeXYZWithCircleHoleZ(origin, radius)
             pbound => pplane
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -749,6 +534,7 @@ contains
             allocate (pcylinder)
             pcylinder = new_cylinderZ(origin_bottom, radius, height)
             pbound => pcylinder
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -760,6 +546,7 @@ contains
             allocate (pcircle)
             pcircle = new_CircleZ(origin_bottom, radius)
             pbound => pcircle
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -773,8 +560,8 @@ contains
             type(t_HyperboloidXYZ), pointer :: phyperboloid
             type(t_CircleXYZ), pointer :: pcircle
 
-            double precision :: origin(3), origin_hyperboloid(3), origin_bottom(3)
-            double precision :: max_radius, min_radius, height
+            real(kind=dp) :: origin(3), origin_hyperboloid(3), origin_bottom(3)
+            real(kind=dp) :: max_radius, min_radius, height
 
             max_radius = 0.5d0*(xu - xl)
             min_radius = rcurv*max_radius
@@ -788,6 +575,7 @@ contains
             allocate (pplane)
             pplane = new_planeXYZWithCircleHoleZ(origin, max_radius)
             pbound => pplane
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -798,6 +586,7 @@ contains
             allocate (phyperboloid)
             phyperboloid = new_HyperboloidZ(origin_hyperboloid, max_radius, min_radius, height)
             pbound => phyperboloid
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -808,6 +597,7 @@ contains
             allocate (pcircle)
             pcircle = new_CircleZ(origin_bottom, max_radius)
             pbound => pcircle
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -821,8 +611,8 @@ contains
             type(t_EllipsoidXYZ), pointer :: pellipsoid
             type(t_CircleXYZ), pointer :: pcircle
 
-            double precision :: origin(3), origin_ellipsoid(3), origin_bottom(3)
-            double precision :: max_radius, min_radius, height
+            real(kind=dp) :: origin(3), origin_ellipsoid(3), origin_bottom(3)
+            real(kind=dp) :: max_radius, min_radius, height
 
             min_radius = 0.5d0*(xu - xl)
             max_radius = rcurv*min_radius
@@ -836,6 +626,7 @@ contains
             allocate (pplane)
             pplane = new_planeXYZWithCircleHoleZ(origin, min_radius)
             pbound => pplane
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -846,6 +637,7 @@ contains
             allocate (pellipsoid)
             pellipsoid = new_EllipsoidZ(origin_ellipsoid, min_radius, max_radius, height)
             pbound => pellipsoid
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -856,6 +648,7 @@ contains
             allocate (pcircle)
             pcircle = new_CircleZ(origin_bottom, min_radius)
             pbound => pcircle
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -866,10 +659,10 @@ contains
         subroutine add_cover_all
             class(t_Boundary), pointer :: pbound
             type(t_RectangleXYZ), pointer :: prect
-            double precision :: origin(3)
-            double precision :: rnx, rny
-            integer :: iboundary, nboundaries_init
-double precision :: xmin, ymin, xmax, ymax
+            real(kind=dp) :: origin(3)
+            real(kind=dp) :: rnx, rny
+            integer(kind=ip) :: iboundary, nboundaries_init
+            real(kind=dp) :: xmin, ymin, xmax, ymax
 
             nboundaries_init = boundaries%nboundaries
             rnx = nx
@@ -880,6 +673,7 @@ double precision :: xmin, ymin, xmax, ymax
             allocate (prect)
             prect = new_rectangleZ(origin, rnx, rny)
             pbound => prect
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -887,21 +681,21 @@ double precision :: xmin, ymin, xmax, ymax
             end if
 
             ! ! 1. -X boundary
-! origin = [0d0, 0d0, 0d0]
-! allocate (prect)
+            ! origin = [0d0, 0d0, 0d0]
+            ! allocate (prect)
             ! prect = new_rectangleX(origin, rny, zu)
             ! pbound => prect
             ! if (pbound%is_overlap(sdoms, extent=extent)) then
             !     call boundaries%add_boundary(pbound)
             ! else
             !     deallocate (prect)
-! end if
+            ! end if
 
             ! ! 2. +X boundary
             ! origin = [rnx, 0d0, 0d0]
             ! allocate (prect)
             ! prect = new_rectangleX(origin, rny, zu)
-! pbound => prect
+            ! pbound => prect
             ! if (pbound%is_overlap(sdoms, extent=extent)) then
             !     call boundaries%add_boundary(pbound)
             ! else
@@ -941,8 +735,8 @@ double precision :: xmin, ymin, xmax, ymax
             type(t_PlaneXYZWithCircleHole), pointer :: pplane
             type(t_CylinderXYZ), pointer :: pcylinder
 
-            double precision :: origin(3), origin_bottom(3)
-            double precision :: radius, height
+            real(kind=dp) :: origin(3), origin_bottom(3)
+            real(kind=dp) :: radius, height
 
             height = plane_with_circle_hole_height(itype)
 
@@ -955,6 +749,7 @@ double precision :: xmin, ymin, xmax, ymax
             allocate (pplane)
             pplane = new_planeXYZWithCircleHoleZ(origin, radius)
             pbound => pplane
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -965,6 +760,7 @@ double precision :: xmin, ymin, xmax, ymax
             allocate (pcylinder)
             pcylinder = new_cylinderZ(origin_bottom, radius, height)
             pbound => pcylinder
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -975,6 +771,7 @@ double precision :: xmin, ymin, xmax, ymax
             allocate (pplane)
             pplane = new_planeXYZWithCircleHoleZ(origin_bottom, radius)
             pbound => pplane
+            pbound%material%tag = itype
             if (pbound%is_overlap(sdoms, extent=extent)) then
                 call boundaries%add_boundary(pbound)
             else
@@ -982,69 +779,6 @@ double precision :: xmin, ymin, xmax, ymax
             end if
         end subroutine
 
-        subroutine add_disk(axis)
-            integer, intent(in) :: axis
-
-            class(t_Boundary), pointer :: pbound
-            type(t_CylinderXYZ), pointer :: pouter_cylinder
-            type(t_CylinderXYZ), pointer :: pinner_cylinder
-            type(t_DonutXYZ), pointer :: plower_donut
-            type(t_DonutXYZ), pointer :: pupper_donut
-
-            double precision :: height
-            double precision :: lower_origin(3)
-            double precision :: upper_origin(3)
-            double precision :: radius
-            double precision :: inner_radius
-
-            height = disk_height(itype)
-            lower_origin(1:3) = disk_origin(1:3, itype)
-            upper_origin(1:3) = disk_origin(1:3, itype)
-            upper_origin(axis) = upper_origin(axis) + height
-            radius = disk_radius(itype)
-            inner_radius = disk_inner_radius(itype)
-
-            ! Outer cylinder
-            allocate (pouter_cylinder)
-            pouter_cylinder = new_cylinderXYZ(axis, lower_origin, radius, height)
-            pbound => pouter_cylinder
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (pouter_cylinder)
-            end if
-
-            ! Inner cylinder
-            allocate (pinner_cylinder)
-            pinner_cylinder = new_cylinderXYZ(axis, lower_origin, inner_radius, height)
-            pbound => pinner_cylinder
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (pinner_cylinder)
-            end if
-
-            ! Lower donut
-            allocate (plower_donut)
-            plower_donut = new_DonutXYZ(axis, lower_origin, inner_radius, height)
-            pbound => plower_donut
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (plower_donut)
-            end if
-
-            ! Upper donut
-            allocate (pupper_donut)
-            pupper_donut = new_DonutXYZ(axis, upper_origin, inner_radius, height)
-            pbound => pupper_donut
-            if (pbound%is_overlap(sdoms, extent=extent)) then
-                call boundaries%add_boundary(pbound)
-            else
-                deallocate (pupper_donut)
-            end if
-        end subroutine
-
-    end function
+    end subroutine
 
 end module

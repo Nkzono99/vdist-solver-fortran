@@ -23,15 +23,32 @@ module m_namelist
     namelist /ptcond/ boundary_type, boundary_types, &
         zssurf, &
         xlrechole, ylrechole, zlrechole, xurechole, yurechole, zurechole, &
+        boundary_conductor_id, &
         cylinder_origin, cylinder_radius, cylinder_height, rcurv, &
         rectangle_shape, &
         sphere_origin, sphere_radius, &
         circle_origin, circle_radius, &
         cuboid_shape, &
         disk_origin, disk_height, disk_radius, disk_inner_radius, &
+        conductivity, &
         plane_with_circle_hole_zlower, &
         plane_with_circle_hole_height, &
-        plane_with_circle_hole_radius
+        plane_with_circle_hole_radius, &
+        plane_with_circle_origin, &
+        plane_with_circle_radius, &
+        max_bounce_count, &
+        boundary_mirror_reflection_rate, &
+        boundary_mirror_reflect_alpha, &
+        boundary_reversal_reflection_rate, &
+        boundary_reversal_reflect_alpha, &
+        boundary_mirror_reflect_energy_loss_frac, &
+        boundary_reversal_reflect_energy_loss_frac, &
+        enable_secondary_electron_emission, &
+        boundary_se_model_type, &
+        boundary_se_const_yield, &
+        boundary_se_yield_max, &
+        boundary_se_energy_max, &
+        boundary_se_species_id
 
     namelist /emissn/ nflag_emit, &
         nepl, curf, nemd, curfs, &
