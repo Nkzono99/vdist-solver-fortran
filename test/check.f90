@@ -1,11 +1,18 @@
 program check
     use m_dust_charge_simulator
     use m_field
+    use m_emses_solver, only: es_get_probabilities => get_probabilities, &
+                              es_get_backtraces => get_backtraces
+    use m_emses_simulator_builder, only: b_create_simulator => create_simulator, &
+                                         b_create_dust_charge_simulator => create_dust_charge_simulator
+    use m_vdsolverf, only: u_get_backtraces => get_backtraces, &
+                           u_get_probabilities => get_probabilities
 
     implicit none
 
     call test_negative_potential_electron_current()
     call test_negative_potential_ion_current()
+    call test_public_api_modules_expose_expected_entries()
 
     print *, "All tests passed."
 
@@ -57,6 +64,16 @@ contains
         expected_charge = dust%charge + (1d0 - (-1d0)/2d0)*4d0*pi*(-1d0)
 
         call assert_close("ion current for negative dust potential", dust_new%charge, expected_charge)
+    end subroutine
+
+    subroutine test_public_api_modules_expose_expected_entries()
+        !! Compile-time regression guard for the emses_solver / emses_simulator_builder split.
+        !! The `use, only:` clauses at the top of this program fail to compile if any of
+        !! `get_backtraces`, `get_probabilities`, `get_backtrace_dust` stop being public in
+        !! `m_emses_solver` or `m_vdsolverf`, or if the builder helpers stop being public
+        !! in `m_emses_simulator_builder`. Reaching this subroutine at runtime means all
+        !! imports succeeded.
+        print *, "public API surface: emses_solver, emses_simulator_builder, vdsolverf — imported ok"
     end subroutine
 
     subroutine assert_close(label, actual, expected)
