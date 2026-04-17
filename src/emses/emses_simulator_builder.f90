@@ -18,6 +18,7 @@ module m_emses_simulator_builder
     use m_allcom
     use m_namelist, only: read_namelist
     use m_emses_boundaries, only: create_simple_collision_boundaries
+    use m_photoelectron_raycast, only: new_PhotoelectronRaycastProbability
 
     use m_maxwell_flux_erf, only: solve_density_from_flux_erf
 
@@ -77,10 +78,12 @@ contains
             integer :: isdoms(2, 3)
             integer :: boundary_conditions(3)
 
-            allocate (probability_functions(n_probability_functions + 1)%ref, source=new_ZeroProbability())
-            n_probability_functions = n_probability_functions + 1
-
             isdoms = reshape([[0, lx], [0, ly], [0, lz]], [2, 3])
+
+            call register_inner_boundary_probability(isdoms, ispec, &
+                                                     probability_functions, &
+                                                     n_probability_functions)
+
             boundaries = create_simple_collision_boundaries(isdoms, tag=n_probability_functions)
 
             ! boundaries = new_BoundaryList()
@@ -97,6 +100,45 @@ contains
                                         probability_functions)
         end block
     end function
+
+    subroutine register_inner_boundary_probability(isdoms, ispec, &
+                                                   probability_functions, &
+                                                   n_probability_functions)
+        !! Register the probability function used when a backtraced particle
+        !! collides with an internal surface/object.
+        !!
+        !! Default: `t_ZeroProbability` (absorbing).
+        !! When `use_raycast .and. nflag_emit(ispec) == 2`, a
+        !! `t_PhotoelectronRaycastProbability` is used instead. A separate
+        !! collision-boundary list (built from the same input geometry) is
+        !! handed to it as the occlusion test target so the main simulator
+        !! boundary list can be destroyed independently.
+        integer, intent(in) :: isdoms(2, 3)
+        integer, intent(in) :: ispec
+        type(tp_Probability), intent(inout) :: probability_functions(:)
+        integer, intent(inout) :: n_probability_functions
+
+        type(t_BoundaryList) :: blocking_boundaries
+        double precision :: sun_direction(3)
+        double precision :: vmean(3), vthermal(3)
+
+        n_probability_functions = n_probability_functions + 1
+
+        if (use_raycast .and. nflag_emit(ispec) == 2) then
+            blocking_boundaries = create_simple_collision_boundaries(isdoms)
+
+            vmean = vdri_vector(ispec)
+            vthermal = vth_vector(ispec)
+            sun_direction = -vmean
+
+            allocate (probability_functions(n_probability_functions)%ref, &
+                      source=new_PhotoelectronRaycastProbability( &
+                      vmean, vthermal, sun_direction, blocking_boundaries))
+        else
+            allocate (probability_functions(n_probability_functions)%ref, &
+                      source=new_ZeroProbability())
+        end if
+    end subroutine
 
     subroutine add_probability_boundaries(boundaries, &
                                           ispec, &
