@@ -123,9 +123,12 @@ contains
         double precision :: net_current
         double precision :: dust_potential
 
-        double precision, allocatable :: currents(:)
+        double precision, allocatable :: current_values(:)
 
         double precision :: area
+        double precision :: current(3)
+        double precision :: j0
+        double precision :: temperature
 
         area = 4*pi*dust%radius*dust%radius
 
@@ -133,55 +136,25 @@ contains
 
         net_current = 0d0
 
-        currents = self%currents%at(dust%particle%position)
+        current_values = self%currents%at(dust%particle%position)
 
-        ispec = 1
-        if (ispec <= self%nspec) then
-            block
-                double precision :: current(3), j0
-                double precision :: temperature
+        do ispec = 1, min(self%nspec, 3)
+            current = current_values((ispec - 1)*3 + 1:ispec*3)
+            j0 = norm2(current)
+            temperature = self%temperatures(ispec)
 
-                current = currents((ispec - 1)*3 + 1:ispec*3)
-                j0 = norm2(current)
-
-                temperature = self%temperatures(ispec)
-
+            select case (ispec)
+            case (1)
                 net_current = net_current + calculate_electron_current(dust_potential, j0, temperature)
-            end block
-        end if
-
-        ispec = 2
-        if (ispec <= self%nspec) then
-            block
-                double precision :: current(3), j0
-                double precision :: temperature
-
-                current = currents((ispec - 1)*3 + 1:ispec*3)
-                j0 = norm2(current)
-
-                temperature = self%temperatures(ispec)
-
+            case (2)
                 net_current = net_current + calculate_ion_current(dust_potential, j0, temperature)
-            end block
-        end if
-
-        ispec = 3
-        if (ispec <= self%nspec) then
-            block
-                double precision :: current(3), j0
-                double precision :: temperature
-
-                current = currents((ispec - 1)*3 + 1:ispec*3)
-                j0 = norm2(current)
-
-                temperature = self%temperatures(ispec)
-
+            case (3)
                 net_current = net_current + calculate_photoelectron_current(dust_potential, &
                                                                             self%jph0, &
                                                                             j0, &
                                                                             temperature)
-            end block
-        end if
+            end select
+        end do
 
         block
             double precision :: charge_new
@@ -211,7 +184,7 @@ contains
         if (phid >= 0) then
             ret = -je0*(1 + phid/Te)
         else
-            ret = -je0*(1 + phid/Te)
+            ret = -je0*exp(phid/Te)
         end if
     end function
 
@@ -224,7 +197,7 @@ contains
         if (phid >= 0) then
             ret = ji0*exp(-phid/Ti)
         else
-            ret = ji0*exp(phid/Ti)
+            ret = ji0*(1 - phid/Ti)
         end if
     end function
 

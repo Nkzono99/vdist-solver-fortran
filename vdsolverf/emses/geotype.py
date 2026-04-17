@@ -69,7 +69,7 @@ def create_cylinder_boundary(nml: f90nml.Namelist, data: emout.Emout, ipc: int) 
 
     append_circle_to_namelist(nml, axis, origin, radius)
     append_circle_to_namelist(nml, axis, upper_origin, radius)
-    append_cylinder_to_namelist(nml, axis, origin, height, radius)
+    append_cylinder_to_namelist(nml, axis, origin, radius, height)
 
 
 def create_sphere_boundary(nml: f90nml.Namelist, data: emout.Emout, ipc: int) -> None:
@@ -199,7 +199,7 @@ def fetch_from_inp(data: emout.Emout, group: str, name: str, default=0) -> np.nd
 
     values = getattr(data.inp, name)
     values = np.array(values, dtype=float)
-    values = np.nan_to_num(values, nan=default)
+    values = np.where(np.isnan(values), default, values)
 
     original_shape = start_index + np.array(values.shape)
 

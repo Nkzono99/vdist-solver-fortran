@@ -1,10 +1,7 @@
 from pathlib import Path
-from typing import Any, List
 
 import emout
 import f90nml
-import f90nml.namelist
-import numpy as np
 
 from .geotype import (
     create_cylinder_boundary,
@@ -87,26 +84,12 @@ class TempolaryInput(object):
         self.__tmppath: Path = data.directory / f"plasma-vdsolverf.inp"
 
     def __enter__(self) -> "TempolaryInput":
-        data = self.__data
-        from collections import defaultdict
+        inp = f90nml.Namelist()
 
-        dic = defaultdict(lambda: dict())
-
-        for group in TMP_INP_KEYS.keys():
-            for key in TMP_INP_KEYS[group]:
-                if key not in data.inp:
-                    continue
-                dic[group][key] = getattr(data.inp, key)
-
-        inp = f90nml.Namelist(dic)
-
-        # start_indexを追加する.
-        for group in TMP_INP_KEYS.keys():
-            start_indexes = data.inp.nml[group].start_index
-            for key in TMP_INP_KEYS[group]:
-                if key not in start_indexes:
-                    continue
-                inp[group].start_index[key] = start_indexes[key]
+        for group, keys in TMP_INP_KEYS.items():
+            group_namelist = self._create_group_namelist(group, keys)
+            if group_namelist:
+                inp[group] = group_namelist
 
         self.convert_from_geotype(inp)
 
@@ -115,7 +98,52 @@ class TempolaryInput(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        pass
+        if self.__tmppath.exists():
+            self.__tmppath.unlink()
+
+    def _create_group_namelist(self, group: str, keys):
+        data = self.__data
+
+        if group not in data.inp.nml:
+            return None
+
+        source_group = data.inp.nml[group]
+        group_namelist = f90nml.Namelist()
+
+        for key in keys:
+            if key not in data.inp:
+                continue
+
+            group_namelist[key] = getattr(data.inp, key)
+            if key in source_group.start_index:
+                group_namelist.start_index[key] = source_group.start_index[key]
+
+        if not group_namelist:
+            return None
+
+        return group_namelist
+
+    def _ensure_complex_boundary_group(self, nml: f90nml.Namelist) -> f90nml.Namelist:
+        if "ptcond" not in nml:
+            nml["ptcond"] = f90nml.Namelist()
+
+        ptcond = nml["ptcond"]
+        original_boundary_type = ptcond.get("boundary_type", "complex")
+
+        existing_boundary_types = ptcond.get("boundary_types", [])
+        if isinstance(existing_boundary_types, str):
+            boundary_types = [existing_boundary_types]
+        else:
+            boundary_types = list(existing_boundary_types)
+
+        if original_boundary_type != "complex" and original_boundary_type not in boundary_types:
+            boundary_types.insert(0, original_boundary_type)
+
+        ptcond["boundary_type"] = "complex"
+        ptcond["boundary_types"] = boundary_types
+        ptcond.start_index["boundary_types"] = [1]
+
+        return ptcond
 
     def convert_from_geotype(self, nml: f90nml.Namelist):
         data = self.__data
@@ -123,14 +151,7 @@ class TempolaryInput(object):
         if "geotype" not in data.inp:
             return
 
-        if "boundary_type" in data.inp and data.inp.boundary_type != "complex":
-            nml["ptcond"]["boundary_types"] = [data.inp.boundary_type]
-            nml["ptcond"].start_index["boundary_types"] = [1]
-
-        if "boundary_type" not in data.inp:
-            nml["ptcond"]["boundary_type"] = "complex"
-            nml["ptcond"]["boundary_types"] = []
-            nml["ptcond"].start_index["boundary_types"] = [1]
+        self._ensure_complex_boundary_group(nml)
 
         if "npc" not in data.inp:
             return

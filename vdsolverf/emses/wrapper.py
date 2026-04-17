@@ -188,7 +188,7 @@ def get_backtraces_dll(
         np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_last_step
         POINTER(c_int),  # n_threads
     ]
-    dll.get_probabilities.restype = None
+    dll.get_backtraces.restype = None
 
     data = emout.Emout(directory)
 
@@ -494,7 +494,7 @@ def get_dust_backtrace_dll(
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_velocities
         POINTER(c_int),  # return_last_step
     ]
-    dll.get_probabilities.restype = None
+    dll.get_backtrace_dust.restype = None
 
     data = emout.Emout(directory)
 
@@ -624,7 +624,7 @@ def create_relocated_current_values(data: emout.Emout, istep: int) -> np.ndarray
         current_values[:, 1:-1, :, ispec * 3 + ielem] = 0.5 * (
             jy[:, :-2, :] + jy[:, 1:-1, :]
         )
-        if data.inp.mtd_vbnd[0] in [0, 2]:
+        if data.inp.mtd_vbnd[1] in [0, 2]:
             current_values[:, 0, :, ispec * 3 + ielem] = 0
             current_values[:, -1, :, ispec * 3 + ielem] = 0
         else:
@@ -637,7 +637,7 @@ def create_relocated_current_values(data: emout.Emout, istep: int) -> np.ndarray
         current_values[1:-1, :, :, ispec * 3 + ielem] = 0.5 * (
             jz[:-2, :, :] + jz[1:-1, :, :]
         )
-        if data.inp.mtd_vbnd[0] in [0, 2]:
+        if data.inp.mtd_vbnd[2] in [0, 2]:
             current_values[0, :, :, ispec * 3 + ielem] = 0
             current_values[-1, :, :, ispec * 3 + ielem] = 0
         else:

@@ -738,12 +738,11 @@ contains
         block
             double precision, allocatable :: temperatures(:)
             type(t_VectorFieldGrid) :: currents
-            integer :: ispec
 
             allocate (temperatures(nspecies))
-            temperatures = path(1:nspec)*path(1:nspec)/abs(qm(1:nspec)) ! [eV in EMSES-U]
+            temperatures = path(1:nspecies)*path(1:nspecies)/abs(qm(1:nspecies)) ! [eV in EMSES-U]
 
-            currents = new_VectorFieldGrid(3*nspecies, nx, ny, nz, current_values(:, :, :, :))
+            currents = new_VectorFieldGrid(3*nspecies, lx, ly, lz, current_values(:, :, :, :))
 
             simulator = new_DustChargeSimulator(lx, ly, lz, nspecies, temperatures, currents, jph0)
         end block
