@@ -74,6 +74,7 @@ TMP_INP_KEYS = {
         "zmaxe",
         "thetaz",
         "thetaxy",
+        "use_raycast",
     ],
 }
 

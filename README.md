@@ -273,5 +273,7 @@ EMSES offers various settings for emission surfaces, and this solver supports th
         = Range of emission surfaces
 
     thetaz, thetaxy = Angle with magnetic field related to thermal velocity of emitted particles [deg]
+
+    use_raycast = .true. enables raycast-based photoelectron probability for species with nflag_emit == 2. When the backtraced particle hits an internal boundary, a ray is cast toward the sun (opposite of vdri/vdthz/vdthxy) through the same internal geometry; if the ray is not occluded, a Maxwellian PDF weighted by vth_vector(ispec) and vdri_vector(ispec) is returned; otherwise 0.
 &
 ```
