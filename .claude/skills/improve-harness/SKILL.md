@@ -14,7 +14,8 @@ Claude Codeのハーネスを自己観察し、反復的に改善するための
 
 - `settings.json` / `settings.local.json` (権限, hooks, env)
 - `skills/**/SKILL.md` (`improve-harness`自身を含む)
-- `rules/**/*.md`
+  - 現在用意済み: `build-lib`, `run-fortran-tests`, `sync-wrapper-interface`, `release`, `improve-harness`
+- `rules/**/*.md` (`fortran-python-interop`, `python-venv` など)
 - `commands/**/*.md`
 - ルート `CLAUDE.md` / `AGENTS.md`
 
