@@ -18,7 +18,7 @@ module m_emses_solver
     use m_vdsolverf_core
     use m_allcom
     use m_namelist
-    use emses_boundaries
+    use m_emses_boundaries
 
     use m_maxwell_flux_erf, only: solve_density_from_flux_erf
 

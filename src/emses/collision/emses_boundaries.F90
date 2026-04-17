@@ -37,7 +37,7 @@
 !>   boundary_rotation_deg(3) = 0d0, 0d0, 0d0
 !> &
 !>
-module emses_boundaries
+module m_emses_boundaries
     use finbound
     use m_surfaces
     use m_objects
