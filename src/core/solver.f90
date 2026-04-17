@@ -3,7 +3,7 @@ module m_solver
 
     use m_particle
     use m_simulator
-    use m_Probabilities
+    use m_probabilities
     use m_dust_charge_simulator
 
     implicit none

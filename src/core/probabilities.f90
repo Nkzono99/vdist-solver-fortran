@@ -1,4 +1,4 @@
-module m_Probabilities
+module m_probabilities
     !! This module defines different probability distributions.
 
     implicit none

@@ -5,7 +5,7 @@ module m_simulator
     use m_vector, only: cross
     use finbound, only: t_BoundaryList, t_CollisionRecord
     use m_particle
-    use m_Probabilities
+    use m_probabilities
     use m_field
 
     implicit none
