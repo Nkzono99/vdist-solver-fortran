@@ -87,6 +87,20 @@ contains
     end function
 
     function photoelectronRaycast_at(self, position, velocity) result(ret)
+        !! Probability density for a photoelectron emission event.
+        !!
+        !! Physical model:
+        !!   1. Photoelectrons leave the surface with velocity whose component
+        !!      along the outward normal (approximated by `sun_direction`) is
+        !!      strictly positive. Particles with v . sun_direction <= 0 could
+        !!      not have been emitted outward, so their density is 0.
+        !!   2. The remaining density is a shifted 3D Maxwellian multiplied by
+        !!      a half-space normalization factor 2 (exact for mu = 0 along the
+        !!      normal; a reasonable approximation for drifting distributions
+        !!      when |drift| is not dominated by the thermal spread).
+        !!   3. If a blocking boundary intercepts the ray toward the sun the
+        !!      surface element is in shadow and no photoelectron could have
+        !!      been produced there, so the density is again 0.
         class(t_PhotoelectronRaycastProbability), intent(in) :: self
         double precision, intent(in) :: position(3)
         double precision, intent(in) :: velocity(3)
@@ -95,9 +109,17 @@ contains
         type(t_Ray) :: ray
         type(t_HitRecord) :: hit
         double precision :: origin(3)
+        double precision :: v_parallel
         integer :: i
 
-        ret = self%coefficient
+        ! Half-space check: only keep particles moving outward (along +sun_dir).
+        v_parallel = dot_product(velocity, self%sun_direction)
+        if (v_parallel <= 0d0) then
+            ret = 0d0
+            return
+        end if
+
+        ret = 2d0*self%coefficient
         do i = 1, 3
             ret = ret*maxwell_pdf(velocity(i), self%locs(i), self%scales(i))
         end do

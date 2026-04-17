@@ -15,7 +15,7 @@ module m_emses_solver
 
     use m_vdsolverf_core
     use m_allcom, only: qm, curf
-    use m_emses_simulator_builder, only: create_simulator, create_dust_charge_simulator
+    use m_emses_simulator_builder, only: create_simulator, create_dust_charge_simulator, destroy_simulator
 
     implicit none
 
@@ -173,7 +173,7 @@ contains
 
         call bar%update(current=1d0)
         call bar%destroy
-        call simulator%boundaries%destroy
+        call destroy_simulator(simulator)
     end subroutine
 
     subroutine get_probabilities( &
@@ -286,7 +286,7 @@ contains
         call bar%update(current=1d0)
 
         call bar%destroy
-        call simulator%boundaries%destroy
+        call destroy_simulator(simulator)
     end subroutine
 
     subroutine get_backtrace_dust(inppath, &
@@ -392,7 +392,7 @@ contains
             return_last_step = record%last_step
         end block
 
-        call simulator%boundaries%destroy
+        call destroy_simulator(simulator)
     end subroutine
 
 end module

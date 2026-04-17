@@ -180,6 +180,12 @@ module m_allcom
 
     logical :: use_raycast = .false.
         !! Enable raycast-based photoelectron probability for species with nflag_emit == 2
+    double precision :: ray_zenith_angle_deg(max_nspec) = 9999d0
+        !! Sentinel value 9999d0 means "fall back to vdthz(ispec)". Otherwise the
+        !! ray direction follows the same rotation convention as `vdri_vector`
+        !! (zenith from +z with sign -ray_zenith_angle_deg around y).
+    double precision :: ray_azimuth_angle_deg(max_nspec) = 9999d0
+        !! Sentinel value 9999d0 means "fall back to vdthxy(ispec)".
 
 contains
 

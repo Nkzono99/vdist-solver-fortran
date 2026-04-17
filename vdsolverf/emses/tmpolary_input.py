@@ -75,6 +75,8 @@ TMP_INP_KEYS = {
         "thetaz",
         "thetaxy",
         "use_raycast",
+        "ray_zenith_angle_deg",
+        "ray_azimuth_angle_deg",
     ],
 }
 

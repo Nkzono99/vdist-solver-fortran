@@ -18,7 +18,8 @@ module m_emses_simulator_builder
     use m_allcom
     use m_namelist, only: read_namelist
     use m_emses_boundaries, only: create_simple_collision_boundaries
-    use m_photoelectron_raycast, only: new_PhotoelectronRaycastProbability
+    use m_photoelectron_raycast, only: new_PhotoelectronRaycastProbability, &
+                                       t_PhotoelectronRaycastProbability
 
     use m_maxwell_flux_erf, only: solve_density_from_flux_erf
 
@@ -27,8 +28,37 @@ module m_emses_simulator_builder
     private
     public create_simulator
     public create_dust_charge_simulator
+    public destroy_simulator
 
 contains
+
+    subroutine destroy_simulator(simulator)
+        !! Release all heap-allocated state owned by the simulator: the
+        !! boundary list as well as each probability function (including any
+        !! occlusion boundary list held by the raycast photoelectron prob).
+        !!
+        !! `select type` is used instead of a polymorphic destroy() method
+        !! so that concrete probability classes that do not own heap state
+        !! (ZeroProbability, MaxwellianProbability) don't need to declare a
+        !! no-op override.
+        type(t_ESSimulator), intent(inout) :: simulator
+        integer :: i
+
+        call simulator%boundaries%destroy
+
+        if (allocated(simulator%probability_functions)) then
+            do i = 1, size(simulator%probability_functions)
+                if (associated(simulator%probability_functions(i)%ref)) then
+                    select type (p => simulator%probability_functions(i)%ref)
+                    type is (t_PhotoelectronRaycastProbability)
+                        call p%blocking_boundaries%destroy
+                    end select
+                    deallocate (simulator%probability_functions(i)%ref)
+                end if
+            end do
+            deallocate (simulator%probability_functions)
+        end if
+    end subroutine
 
     function create_simulator(inppath, length, lx, ly, lz, ebvalues, ispec, max_probability_types) result(simulator)
         !! Create and initialize a new ES simulator object.
@@ -129,7 +159,7 @@ contains
 
             vmean = vdri_vector(ispec)
             vthermal = vth_vector(ispec)
-            sun_direction = -vmean
+            sun_direction = resolve_sun_direction(ispec)
 
             allocate (probability_functions(n_probability_functions)%ref, &
                       source=new_PhotoelectronRaycastProbability( &
@@ -139,6 +169,44 @@ contains
                       source=new_ZeroProbability())
         end if
     end subroutine
+
+    function resolve_sun_direction(ispec) result(ret)
+        !! Direction from the collision point toward the sun.
+        !!
+        !! Uses `ray_zenith_angle_deg(ispec)` and `ray_azimuth_angle_deg(ispec)`
+        !! when those are set (sentinel: 9999d0 means "unset"). Otherwise falls
+        !! back to `vdthz(ispec)` / `vdthxy(ispec)`. The returned vector is the
+        !! negation of the vdri-style rotation of +z, normalized — i.e. the
+        !! opposite of the drift vector per the user-requested convention.
+        integer, intent(in) :: ispec
+        double precision :: ret(3)
+
+        double precision :: zenith_deg, azimuth_deg
+        double precision :: drift_unit(3)
+        double precision, parameter :: SENTINEL = 9000d0
+
+        if (ray_zenith_angle_deg(ispec) < SENTINEL) then
+            zenith_deg = ray_zenith_angle_deg(ispec)
+        else
+            zenith_deg = vdthz(ispec)
+        end if
+
+        if (ray_azimuth_angle_deg(ispec) < SENTINEL) then
+            azimuth_deg = ray_azimuth_angle_deg(ispec)
+        else
+            azimuth_deg = vdthxy(ispec)
+        end if
+
+        drift_unit = [0d0, 0d0, 1d0]
+        drift_unit = rot3d_y(drift_unit, -zenith_deg*DEG2RAD)
+        drift_unit = rot3d_z(drift_unit, azimuth_deg*DEG2RAD)
+
+        if (norm2(drift_unit) > 0d0) then
+            ret = -drift_unit/norm2(drift_unit)
+        else
+            ret = [0d0, 0d0, -1d0]
+        end if
+    end function
 
     subroutine add_probability_boundaries(boundaries, &
                                           ispec, &

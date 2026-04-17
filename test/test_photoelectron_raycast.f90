@@ -17,6 +17,7 @@ program test_photoelectron_raycast
     call test_unoccluded_ray_returns_maxwell_pdf()
     call test_occluded_ray_returns_zero()
     call test_zero_coefficient_stays_zero_even_unoccluded()
+    call test_inward_velocity_returns_zero()
 
     print *, "test_photoelectron_raycast: all tests passed."
 
@@ -59,7 +60,8 @@ contains
     end function
 
     subroutine test_unoccluded_ray_returns_maxwell_pdf()
-        !! No blockers -> ray escapes -> probability = Maxwell PDF at velocity.
+        !! No blockers, velocity outward (v . sun_dir > 0) -> probability is
+        !! 2 * Maxwell PDF (half-space normalization).
         type(t_PhotoelectronRaycastProbability) :: prob
         double precision :: loc(3), sigma(3), sun_dir(3)
         double precision :: position(3), velocity(3)
@@ -74,9 +76,22 @@ contains
         prob = new_PhotoelectronRaycastProbability(loc, sigma, sun_dir, &
                                                    empty_boundary_list())
 
-        expected = maxwell_pdf_3d(velocity, loc, sigma)
-        call assert_close("unoccluded ray returns Maxwell PDF", &
+        expected = 2d0*maxwell_pdf_3d(velocity, loc, sigma)
+        call assert_close("unoccluded ray returns 2 * Maxwell PDF", &
                           prob%at(position, velocity), expected)
+    end subroutine
+
+    subroutine test_inward_velocity_returns_zero()
+        !! v . sun_dir < 0 -> particle was headed away from the sun, so it
+        !! could not have been a freshly-emitted photoelectron.
+        type(t_PhotoelectronRaycastProbability) :: prob
+
+        prob = new_PhotoelectronRaycastProbability( &
+               [0d0, 0d0, 0d0], [1d0, 1d0, 1d0], [0d0, 0d0, 1d0], &
+               empty_boundary_list())
+
+        call assert_close("inward-moving velocity returns 0", &
+                          prob%at([0.5d0, 0.5d0, 0.5d0], [0d0, 0d0, -0.3d0]), 0d0)
     end subroutine
 
     subroutine test_occluded_ray_returns_zero()

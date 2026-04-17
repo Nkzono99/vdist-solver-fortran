@@ -54,7 +54,8 @@ module m_namelist
         nepl, curf, nemd, curfs, &
         xmaxe, xmine, ymaxe, ymine, zmaxe, zmine, &
         thetaz, thetaxy, &
-        use_raycast
+        use_raycast, &
+        ray_zenith_angle_deg, ray_azimuth_angle_deg
 
 contains
 
