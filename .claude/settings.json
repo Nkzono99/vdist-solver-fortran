@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit -m *)",
+      "Bash(git commit -F *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(git switch *)",
+      "Bash(fpm *)",
+      "Bash(make)",
+      "Bash(make *)",
+      "Bash(ls *)",
+      "Bash(cat .venv/bin/activate)",
+      "Bash(.venv/bin/python *)",
+      "Bash(.venv/bin/pip list)",
+      "Bash(.venv/bin/pip show *)",
+      "Bash(python3 -c *)",
+      "Bash(python3 -m json.tool *)",
+      "Bash(/usr/bin/python3.12 -m venv .venv)",
+      "Bash(which *)",
+      "Bash(module avail *)",
+      "Read(//usr/bin/**)",
+      "Read(//opt/**)",
+      "Read(//tmp/**)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.anthropic.com)"
+    ],
+    "ask": [],
+    "deny": []
+  },
+  "hooks": {}
+}

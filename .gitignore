@@ -197,3 +197,6 @@ cython_debug/
 old/
 
 ref/
+
+# Claude Code personal settings (keep team settings.json tracked)
+.claude/settings.local.json
