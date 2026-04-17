@@ -2,7 +2,7 @@
 module m_namelist
     use, intrinsic :: iso_c_binding
 
-    use allcom
+    use m_allcom
 
     implicit none
 

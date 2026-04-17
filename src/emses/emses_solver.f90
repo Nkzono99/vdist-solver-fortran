@@ -16,7 +16,7 @@ module m_emses_solver
     use forbear, only: bar_object
 
     use m_vdsolverf_core
-    use allcom
+    use m_allcom
     use m_namelist
     use emses_boundaries
 

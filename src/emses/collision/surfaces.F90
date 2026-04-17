@@ -39,7 +39,7 @@
 !>
 module m_surfaces
     use finbound
-    use allcom, only: xlrechole, ylrechole, zlrechole, &
+    use m_allcom, only: xlrechole, ylrechole, zlrechole, &
                       xurechole, yurechole, zurechole, &
                       zssurf, &
                       nx, ny, nz, &

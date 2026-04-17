@@ -41,7 +41,7 @@ module emses_boundaries
     use finbound
     use m_surfaces
     use m_objects
-    use allcom, only: xlrechole, ylrechole, zlrechole, &
+    use m_allcom, only: xlrechole, ylrechole, zlrechole, &
                       xurechole, yurechole, zurechole, &
                       zssurf, &
                       nx, ny, nz, &

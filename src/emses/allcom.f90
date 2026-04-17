@@ -1,4 +1,4 @@
-module allcom
+module m_allcom
     !! This module defines common variables and parameters used across the application.
 
     use m_vector

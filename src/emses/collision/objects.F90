@@ -39,7 +39,7 @@
 !>
 module m_objects
     use finbound
-    use allcom, only: nx, ny, nz, &
+    use m_allcom, only: nx, ny, nz, &
                       boundary_type, nboundary_types, boundary_types, &
                       cylinder_origin, cylinder_radius, cylinder_height, &
                       rectangle_shape, &
