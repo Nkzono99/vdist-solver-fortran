@@ -171,7 +171,7 @@ particles = phase_grid.create_particles()
 
 probabilities, ret_particles = get_probabilities(
         directory=data.directory,
-        ispec=0, # 0: electron, 1: ion, 2: photoelectron(not supported yet)
+        ispec=0, # 0: electron, 1: ion, 2: photoelectron (requires use_raycast = .true. in /emissn/)
         istep=-1,
         particles=particles,
         dt=data.inp.dt,
