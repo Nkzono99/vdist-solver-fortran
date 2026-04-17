@@ -24,6 +24,29 @@ VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS = (
     Path(__file__).parent.parent / "libvdist-solver-fortran.dll"
 )
 
+_DEFAULT_LIBRARY_PATHS = {
+    "linux": VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX,
+    "darwin": VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN,
+    "windows": VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS,
+}
+
+
+def _load_dll(
+    system: Literal["auto", "linux", "darwin", "windows"],
+    library_path: Union[PathLike, None],
+) -> Union[CDLL, "WinDLL"]:
+    if system == "auto":
+        system = platform.system().lower()
+
+    if system not in _DEFAULT_LIBRARY_PATHS:
+        raise RuntimeError(f"This platform is not supported: {system}")
+
+    resolved_path = Path(library_path) if library_path is not None else _DEFAULT_LIBRARY_PATHS[system]
+
+    if system == "windows":
+        return WinDLL(str(resolved_path.resolve()))  # type: ignore[name-defined]
+    return CDLL(str(resolved_path))
+
 
 def get_backtrace(
     directory: PathLike,
@@ -39,23 +62,7 @@ def get_backtrace(
     library_path: PathLike = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
-    if system == "auto":
-        system = platform.system().lower()
-
-    if library_path is not None:
-        library_path = Path(library_path)
-
-    if system == "linux":
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
-        dll = CDLL(library_path)
-    elif system == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
-        dll = CDLL(library_path)
-    elif system == "windows":  # TODO: 実際に動作するのかは未検証
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(str(library_path.resolve()))  # type:ignore
-    else:
-        raise RuntimeError(f"This platform is not supported: {system}")
+    dll = _load_dll(system, library_path)
 
     result = get_backtraces_dll(
         directory=directory,
@@ -107,23 +114,7 @@ def get_backtraces(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
-    if system == "auto":
-        system = platform.system().lower()
-
-    if library_path is not None:
-        library_path = Path(library_path)
-
-    if system == "linux":
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
-        dll = CDLL(library_path)
-    elif system == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
-        dll = CDLL(library_path)
-    elif system == "windows":  # TODO: 実際に動作するのかは未検証
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(str(library_path.resolve()))  # type:ignore
-    else:
-        raise RuntimeError(f"This platform is not supported: {system}")
+    dll = _load_dll(system, library_path)
 
     result = get_backtraces_dll(
         directory=directory,
@@ -274,23 +265,7 @@ def get_probabilities(
 ) -> Tuple[np.ndarray, List[Particle]]:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
-    if system == "auto":
-        system = platform.system().lower()
-
-    if library_path is not None:
-        library_path = Path(library_path)
-
-    if system == "linux":
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
-        dll = CDLL(library_path)
-    elif system == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
-        dll = CDLL(library_path)
-    elif system == "windows":  # TODO: 実際に動作するのかは未検証
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(str(library_path.resolve()))  # type:ignore
-    else:
-        raise RuntimeError(f"This platform is not supported: {system}")
+    dll = _load_dll(system, library_path)
 
     result = get_probabilities_dll(
         directory=directory,
@@ -418,23 +393,10 @@ def get_dust_backtrace(
     max_step: int,
     use_adaptive_dt: bool = False,
     max_probability_types: int = 100,
-    os: Literal["auto", "linux", "darwin", "windows"] = "auto",
+    system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    if os == "auto":
-        os = platform.system().lower()
-
-    if os == "linux":
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
-        dll = CDLL(library_path)
-    elif os == "darwin":  # TODO: CDLLがこのプラットフォームで使えるのか要検証
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_DARWIN
-        dll = CDLL(library_path)
-    elif os == "windows":  # TODO: 実際に動作するのかは未検証
-        library_path = library_path or VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS
-        dll = WinDLL(library_path)  # type:ignore
-    else:
-        raise RuntimeError(f"This platform is not supported: {os}")
+    dll = _load_dll(system, library_path)
 
     result = get_dust_backtrace_dll(
         directory=directory,
@@ -604,44 +566,55 @@ def create_relocated_current_values(data: emout.Emout, istep: int) -> np.ndarray
         dtype=np.float64,
     )
 
+    # axis_char, spatial axis in current_values layout (z,y,x,ielem)
+    axes = [("x", 2), ("y", 1), ("z", 0)]
+
     for ispec in range(data.inp.nspec):
-        # EX
-        ielem = 0
-        jx = getattr(data, f"j{ispec+1}x")[istep]
-        current_values[:, :, 1:-1, ispec * 3 + ielem] = 0.5 * (
-            jx[:, :, :-2] + jx[:, :, 1:-1]
-        )
-        if data.inp.mtd_vbnd[0] in [0, 2]:
-            current_values[:, :, 0, ispec * 3 + ielem] = 0
-            current_values[:, :, -1, ispec * 3 + ielem] = 0
-        else:
-            current_values[:, :, 0, ispec * 3 + ielem] = jx[:, :, 0]
-            current_values[:, :, -1, ispec * 3 + ielem] = jx[:, :, -1]
-
-        # EY
-        ielem = 1
-        jy = getattr(data, f"j{ispec+1}y")[istep]
-        current_values[:, 1:-1, :, ispec * 3 + ielem] = 0.5 * (
-            jy[:, :-2, :] + jy[:, 1:-1, :]
-        )
-        if data.inp.mtd_vbnd[1] in [0, 2]:
-            current_values[:, 0, :, ispec * 3 + ielem] = 0
-            current_values[:, -1, :, ispec * 3 + ielem] = 0
-        else:
-            current_values[:, 0, :, ispec * 3 + ielem] = jy[:, 0, :]
-            current_values[:, -1, :, ispec * 3 + ielem] = jy[:, -1, :]
-
-        # EZ
-        ielem = 2
-        jz = getattr(data, f"j{ispec+1}z")[istep]
-        current_values[1:-1, :, :, ispec * 3 + ielem] = 0.5 * (
-            jz[:-2, :, :] + jz[1:-1, :, :]
-        )
-        if data.inp.mtd_vbnd[2] in [0, 2]:
-            current_values[0, :, :, ispec * 3 + ielem] = 0
-            current_values[-1, :, :, ispec * 3 + ielem] = 0
-        else:
-            current_values[0, :, :, ispec * 3 + ielem] = jz[0, :, :]
-            current_values[-1, :, :, ispec * 3 + ielem] = jz[-1, :, :]
+        for ielem, (axis_char, axis) in enumerate(axes):
+            j = getattr(data, f"j{ispec+1}{axis_char}")[istep]
+            _assign_interior_average(current_values, ispec * 3 + ielem, axis, j)
+            _assign_boundary(
+                current_values,
+                ispec * 3 + ielem,
+                axis,
+                j,
+                zero_boundary=data.inp.mtd_vbnd[ielem] in (0, 2),
+            )
 
     return current_values
+
+
+def _assign_interior_average(
+    current_values: np.ndarray, ielem_idx: int, axis: int, j: np.ndarray
+) -> None:
+    interior = _build_slice(axis, slice(1, -1), ielem_idx, ndim_extra=True)
+    lower = _build_slice(axis, slice(None, -2), None, ndim_extra=False)
+    upper = _build_slice(axis, slice(1, -1), None, ndim_extra=False)
+    current_values[interior] = 0.5 * (j[lower] + j[upper])
+
+
+def _assign_boundary(
+    current_values: np.ndarray,
+    ielem_idx: int,
+    axis: int,
+    j: np.ndarray,
+    zero_boundary: bool,
+) -> None:
+    lower_dst = _build_slice(axis, 0, ielem_idx, ndim_extra=True)
+    upper_dst = _build_slice(axis, -1, ielem_idx, ndim_extra=True)
+    if zero_boundary:
+        current_values[lower_dst] = 0
+        current_values[upper_dst] = 0
+    else:
+        lower_src = _build_slice(axis, 0, None, ndim_extra=False)
+        upper_src = _build_slice(axis, -1, None, ndim_extra=False)
+        current_values[lower_dst] = j[lower_src]
+        current_values[upper_dst] = j[upper_src]
+
+
+def _build_slice(axis: int, value, ielem_idx, ndim_extra: bool) -> tuple:
+    indexer = [slice(None)] * 3
+    indexer[axis] = value
+    if ndim_extra:
+        indexer.append(ielem_idx)
+    return tuple(indexer)
