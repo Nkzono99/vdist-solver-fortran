@@ -178,6 +178,9 @@ module m_allcom
     double precision :: thetaz(max_nepl), thetaxy(max_nepl)
         !! Emission angles in the Z direction and XY plane for each emission surface
 
+    logical :: use_raycast = .false.
+        !! Enable raycast-based photoelectron probability for species with nflag_emit == 2
+
 contains
 
     function vdri_vector(ispec) result(ret)

@@ -53,7 +53,8 @@ module m_namelist
     namelist /emissn/ nflag_emit, &
         nepl, curf, nemd, curfs, &
         xmaxe, xmine, ymaxe, ymine, zmaxe, zmine, &
-        thetaz, thetaxy
+        thetaz, thetaxy, &
+        use_raycast
 
 contains
 
