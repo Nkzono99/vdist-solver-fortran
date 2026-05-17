@@ -1,1 +1,24 @@
-include vdsolverf/libvdist-solver-fortran.*
+include LICENSE
+include README.md
+include README.en.md
+include AGENTS.md
+include CLAUDE.md
+include CITATION.cff
+include pyproject.toml
+include setup.py
+include Makefile
+include install.sh
+include fpm.toml
+
+recursive-include src *.f90 *.F90
+recursive-include test *.f90
+recursive-include vdsolverf *.py
+recursive-include docs *.md
+recursive-include env *.env *.md
+recursive-include sample *.py
+
+exclude vdsolverf/libvdist-solver-fortran.*
+prune build
+prune dist
+prune *.egg-info
+global-exclude __pycache__ *.py[cod] *.mod *.smod

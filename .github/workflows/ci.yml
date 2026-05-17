@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    name: Test and Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran make
+
+      - name: Install Python build tools
+        run: |
+          python -m pip install --upgrade pip build fpm
+
+      - name: Run Fortran tests
+        run: fpm test
+
+      - name: Build source distribution
+        run: |
+          (cd "$(dirname "$GITHUB_WORKSPACE")" && python -m build --sdist "$GITHUB_WORKSPACE" --outdir "$GITHUB_WORKSPACE/dist")
+
+      - name: Check source distribution contains Fortran sources
+        run: |
+          tar -tzf dist/*.tar.gz | grep '/src/core/solver.f90'
+          tar -tzf dist/*.tar.gz | grep '/install.sh'
+          tar -tzf dist/*.tar.gz | grep '/env/common.env'
+          ! tar -tzf dist/*.tar.gz | grep 'vdsolverf/libvdist-solver-fortran\.so'
+
+      - name: Install from source distribution
+        env:
+          INSTALL_PROFILE: generic
+        run: |
+          python -m pip install dist/*.tar.gz
+          python -c "from vdsolverf.emses import wrapper; print('ok')"

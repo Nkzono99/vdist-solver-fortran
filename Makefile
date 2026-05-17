@@ -1,77 +1,53 @@
-SHELL=/bin/bash
+SHELL := /bin/bash
 
-LIBNAME=vdist-solver-fortran
+LIBNAME ?= vdist-solver-fortran
+PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo $(CURDIR)/.venv/bin/python; \
+	elif command -v python >/dev/null 2>&1; then echo python; \
+	elif command -v python3.12 >/dev/null 2>&1; then echo python3.12; \
+	elif command -v python3.11 >/dev/null 2>&1; then echo python3.11; \
+	else echo python3; fi)
+FPM ?= fpm
+PROFILE ?= release
+INSTALL_PROFILE ?= auto
+PREFIX ?= $(PWD)
 
-ifeq ($(OS),Windows_NT)
-    PLATFORM := windows
-else
-    UNAME_OS := $(shell uname -s)
-    ifeq ($(UNAME_OS),Linux)
-        PLATFORM := linux
-    else ifeq ($(UNAME_OS),Darwin)
-        PLATFORM := darwin
-    else
-        PLATFORM := unknown
-    endif
-endif
+.PHONY: \
+	all install install-local install-auto install-generic install-camphor \
+	build test clean package-sdist package-check
 
-export FPM_FC := gfortran
-export FPM_FFLAGS := -Ofast -m64 -fPIC -fopenmp
-export FPM_FFLAGS := $(FPM_FFLAGS) -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow
-BUILD_DIR=build
+all: install
 
-all: $(LIBNAME)
+install:
+	BUILD_PROFILE=$(INSTALL_PROFILE) PREFIX=$(PREFIX) ./install.sh
 
-$(LIBNAME): build shared copy_shared
+install-local:
+	BUILD_PROFILE=$(INSTALL_PROFILE) PREFIX=$(PWD)/.local ./install.sh
 
-.PHONY: build
-build: build_$(PLATFORM)
+install-auto:
+	BUILD_PROFILE=auto PREFIX=$(PREFIX) ./install.sh
 
-build_linux:
-	fpm install --profile=release --prefix ./
+install-generic:
+	BUILD_PROFILE=generic PREFIX=$(PREFIX) ./install.sh
 
-build_darwin:
-	fpm install --profile=release --archiver /usr/bin/ar --prefix ./
+install-camphor:
+	BUILD_PROFILE=camphor PREFIX=$(PREFIX) ./install.sh
 
-build_windows:
-	fpm install --profile=release --prefix ./
+build:
+	$(FPM) build --profile $(PROFILE) --flag "-fPIC -fopenmp"
 
-shared: shared_$(PLATFORM)
+test:
+	$(FPM) test --profile debug --flag "-fopenmp"
 
-shared_linux:
-	gfortran -shared -o lib/lib$(LIBNAME).so -Wl,--whole-archive lib/lib$(LIBNAME).a -Wl,--no-whole-archive -fopenmp
+package-sdist:
+	$(PYTHON) -m pip install --upgrade build
+	rm -rf dist
+	cd .. && $(PYTHON) -m build --sdist "$(CURDIR)" --outdir "$(CURDIR)/dist"
 
-shared_darwin: 
-	gfortran lib/lib$(LIBNAME).a -dynamiclib -install_name lib/lib$(LIBNAME).dylib -static-libgfortran -static-libquadmath -static-libgcc -o lib/lib$(LIBNAME).dylib -Wl,-all_load lib/lib$(LIBNAME).a -Wl,-noall_load -fopenmp
+package-check: package-sdist
+	$(PYTHON) -m pip install --upgrade twine
+	$(PYTHON) -m twine check dist/*
 
-shared_windows: 
-	gfortran -shared -static -o lib\\lib$(LIBNAME).dll -Wl,--out-implib=lib\\lib$(LIBNAME).dll,--export-all-symbols,--enable-auto-import,--whole-archive lib/lib$(LIBNAME).a -Wl,--no-whole-archive -fopenmp
-
-copy_shared: copy_shared_${PLATFORM}
-
-copy_shared_linux:
-	cp lib/lib${LIBNAME}.so vdsolverf/
-
-copy_shared_darwin:
-	cp lib/lib${LIBNAME}.dylib vdsolverf/
-
-copy_shared_windows:
-	copy /y lib\\lib${LIBNAME}.dll vdsolverf\\lib${LIBNAME}.dll
-
-.PHONY: clean
-clean: clean_$(PLATFORM)
-
-clean_linux:
-	fpm clean --skip
-	rm lib/lib${LIBNAME}.a
-	rm vdsolverf/lib${LIBNAME}.so
-
-clean_darwin:
-	fpm clean --skip
-	rm lib/lib${LIBNAME}.a
-	rm vdsolverf/lib${LIBNAME}.dylib
-
-clean_windows:
-	fpm clean --skip
-	del /Q lib/lib${LIBNAME}.a >NUL 2>NUL || echo ok
-	del /Q "vdsolverf/lib${LIBNAME}.dll" >NUL 2>NUL || echo ok
+clean:
+	$(FPM) clean --skip
+	rm -rf build dist *.egg-info lib
+	rm -f vdsolverf/lib$(LIBNAME).so vdsolverf/lib$(LIBNAME).dylib vdsolverf/lib$(LIBNAME).dll

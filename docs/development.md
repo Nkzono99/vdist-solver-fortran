@@ -8,9 +8,9 @@
 
 ## 環境
 
-- `gfortran` と `fpm` が `PATH` 上にあること。`make` は
-  `fpm install --profile=release` を内部で呼び出したあと、アーカイブを
-  共有ライブラリとして再リンクします。
+- `gfortran`、`make`、`fpm` が `PATH` 上にあること。`make` は
+  `install.sh` を呼び出し、`fpm install --profile=release` でできた
+  アーカイブを共有ライブラリとして再リンクします。
 - リポジトリ直下の `.venv/` に Python 3.12:
 
   ```bash
@@ -32,6 +32,15 @@ make                   # エンドツーエンド: fpm install → 共有ライ�
 
 Fortran を触ったら必ず `fpm test` を回してから `make` を走らせ、Python
 から参照する `.so` を同期させてください。
+
+pip / PyPI 配布では sdist に Fortran ソースとビルド補助ファイルを含め、
+インストール時に同じ `make install` が実行されます。profile は
+`INSTALL_PROFILE=generic` / `camphor` などで指定できます。
+
+```bash
+make package-sdist
+INSTALL_PROFILE=generic .venv/bin/python -m pip install dist/*.tar.gz
+```
 
 Python 側のみの変更なら import チェックで十分なことが多いです:
 

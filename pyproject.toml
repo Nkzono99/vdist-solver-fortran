@@ -1,9 +1,9 @@
 [build-system]
 build-backend = "setuptools.build_meta"
 requires = [
-  "setuptools",
-  'fpm==0.10.0; sys_platform == "win32"',
-  'fpm; sys_platform != "win32"',
+  "setuptools>=68",
+  "wheel",
+  "fpm",
 ]
 
 [project]
@@ -12,7 +12,7 @@ version = "1.4.2"
 
 requires-python = ">=3.7"
 
-description = "Wrapper of velocsty distribution solver written in Fortran"
+description = "Wrapper of velocity distribution solver written in Fortran"
 readme = "README.md"
 
 keywords = []
@@ -34,11 +34,6 @@ dependencies = [
   "ipywidgets",
 ]
 
-[project.optional-dependencies]
-mpi = [
-  "mpi4py",
-]
-
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
   "Development Status :: 3 - Alpha",
@@ -48,8 +43,16 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
 ]
 
+[project.optional-dependencies]
+mpi = [
+  "mpi4py",
+]
+
 [project.urls]
 Repository = "https://github.com/Nkzono99/vdist-solver-fortran.git"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.package-data]
+vdsolverf = ["libvdist-solver-fortran.*"]

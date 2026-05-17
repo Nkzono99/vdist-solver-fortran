@@ -8,9 +8,9 @@ agent-oriented notes in
 
 ## Environment
 
-- `gfortran` and `fpm` must be on `PATH`. `make` builds call
-  `fpm install --profile=release` then re-link the archive as a shared
-  library.
+- `gfortran`, `make`, and `fpm` must be on `PATH`. `make` calls
+  `install.sh`, which runs `fpm install --profile=release` then re-links
+  the archive as a shared library.
 - Python 3.12 via `.venv/` at the repository root:
 
   ```bash
@@ -32,6 +32,15 @@ make                   # End-to-end: fpm install -> link shared lib into vdsolve
 
 After touching Fortran, always run `fpm test` and then
 `make` so the Python-facing `.so` stays in sync.
+
+For pip / PyPI distribution, the sdist contains the Fortran sources and build
+helper files, and installation runs the same `make install` path.  Select a
+build profile with `INSTALL_PROFILE=generic`, `camphor`, etc.
+
+```bash
+make package-sdist
+INSTALL_PROFILE=generic .venv/bin/python -m pip install dist/*.tar.gz
+```
 
 For Python-only changes a quick import check is usually enough:
 

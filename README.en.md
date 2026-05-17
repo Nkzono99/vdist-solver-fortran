@@ -3,6 +3,8 @@
 > Lang: [日本語](README.md) | **English**
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14018863.svg)](https://doi.org/10.5281/zenodo.14018863)
+[![CI](https://github.com/Nkzono99/vdist-solver-fortran/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Nkzono99/vdist-solver-fortran/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/vdist-solver-fortran)](https://pypi.org/project/vdist-solver-fortran/)
 
 Velocity distribution solver for Python, implemented in Fortran.
 
@@ -15,18 +17,34 @@ wrapper.
 ## Requirements
 
 - `gfortran`
+- `make`
+- `fpm`
 - Python 3.7+ (development uses 3.12 in `.venv/`)
 
 ## Install
 
-Installation scripts are currently only guaranteed to work on Linux and
-Windows.
+PyPI installation is recommended.  During pip builds, `make install` builds
+the Fortran shared library and bundles it into the Python package.
 
 > [!Note]
 > The build should also succeed on macOS but is not CI-tested.
 
 ```bash
-pip install git+https://github.com/Nkzono99/vdist-solver-fortran.git
+python -m pip install -U pip setuptools wheel
+python -m pip install vdist-solver-fortran
+```
+
+You can also install the development version directly from GitHub:
+
+```bash
+python -m pip install "git+https://github.com/Nkzono99/vdist-solver-fortran.git"
+```
+
+Pip builds use `INSTALL_PROFILE=auto` by default.  Override it with
+`INSTALL_PROFILE=generic` or `INSTALL_PROFILE=camphor` when needed.
+
+```bash
+INSTALL_PROFILE=generic python -m pip install vdist-solver-fortran
 ```
 
 ## Quick start

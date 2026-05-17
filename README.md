@@ -3,6 +3,8 @@
 > Lang: **日本語** | [English](README.en.md)
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14018863.svg)](https://doi.org/10.5281/zenodo.14018863)
+[![CI](https://github.com/Nkzono99/vdist-solver-fortran/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Nkzono99/vdist-solver-fortran/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/vdist-solver-fortran)](https://pypi.org/project/vdist-solver-fortran/)
 
 Fortran で実装した速度分布ソルバを Python から利用するためのパッケージです。
 
@@ -14,17 +16,35 @@ Fortran で実装した速度分布ソルバを Python から利用するため�
 ## 必要環境
 
 - `gfortran`
+- `make`
+- `fpm`
 - Python 3.7 以上 (開発は `.venv/` 内の 3.12 で実施)
 
 ## インストール
 
-インストールスクリプトは現状 Linux と Windows での動作のみ保証しています。
+PyPI からのインストールを推奨します。pip のビルド中に `make install` が
+走り、Fortran 共有ライブラリをビルドして Python package に同梱します。
 
 > [!Note]
 > macOS でもビルド自体は通る想定ですが CI では検証していません。
 
 ```bash
-pip install git+https://github.com/Nkzono99/vdist-solver-fortran.git
+python -m pip install -U pip setuptools wheel
+python -m pip install vdist-solver-fortran
+```
+
+開発版を GitHub から直接入れることもできます。
+
+```bash
+python -m pip install "git+https://github.com/Nkzono99/vdist-solver-fortran.git"
+```
+
+pip 経由のビルドでは既定で `INSTALL_PROFILE=auto` を使います。必要なら
+`INSTALL_PROFILE=generic` や `INSTALL_PROFILE=camphor` を環境変数で
+指定してください。
+
+```bash
+INSTALL_PROFILE=generic python -m pip install vdist-solver-fortran
 ```
 
 ## クイックスタート
