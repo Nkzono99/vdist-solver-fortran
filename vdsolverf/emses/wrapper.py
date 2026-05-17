@@ -30,6 +30,12 @@ _DEFAULT_LIBRARY_PATHS = {
     "windows": VDIST_SOLVER_FORTRAN_LIBRARY_PATH_WINDOWS,
 }
 
+_ELECTRIC_COMPONENTS = (
+    ("ex", "rex", 2),
+    ("ey", "rey", 1),
+    ("ez", "rez", 0),
+)
+
 
 def _load_dll(
     system: Literal["auto", "linux", "darwin", "windows"],
@@ -404,62 +410,76 @@ def create_relocated_ebvalues(
 
     phibk = load_accumulated_potential(data, istep, ispec)
     if phibk is not None:
-        accumulated_e = accumulated_electric_field_from_potential(
-            phibk, field_substeps_per_particle_step(data)
+        fill_separated_electric_fields(
+            ebvalues, data, istep, phibk, field_substeps_per_particle_step(data)
         )
-        ebvalues[:, :, :, 0:3] = create_relocated_space_electric_field(
-            data, istep, accumulated_e
-        )
-        ebvalues[:, :, :, 6:9] = accumulated_e
     else:
-        ebvalues[:, :, :, 0:3] = load_relocated_electric_field(data, istep)
+        fill_relocated_electric_field(ebvalues, data, istep)
 
     return ebvalues
 
 
-def create_relocated_space_electric_field(
-    data: emout.Emout, istep: int, accumulated_electric_field: np.ndarray
-) -> np.ndarray:
-    try:
-        space_electric_field = (
-            load_electric_field(data, istep) - accumulated_electric_field
+def fill_separated_electric_fields(
+    ebvalues: np.ndarray,
+    data: emout.Emout,
+    istep: int,
+    accumulated_potential: np.ndarray,
+    substeps_per_particle_step: float,
+):
+    expected_shape = (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1)
+
+    for component, (field_name, relocated_name, axis) in enumerate(
+        _ELECTRIC_COMPONENTS
+    ):
+        accumulated_e = ebvalues[:, :, :, component + 6]
+        write_potential_difference(
+            accumulated_potential,
+            axis=axis,
+            out=accumulated_e,
+            scale=substeps_per_particle_step,
         )
-    except AttributeError:
-        relocated_total_e = load_relocated_electric_field(data, istep)
-        relocated_accumulated_e = relocate_electric_field(data, accumulated_electric_field)
-        return relocated_total_e - relocated_accumulated_e
 
-    return relocate_electric_field(data, space_electric_field)
-
-
-def load_electric_field(data: emout.Emout, istep: int) -> np.ndarray:
-    expected_shape = (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1)
-    electric_field = np.zeros(expected_shape + (3,), dtype=np.float64)
-
-    for component, name in enumerate(("ex", "ey", "ez")):
-        grid = load_required_grid_step(data, name, istep)
-        if grid.shape != expected_shape:
-            raise ValueError(
-                f"{name} shape mismatch: expected {expected_shape}, got {grid.shape}"
+        relocated_space_e = ebvalues[:, :, :, component]
+        try:
+            total_e = load_required_grid_step(data, field_name, istep)
+        except AttributeError:
+            relocated_total_e = load_required_grid_step(data, relocated_name, istep)
+            validate_grid_shape(relocated_name, relocated_total_e, expected_shape)
+            relocate_electric_component(
+                accumulated_e,
+                axis=axis,
+                btype=electric_boundary_type(data, axis),
+                out=relocated_space_e,
             )
-        electric_field[:, :, :, component] = grid
+            np.subtract(relocated_total_e, relocated_space_e, out=relocated_space_e)
+            continue
 
-    return electric_field
+        validate_grid_shape(field_name, total_e, expected_shape)
+        relocate_electric_component_difference(
+            total_e,
+            accumulated_e,
+            axis=axis,
+            btype=electric_boundary_type(data, axis),
+            out=relocated_space_e,
+        )
 
 
-def load_relocated_electric_field(data: emout.Emout, istep: int) -> np.ndarray:
+def fill_relocated_electric_field(
+    ebvalues: np.ndarray, data: emout.Emout, istep: int
+):
     expected_shape = (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1)
-    electric_field = np.zeros(expected_shape + (3,), dtype=np.float64)
 
-    for component, name in enumerate(("rex", "rey", "rez")):
-        grid = load_required_grid_step(data, name, istep)
-        if grid.shape != expected_shape:
-            raise ValueError(
-                f"{name} shape mismatch: expected {expected_shape}, got {grid.shape}"
-            )
-        electric_field[:, :, :, component] = grid
+    for component, (_, relocated_name, _) in enumerate(_ELECTRIC_COMPONENTS):
+        relocated_e = load_required_grid_step(data, relocated_name, istep)
+        validate_grid_shape(relocated_name, relocated_e, expected_shape)
+        ebvalues[:, :, :, component] = relocated_e
 
-    return electric_field
+
+def validate_grid_shape(name: str, grid: np.ndarray, expected_shape: Tuple[int, ...]):
+    if grid.shape != expected_shape:
+        raise ValueError(
+            f"{name} shape mismatch: expected {expected_shape}, got {grid.shape}"
+        )
 
 
 def load_accumulated_potential(
@@ -515,60 +535,37 @@ def load_required_grid_step(data: emout.Emout, name: str, istep: int) -> np.ndar
     return array
 
 
-def accumulated_electric_field_from_potential(
-    potential: np.ndarray, substeps_per_particle_step: float
-) -> np.ndarray:
-    electric_field = np.zeros(potential.shape + (3,), dtype=np.float64)
-
-    electric_field[:, :, :, 0] = potential_difference(potential, axis=2)
-    electric_field[:, :, :, 1] = potential_difference(potential, axis=1)
-    electric_field[:, :, :, 2] = potential_difference(potential, axis=0)
-
-    electric_field *= substeps_per_particle_step
-
-    return electric_field
-
-
-def potential_difference(potential: np.ndarray, axis: int) -> np.ndarray:
-    difference = np.zeros_like(potential, dtype=np.float64)
-
+def write_potential_difference(
+    potential: np.ndarray, axis: int, out: np.ndarray, scale: float
+):
+    out[:, :, :] = 0.0
     if potential.shape[axis] <= 1:
-        return difference
+        return
 
     left = [slice(None)] * 3
     left[axis] = slice(0, -1)
     right = [slice(None)] * 3
     right[axis] = slice(1, None)
-    difference[tuple(left)] = potential[tuple(left)] - potential[tuple(right)]
+    np.subtract(potential[tuple(left)], potential[tuple(right)], out=out[tuple(left)])
 
     last = [slice(None)] * 3
     last[axis] = -1
     previous = [slice(None)] * 3
     previous[axis] = -2
-    difference[tuple(last)] = difference[tuple(previous)]
+    out[tuple(last)] = out[tuple(previous)]
 
-    return difference
-
-
-def relocate_electric_field(
-    data: emout.Emout, electric_field: np.ndarray
-) -> np.ndarray:
-    relocated = np.zeros_like(electric_field, dtype=np.float64)
-
-    for component, axis in enumerate((2, 1, 0)):
-        relocated[:, :, :, component] = relocate_electric_component(
-            electric_field[:, :, :, component],
-            axis=axis,
-            btype=electric_boundary_type(data, axis),
-        )
-
-    return relocated
+    if scale != 1.0:
+        out[:, :, :] *= scale
 
 
 def relocate_electric_component(
-    component: np.ndarray, axis: int, btype: Literal["periodic", "dirichlet", "neumann"]
+    component: np.ndarray,
+    axis: int,
+    btype: Literal["periodic", "dirichlet", "neumann"],
+    out: Union[np.ndarray, None] = None,
 ) -> np.ndarray:
-    relocated = np.zeros_like(component, dtype=np.float64)
+    relocated = np.zeros_like(component, dtype=np.float64) if out is None else out
+    relocated[:, :, :] = 0.0
 
     if component.shape[axis] <= 1:
         return relocated
@@ -576,17 +573,20 @@ def relocate_electric_component(
     middle = axis_slice(axis, slice(1, -1))
     lower = axis_slice(axis, slice(None, -2))
     upper = axis_slice(axis, slice(1, -1))
-    relocated[middle] = 0.5 * (component[lower] + component[upper])
+    np.add(component[lower], component[upper], out=relocated[middle])
+    relocated[middle] *= 0.5
 
     first = axis_slice(axis, 0)
     last = axis_slice(axis, -1)
 
     if btype == "periodic":
-        periodic_value = 0.5 * (
-            component[axis_slice(axis, -2)] + component[axis_slice(axis, 1)]
+        np.add(
+            component[axis_slice(axis, -2)],
+            component[axis_slice(axis, 1)],
+            out=relocated[first],
         )
-        relocated[first] = periodic_value
-        relocated[last] = periodic_value
+        relocated[first] *= 0.5
+        relocated[last] = relocated[first]
     elif btype == "neumann":
         relocated[first] = 0.0
         relocated[last] = 0.0
@@ -595,6 +595,57 @@ def relocate_electric_component(
         relocated[last] = component[axis_slice(axis, -2)]
 
     return relocated
+
+
+def relocate_electric_component_difference(
+    total: np.ndarray,
+    accumulated: np.ndarray,
+    axis: int,
+    btype: Literal["periodic", "dirichlet", "neumann"],
+    out: np.ndarray,
+) -> np.ndarray:
+    out[:, :, :] = 0.0
+
+    if total.shape[axis] <= 1:
+        return out
+
+    middle = axis_slice(axis, slice(1, -1))
+    lower = axis_slice(axis, slice(None, -2))
+    upper = axis_slice(axis, slice(1, -1))
+    np.subtract(total[lower], accumulated[lower], out=out[middle])
+    out[middle] += total[upper]
+    out[middle] -= accumulated[upper]
+    out[middle] *= 0.5
+
+    first = axis_slice(axis, 0)
+    last = axis_slice(axis, -1)
+
+    if btype == "periodic":
+        np.subtract(
+            total[axis_slice(axis, -2)],
+            accumulated[axis_slice(axis, -2)],
+            out=out[first],
+        )
+        out[first] += total[axis_slice(axis, 1)]
+        out[first] -= accumulated[axis_slice(axis, 1)]
+        out[first] *= 0.5
+        out[last] = out[first]
+    elif btype == "neumann":
+        out[first] = 0.0
+        out[last] = 0.0
+    else:
+        np.subtract(
+            total[axis_slice(axis, 1)],
+            accumulated[axis_slice(axis, 1)],
+            out=out[first],
+        )
+        np.subtract(
+            total[axis_slice(axis, -2)],
+            accumulated[axis_slice(axis, -2)],
+            out=out[last],
+        )
+
+    return out
 
 
 def axis_slice(axis: int, axis_index) -> Tuple:
