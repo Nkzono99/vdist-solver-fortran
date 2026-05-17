@@ -58,7 +58,9 @@ vdsolverf.emses.wrapper
   get_backtraces(...)  多粒子 ctypes 呼び出し
   get_probabilities(...)
   create_relocated_ebvalues
-                       emout から EB 場配列を組み立てる
+                       emout から EB 場配列を組み立てる。`phibk` /
+                       `phibksp*` がある場合は蓄積電荷由来 E を分離し、
+                       空間電荷由来 E だけを reallocation する
 vdsolverf.emses.tmpolary_input
   TempolaryInput       emout から最小限の plasma-vdsolverf.inp を書き出して
                        終了時に削除するコンテキストマネージャ
@@ -70,7 +72,9 @@ vdsolverf.emses.geotype
 ## 境界を越える流れ
 
 1. Python が EB 場を `bind(c)` サブルーチンで宣言された形状に合わせて
-   `numpy` 配列に詰めます。引数アライメント
+   `numpy` 配列に詰めます。配列の成分 1-6 は reallocation 済みの
+   空間電荷由来 E と B、成分 7-9 は +0.5 セル grid の蓄積電荷由来 E です。
+   引数アライメント
    規則は
    [`.claude/rules/fortran-python-interop.md`](../.claude/rules/fortran-python-interop.md)
    を参照。

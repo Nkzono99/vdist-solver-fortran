@@ -18,6 +18,7 @@ module m_emses_simulator_builder
     use m_allcom
     use m_namelist, only: read_namelist
     use m_emses_boundaries, only: create_simple_collision_boundaries
+    use m_emses_field, only: t_EMSESFieldGrid, new_EMSESFieldGrid
     use m_photoelectron_raycast, only: new_PhotoelectronRaycastProbability, &
                                        t_PhotoelectronRaycastProbability
 
@@ -72,8 +73,8 @@ contains
             !! Number of grid cells in the y direction
         integer(c_int), value, intent(in) :: lz
             !! Number of grid cells in the z direction
-        real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
-            !! Electric and magnetic field values
+        real(c_double), intent(in) :: ebvalues(9, lx + 1, ly + 1, lz + 1)
+            !! Relocated E/B values plus staggered accumulated-charge E values
         integer(c_int), value, intent(in) :: ispec
             !! Species index
         integer(c_int), value, intent(in) :: max_probability_types
@@ -81,7 +82,7 @@ contains
         type(t_ESSimulator) :: simulator
             !! Simulator object
 
-        type(t_VectorFieldGrid), target :: eb
+        type(t_EMSESFieldGrid), target :: eb
 
         type(t_BoundaryList) :: boundaries
 
@@ -117,7 +118,9 @@ contains
 
             ! boundaries = new_BoundaryList()
 
-            eb = new_VectorFieldGrid(6, lx, ly, lz, ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1))
+            eb = new_EMSESFieldGrid(lx, ly, lz, &
+                                    ebvalues(1:6, 1:lx + 1, 1:ly + 1, 1:lz + 1), &
+                                    ebvalues(7:9, 1:lx + 1, 1:ly + 1, 1:lz + 1))
 
             call add_probability_boundaries(boundaries, ispec, n_probability_functions, probability_functions)
 

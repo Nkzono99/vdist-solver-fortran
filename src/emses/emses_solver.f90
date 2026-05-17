@@ -58,8 +58,8 @@ contains
             !! Number of grid cells in the y direction
         integer(c_int), value, intent(in) :: lz
             !! Number of grid cells in the z direction
-        real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
-            !! Electric and magnetic field values
+        real(c_double), intent(in) :: ebvalues(9, lx + 1, ly + 1, lz + 1)
+            !! Relocated E/B values plus staggered accumulated-charge E values
         integer(c_int), value, intent(in) :: ispec
             !! Species index
         integer(c_int), value, intent(in) :: npcls
@@ -202,8 +202,8 @@ contains
             !! Number of grid cells in the y direction
         integer(c_int), value, intent(in) :: lz
             !! Number of grid cells in the z direction
-        real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
-            !! Electric and magnetic field values
+        real(c_double), intent(in) :: ebvalues(9, lx + 1, ly + 1, lz + 1)
+            !! Relocated E/B values plus staggered accumulated-charge E values
         integer(c_int), value, intent(in) :: ispec
             !! Species index
         integer(c_int), value, intent(in) :: npcls

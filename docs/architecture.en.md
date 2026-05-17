@@ -58,7 +58,9 @@ vdsolverf.emses.wrapper
   get_backtraces(...)  Multi-particle ctypes call
   get_probabilities(...)
   create_relocated_ebvalues
-                       Assembles EB field arrays from emout
+                       Assembles EB field arrays from emout. When `phibk` /
+                       `phibksp*` exists, separates accumulated-charge E and
+                       relocates only the space-charge E contribution.
 vdsolverf.emses.tmpolary_input
   TempolaryInput       Context manager writing a minimal plasma-vdsolverf.inp
                        from emout data, then cleaning it up on exit.
@@ -70,8 +72,9 @@ vdsolverf.emses.geotype
 ## Crossing the boundary
 
 1. Python gathers EB fields into contiguous `numpy` arrays matching the
-   Fortran shapes declared on the `bind(c)`
-   subroutines — see
+   Fortran shapes declared on the `bind(c)` subroutines. Components 1-6 are
+   relocated space-charge E and B; components 7-9 are accumulated-charge E on
+   the +0.5-cell staggered grid. See
    [`.claude/rules/fortran-python-interop.md`](../.claude/rules/fortran-python-interop.md)
    for the argument-alignment rules.
 2. `TempolaryInput` writes the filtered namelist to

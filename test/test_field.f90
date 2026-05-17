@@ -9,6 +9,7 @@ program test_field
     call test_linear_gradient_in_x()
     call test_trilinear_interpolation_center()
     call test_position_outside_domain_linearly_extrapolates()
+    call test_component_offset_shifts_interpolation_position()
 
     print *, "test_field: all tests passed."
 
@@ -106,6 +107,29 @@ contains
 
         call assert_close_vec("Position past +X linearly extrapolates", &
                               grid%at([2d0, 0.3d0, 0.7d0]), [8d0])
+    end subroutine
+
+    subroutine test_component_offset_shifts_interpolation_position()
+        type(t_VectorFieldGrid) :: grid
+        double precision :: values(1, 0:2, 0:1, 0:1)
+        double precision :: offsets(3, 1)
+        integer :: ix, iy, iz
+
+        do ix = 0, 2
+            do iy = 0, 1
+                do iz = 0, 1
+                    values(1, ix, iy, iz) = dble(ix)
+                end do
+            end do
+        end do
+
+        offsets(:, :) = 0d0
+        offsets(1, 1) = 0.5d0
+
+        grid = new_VectorFieldGrid(1, 2, 1, 1, values, offsets)
+
+        call assert_close_vec("Offset component samples x - 0.5", &
+                              grid%at([0.75d0, 0.5d0, 0.5d0]), [0.25d0])
     end subroutine
 
 end program
