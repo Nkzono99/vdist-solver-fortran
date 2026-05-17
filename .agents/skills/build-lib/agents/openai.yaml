@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Library"
+  short_description: "Build and sync the Fortran shared library"
+  default_prompt: "Use $build-lib after changing Fortran code so Python loads the updated shared library."

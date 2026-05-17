@@ -1,0 +1,4 @@
+interface:
+  display_name: "Improve Agent Harness"
+  short_description: "Maintain AGENTS.md and local agent skills"
+  default_prompt: "Use $improve-agent-harness to refine this repository agent guidance and skills."

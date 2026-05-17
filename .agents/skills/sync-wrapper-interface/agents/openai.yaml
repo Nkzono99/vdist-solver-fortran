@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sync Wrapper Interface"
+  short_description: "Audit Python ctypes and Fortran bind(c) ABI"
+  default_prompt: "Use $sync-wrapper-interface to check wrapper.py against Fortran bind(c) entry points."

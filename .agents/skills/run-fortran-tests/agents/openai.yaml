@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run Fortran Tests"
+  short_description: "Run focused or full fpm regression tests"
+  default_prompt: "Use $run-fortran-tests to validate the Fortran test suite after code changes."
