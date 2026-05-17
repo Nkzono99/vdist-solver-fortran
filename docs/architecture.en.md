@@ -65,6 +65,13 @@ vdsolverf.emses.tmpolary_input
   TempolaryInput       Context manager writing a minimal plasma-vdsolverf.inp
                        from emout data, then cleaning it up on exit.
   TMP_INP_KEYS         Whitelist of namelist keys forwarded to Fortran.
+vdsolverf.emses.mpi
+  get_*                Optional mpi4py backend that partitions particles
+                       across ranks and calls the existing ctypes backend on
+                       each rank.
+  srun_get_*           Launcher wrappers that start an MPI worker through
+                       Slurm/srun from a normal Python process and collect the
+                       root-rank result through pickle.
 vdsolverf.emses.geotype
   Converts geotype primitives into boundary-type / boundary-shape tuples.
 ```
@@ -78,7 +85,8 @@ vdsolverf.emses.geotype
    [`.claude/rules/fortran-python-interop.md`](../.claude/rules/fortran-python-interop.md)
    for the argument-alignment rules.
 2. `TempolaryInput` writes the filtered namelist to
-   `data.directory / plasma-vdsolverf.inp`.
+   `data.directory / plasma-vdsolverf.inp`.  The MPI backend uses a
+   rank-specific suffix for this temporary file to avoid concurrent writes.
 3. `_load_dll` resolves `libvdist-solver-fortran.so` / `.dylib` / `.dll`.
 4. The ctypes call enters one of the three `bind(c)` entry points, which
    builds the simulator, runs the backtrace loop, and calls

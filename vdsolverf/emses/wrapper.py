@@ -66,6 +66,7 @@ def get_backtrace(
     max_probability_types: int = 100,
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
+    tmp_input_suffix: Union[str, None] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
     dll = _load_dll(system, library_path)
@@ -82,6 +83,7 @@ def get_backtrace(
         max_probability_types=max_probability_types,
         dll=dll,
         n_threads=1,
+        tmp_input_suffix=tmp_input_suffix,
     )
 
     ts, probabilities, positions_list, velocities_list, last_indexes = result
@@ -117,6 +119,7 @@ def get_backtraces(
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
+    tmp_input_suffix: Union[str, None] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
@@ -134,6 +137,7 @@ def get_backtraces(
         max_probability_types=max_probability_types,
         dll=dll,
         n_threads=n_threads,
+        tmp_input_suffix=tmp_input_suffix,
     )
 
     # For some reason, it crashes when I try to close it.
@@ -161,6 +165,7 @@ def get_backtraces_dll(
     max_probability_types: int,
     dll: Union[CDLL, "WinDLL"],
     n_threads: Union[int, None] = None,
+    tmp_input_suffix: Union[str, None] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     dll.get_backtraces.argtypes = [
         c_char_p,  # inppath
@@ -203,7 +208,7 @@ def get_backtraces_dll(
     positions = np.array([particle.pos for particle in particles], dtype=np.float64)
     velocities = np.array([particle.vel for particle in particles], dtype=np.float64)
 
-    with TempolaryInput(data) as tmpinp:
+    with TempolaryInput(data, suffix=tmp_input_suffix) as tmpinp:
         inppath = tmpinp.tmppath
         inppath_str = str(inppath.resolve())
 
@@ -268,6 +273,7 @@ def get_probabilities(
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
+    tmp_input_suffix: Union[str, None] = None,
 ) -> Tuple[np.ndarray, List[Particle]]:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
@@ -284,6 +290,7 @@ def get_probabilities(
         max_probability_types=max_probability_types,
         dll=dll,
         n_threads=n_threads,
+        tmp_input_suffix=tmp_input_suffix,
     )
 
     # For some reason, it crashes when I try to close it.
@@ -310,6 +317,7 @@ def get_probabilities_dll(
     max_probability_types: int,
     dll: Union[CDLL, "WinDLL"],
     n_threads: int = 1,
+    tmp_input_suffix: Union[str, None] = None,
 ) -> Tuple[np.ndarray, List[Particle]]:
     dll.get_probabilities.argtypes = [
         c_char_p,  # inppath
@@ -344,7 +352,7 @@ def get_probabilities_dll(
 
     positions = np.array([particle.pos for particle in particles], dtype=np.float64)
     velocities = np.array([particle.vel for particle in particles], dtype=np.float64)
-    with TempolaryInput(data) as tmpinp:
+    with TempolaryInput(data, suffix=tmp_input_suffix) as tmpinp:
         inppath = tmpinp.tmppath
         inppath_str = str(inppath.resolve())
 

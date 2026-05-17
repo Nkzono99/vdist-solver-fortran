@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Union
 
 import emout
 import f90nml
@@ -82,9 +83,16 @@ TMP_INP_KEYS = {
 
 
 class TempolaryInput(object):
-    def __init__(self, data: emout.Emout):
+    def __init__(self, data: emout.Emout, suffix: Union[str, None] = None):
         self.__data = data
-        self.__tmppath: Path = data.directory / f"plasma-vdsolverf.inp"
+        filename = "plasma-vdsolverf.inp"
+        if suffix is not None:
+            safe_suffix = "".join(
+                char if char.isalnum() or char in "._-" else "_"
+                for char in str(suffix)
+            )
+            filename = f"plasma-vdsolverf-{safe_suffix}.inp"
+        self.__tmppath: Path = data.directory / filename
 
     def __enter__(self) -> "TempolaryInput":
         inp = f90nml.Namelist()

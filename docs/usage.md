@@ -122,6 +122,47 @@ probabilities, ret_particles = get_probabilities(
 )
 ```
 
+## MPI 粒子並列
+
+既存の `vdsolverf.emses.get_*` はそのまま OpenMP/スレッド並列の入口です。
+MPI を使う場合は optional backend を明示します。
+
+```python
+from vdsolverf.emses.mpi import get_probabilities
+
+probabilities, ret_particles = get_probabilities(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    particles=particles,
+    dt=data.inp.dt,
+    max_step=30_000,
+    n_threads=2,        # rank 内のスレッド数
+)
+```
+
+この形は `srun -n 8 python script.py` のように Python スクリプト自体を
+MPI 起動した場合に使います。`mpi4py` は optional 依存なので、
+必要な環境だけ `pip install "vdist-solver-fortran[mpi]"` で追加します。
+
+通常の Python プロセスから Slurm に投げる場合は launcher を使えます。
+
+```python
+from vdsolverf.emses.mpi import srun_get_probabilities
+
+probabilities, ret_particles = srun_get_probabilities(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    particles=particles,
+    dt=data.inp.dt,
+    max_step=30_000,
+    ntasks=8,
+    n_threads=2,
+    cpus_per_task=2,
+)
+```
+
 ## 共有ライブラリのパスを明示指定する
 
 通常はラッパが OS を自動判定して同梱の共有ライブラリを読み込みますが、

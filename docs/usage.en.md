@@ -124,6 +124,48 @@ probabilities, ret_particles = get_probabilities(
 )
 ```
 
+## MPI particle parallelism
+
+The existing `vdsolverf.emses.get_*` functions remain the OpenMP/threaded
+entry points.  Use the optional MPI backend explicitly when you want
+particle-parallel execution.
+
+```python
+from vdsolverf.emses.mpi import get_probabilities
+
+probabilities, ret_particles = get_probabilities(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    particles=particles,
+    dt=data.inp.dt,
+    max_step=30_000,
+    n_threads=2,        # threads per rank
+)
+```
+
+Use this form when the Python script itself is launched with MPI, for example
+`srun -n 8 python script.py`.  `mpi4py` is an optional dependency; install it
+only in MPI environments with `pip install "vdist-solver-fortran[mpi]"`.
+
+To launch Slurm from an ordinary Python process, use the launcher wrapper:
+
+```python
+from vdsolverf.emses.mpi import srun_get_probabilities
+
+probabilities, ret_particles = srun_get_probabilities(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    particles=particles,
+    dt=data.inp.dt,
+    max_step=30_000,
+    ntasks=8,
+    n_threads=2,
+    cpus_per_task=2,
+)
+```
+
 ## Selecting a specific shared-library path
 
 The wrapper auto-detects OS and loads the bundled shared library, but you

@@ -34,6 +34,11 @@ dependencies = [
   "ipywidgets",
 ]
 
+[project.optional-dependencies]
+mpi = [
+  "mpi4py",
+]
+
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
   "Development Status :: 3 - Alpha",

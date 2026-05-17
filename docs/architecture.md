@@ -65,6 +65,11 @@ vdsolverf.emses.tmpolary_input
   TempolaryInput       emout から最小限の plasma-vdsolverf.inp を書き出して
                        終了時に削除するコンテキストマネージャ
   TMP_INP_KEYS         Fortran に渡す namelist キーのホワイトリスト
+vdsolverf.emses.mpi
+  get_*                mpi4py がある環境で粒子リストを rank 分割し、既存の
+                       ctypes backend を各 rank で呼ぶ optional backend
+  srun_get_*           通常の Python プロセスから Slurm/srun 経由で MPI worker
+                       を起動し、root rank の結果を pickle で回収する launcher
 vdsolverf.emses.geotype
   geotype プリミティブを boundary_type / boundary_shape タプルに変換
 ```
@@ -79,7 +84,8 @@ vdsolverf.emses.geotype
    [`.claude/rules/fortran-python-interop.md`](../.claude/rules/fortran-python-interop.md)
    を参照。
 2. `TempolaryInput` がフィルタ済み namelist を
-   `data.directory / plasma-vdsolverf.inp` に書き出します。
+   `data.directory / plasma-vdsolverf.inp` に書き出します。MPI backend では
+   rank ごとに suffix 付きの一時ファイル名を使い、同時書き込みを避けます。
 3. `_load_dll` が `libvdist-solver-fortran.so` / `.dylib` / `.dll` を解決。
 4. ctypes 呼び出しで 3 つの `bind(c)` 入口のいずれかに入り、シミュレータ
    を構築、バックトレースループを回し、終了時に `destroy_simulator` を
