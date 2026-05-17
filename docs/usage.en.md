@@ -124,31 +124,6 @@ probabilities, ret_particles = get_probabilities(
 )
 ```
 
-## Dust-grain charging with a backtrace
-
-The dust solver simultaneously integrates a dust grain's trajectory and its
-charge, using current fields from the EMSES run.
-
-```python
-from vdsolverf.core import DustParticle
-from vdsolverf.emses import get_dust_backtrace
-
-dust = DustParticle(
-    charge=-4e3, mass=1.0, radius=1.0,
-    position=[32, 32, 400],
-    velocity=[0, 0, -10],
-)
-
-ts, charges, positions, velocities = get_dust_backtrace(
-    directory=data.directory,
-    istep=-1,
-    dust=dust,
-    dt=data.inp.dt,
-    max_step=10_000,
-    use_adaptive_dt=False,
-)
-```
-
 ## Selecting a specific shared-library path
 
 The wrapper auto-detects OS and loads the bundled shared library, but you

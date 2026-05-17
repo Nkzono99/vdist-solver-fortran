@@ -15,7 +15,7 @@ src/                  Fortran sources (built by fpm)
   utils/              Small shared helpers
   vdsolverf.f90       Umbrella module (m_vdsolverf) re-exporting the C API
 vdsolverf/            Python package
-  core/               Dataclasses (Particle, DustParticle, PhaseGrid)
+  core/               Dataclasses (Particle, PhaseGrid)
   emses/              ctypes wrapper, temporary-input builder, geotype helpers
 fpm.toml              fpm build configuration (shared library, test auto-discovery)
 Makefile              Wraps `fpm install` + platform-specific shared-lib linking
@@ -39,28 +39,26 @@ m_vdsolverf                           (src/vdsolverf.f90)
                     ├── m_field
                     ├── m_probabilities
                     ├── m_simulator
-                    ├── m_dust_charge_simulator
                     └── m_solver
 ```
 
 `m_emses_solver` is the only module that exposes C symbols. The builder
 module handles simulator construction (including the raycast probability
 wiring) and cleanup via `destroy_simulator`. Everything reachable from the
-C API lives through the umbrella, so Python consumers see exactly three
-entry points: `get_backtraces`, `get_probabilities`, `get_backtrace_dust`.
+C API lives through the umbrella, so Python consumers see `get_backtraces`
+and `get_probabilities`.
 
 ## Python package
 
 ```
-vdsolverf.core         Particle, DustParticle, PhaseGrid dataclasses
+vdsolverf.core         Particle, PhaseGrid dataclasses
 vdsolverf.emses.wrapper
   _load_dll(...)       Resolves the platform-specific shared library
   get_backtrace(...)   Single-particle convenience wrapper
   get_backtraces(...)  Multi-particle ctypes call
   get_probabilities(...)
-  get_dust_backtrace(...)
-  create_relocated_ebvalues / create_relocated_current_values
-                       Assembles EB/current field arrays from emout
+  create_relocated_ebvalues
+                       Assembles EB field arrays from emout
 vdsolverf.emses.tmpolary_input
   TempolaryInput       Context manager writing a minimal plasma-vdsolverf.inp
                        from emout data, then cleaning it up on exit.
@@ -71,8 +69,8 @@ vdsolverf.emses.geotype
 
 ## Crossing the boundary
 
-1. Python gathers EB fields (and currents for dust mode) into contiguous
-   `numpy` arrays matching the Fortran shapes declared on the `bind(c)`
+1. Python gathers EB fields into contiguous `numpy` arrays matching the
+   Fortran shapes declared on the `bind(c)`
    subroutines — see
    [`.claude/rules/fortran-python-interop.md`](../.claude/rules/fortran-python-interop.md)
    for the argument-alignment rules.

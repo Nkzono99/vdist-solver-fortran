@@ -14,18 +14,14 @@ module m_emses_solver
     use forbear, only: bar_object
 
     use m_vdsolverf_core
-    use m_allcom, only: qm, curf
-    use m_emses_simulator_builder, only: create_simulator, create_dust_charge_simulator, destroy_simulator
+    use m_allcom, only: qm
+    use m_emses_simulator_builder, only: create_simulator, destroy_simulator
 
     implicit none
 
     private
     public get_probabilities
     public get_backtraces
-    ! Note: get_backtrace_dust is reachable from C/Python through its `bind(c)` symbol,
-    ! but is not re-exported as a Fortran-level public name to avoid a gfortran quirk
-    ! where `public` on a `bind(c)` subroutine in this module fails the downstream
-    ! `use m_emses_solver, only: get_backtrace_dust` at compile time.
 
 contains
 
@@ -286,112 +282,6 @@ contains
         call bar%update(current=1d0)
 
         call bar%destroy
-        call destroy_simulator(simulator)
-    end subroutine
-
-    subroutine get_backtrace_dust(inppath, &
-                                  length, &
-                                  lx, ly, lz, &
-                                  nspec, &
-                                  ebvalues, &
-                                  current_values, &
-                                  charge, &
-                                  mass, &
-                                  radius, &
-                                  position, &
-                                  velocity, &
-                                  dt, &
-                                  max_step, &
-                                  use_adaptive_dt, &
-                                  max_probability_types, &
-                                  return_ts, &
-                                  return_charges, &
-                                  return_positions, &
-                                  return_velocities, &
-                                  return_last_step &
-                                  ) bind(c, name="get_backtrace_dust")
-        !! Perform backtrace of a dust particle and return the trace data.
-
-        character(1, c_char), intent(in) :: inppath(*)
-            !! Path to the input file
-        integer(c_int), value, intent(in) :: length
-            !! Length of the input path
-        integer(c_int), value, intent(in) :: lx
-            !! Number of grid cells in the x direction
-        integer(c_int), value, intent(in) :: ly
-            !! Number of grid cells in the y direction
-        integer(c_int), value, intent(in) :: lz
-            !! Number of grid cells in the z direction
-        integer(c_int), value, intent(in) :: nspec
-            !! Number of species
-        real(c_double), intent(in) :: ebvalues(6, lx + 1, ly + 1, lz + 1)
-            !! Electric and magnetic field values
-        real(c_double), intent(in) :: current_values(3*nspec, lx + 1, ly + 1, lz + 1)
-            !! Current field values
-        real(c_double), value, intent(in) :: charge
-            !! Initial dust charge
-        real(c_double), value, intent(in) :: mass
-            !! Dust mass
-        real(c_double), value, intent(in) :: radius
-            !! Dust radius
-        real(c_double), intent(in) :: position(3)
-            !! Initial position of the particle
-        real(c_double), intent(in) :: velocity(3)
-            !! Initial velocity of the particle
-        real(c_double), value, intent(in) :: dt
-            !! Time step width (Distance moving in one step (x += v/abs(v)*dt) when use_adaptive_dt is .true.)
-        integer(c_int), value, intent(in) :: max_step
-            !! Maximum number of steps
-        integer(c_int), value, intent(in) :: use_adaptive_dt
-            !! Flag to use adaptive time step
-        integer(c_int), value, intent(in) :: max_probability_types
-            !! Maximum number of probability types
-        real(c_double), intent(out) :: return_ts(max_step)
-            !! Array to store time steps
-        real(c_double), intent(out) :: return_charges(max_step)
-            !! Array to store charges
-        real(c_double), intent(out) :: return_positions(3, max_step)
-            !! Array to store positions
-        real(c_double), intent(out) :: return_velocities(3, max_step)
-            !! Array to store velocities
-        integer(c_int), intent(out) :: return_last_step
-            !! Last step index
-
-        type(t_ESSimulator) :: simulator
-        type(t_DustChargeSimulator) :: charge_simulator
-        type(t_Solver) :: solver
-
-        simulator = create_simulator(inppath, length, &
-                                     lx, ly, lz, &
-                                     ebvalues, &
-                                     1, &
-                                     max_probability_types)
-        charge_simulator = create_dust_charge_simulator(inppath, length, lx, ly, lz, nspec, current_values, curf(3))
-        solver = new_Solver(simulator, charge_simulator)
-
-        block
-            type(t_DustParticle) :: dust
-            type(t_DustBacktraceRecord) :: record
-            integer :: istep
-            type(t_DustParticle) :: trace
-
-            dust = new_DustParticle(charge, mass, radius, position(:), velocity(:), 0d0)
-            record = solver%backtrace_dust(dust, &
-                                           dt, max_step, &
-                                           use_adaptive_dt == 1)
-
-            do istep = 1, record%last_step
-                trace = record%traces(istep)
-
-                return_ts(istep) = trace%particle%t
-                return_charges(istep) = trace%charge
-                return_positions(:, istep) = trace%particle%position(:)
-                return_velocities(:, istep) = trace%particle%velocity(:)
-            end do
-
-            return_last_step = record%last_step
-        end block
-
         call destroy_simulator(simulator)
     end subroutine
 

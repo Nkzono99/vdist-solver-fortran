@@ -48,7 +48,7 @@ Python 側のみの変更なら import チェックで十分なことが多い�
   `assert_close_vec`、`assert_equal_int`、`assert_true` を提供する
   モジュール。
 - ユニット: `test_particle`、`test_field`、`test_probabilities`、
-  `test_maxwell_flux`、`test_dust_charging`、
+  `test_maxwell_flux`、
   `test_photoelectron_raycast`。
 - 統合: `test_solver_probability` は手組みシミュレータでバックトレース →
   衝突 → 確率評価の一連を通す。

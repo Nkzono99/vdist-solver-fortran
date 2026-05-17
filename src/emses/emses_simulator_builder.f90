@@ -1,10 +1,10 @@
 module m_emses_simulator_builder
     !! Construction helpers for EMSES simulators.
     !!
-    !! Encapsulates the logic to build `t_ESSimulator` and `t_DustChargeSimulator`
-    !! from an input namelist plus grid arrays. Separated from the C-facing API
-    !! (`m_emses_solver`) so that builder logic can be tested and evolve
-    !! independently of the ctypes bridge.
+    !! Encapsulates the logic to build `t_ESSimulator` from an input namelist
+    !! plus grid arrays. Separated from the C-facing API (`m_emses_solver`) so
+    !! that builder logic can be tested and evolve independently of the ctypes
+    !! bridge.
 
     use, intrinsic :: iso_c_binding
 
@@ -27,7 +27,6 @@ module m_emses_simulator_builder
 
     private
     public create_simulator
-    public create_dust_charge_simulator
     public destroy_simulator
 
 contains
@@ -435,49 +434,5 @@ contains
         end subroutine
 
     end subroutine
-
-    function create_dust_charge_simulator(inppath, length, lx, ly, lz, nspecies, current_values, jph0) result(simulator)
-        !! Create and initialize a new dust charge simulator object.
-
-        character(1, c_char), intent(in) :: inppath(*)
-            !! Path to the input file
-        integer(c_int), value, intent(in) :: length
-            !! Length of the input path
-        integer(c_int), value, intent(in) :: lx
-            !! Number of grid cells in the x direction
-        integer(c_int), value, intent(in) :: ly
-            !! Number of grid cells in the y direction
-        integer(c_int), value, intent(in) :: lz
-            !! Number of grid cells in the z direction
-        integer(c_int), value, intent(in) :: nspecies
-            !! Number of species
-        real(c_double), intent(in) :: current_values(3*nspecies, lx + 1, ly + 1, lz + 1)
-            !! Electric and magnetic field values
-        real(c_double), intent(in) :: jph0
-            !! Photoelectrons current
-        type(t_DustChargeSimulator) :: simulator
-            !! Simulator object
-
-        block
-            character(length) :: s
-            integer :: i
-            do i = 1, length
-                s(i:i) = inppath(i)
-            end do
-            call read_namelist(s)
-        end block
-
-        block
-            double precision, allocatable :: temperatures(:)
-            type(t_VectorFieldGrid) :: currents
-
-            allocate (temperatures(nspecies))
-            temperatures = path(1:nspecies)*path(1:nspecies)/abs(qm(1:nspecies)) ! [eV in EMSES-U]
-
-            currents = new_VectorFieldGrid(3*nspecies, lx, ly, lz, current_values(:, :, :, :))
-
-            simulator = new_DustChargeSimulator(lx, ly, lz, nspecies, temperatures, currents, jph0)
-        end block
-    end function
 
 end module

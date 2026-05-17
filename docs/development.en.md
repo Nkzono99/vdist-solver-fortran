@@ -47,7 +47,7 @@ under that tree, so adding a file is enough.
 - [`test_helpers.f90`](../test/test_helpers.f90) — module with
   `assert_close`, `assert_close_vec`, `assert_equal_int`, `assert_true`.
 - Unit tests: `test_particle`, `test_field`, `test_probabilities`,
-  `test_maxwell_flux`, `test_dust_charging`,
+  `test_maxwell_flux`,
   `test_photoelectron_raycast`.
 - Integration: `test_solver_probability` exercises the full backtrace →
   collision → probability path with a hand-built simulator.

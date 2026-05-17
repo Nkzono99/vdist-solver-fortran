@@ -42,19 +42,3 @@ class Particle:
 
     def craete_clone(self, pos: np.ndarray, vel: np.ndarray):
         return Particle(pos, vel)
-
-
-class DustParticle:
-    def __init__(
-        self,
-        charge: float,
-        mass: float,
-        radius: float,
-        pos: np.ndarray,
-        vel: np.ndarray,
-    ):
-        self.charge = charge
-        self.mass = mass
-        self.radius = radius
-        self.pos = pos
-        self.vel = vel

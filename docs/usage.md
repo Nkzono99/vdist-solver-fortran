@@ -122,30 +122,6 @@ probabilities, ret_particles = get_probabilities(
 )
 ```
 
-## ダスト粒子の帯電込みバックトレース
-
-ダストソルバは EMSES の電流場を使い、ダスト粒子の軌跡と帯電を同時積分します。
-
-```python
-from vdsolverf.core import DustParticle
-from vdsolverf.emses import get_dust_backtrace
-
-dust = DustParticle(
-    charge=-4e3, mass=1.0, radius=1.0,
-    position=[32, 32, 400],
-    velocity=[0, 0, -10],
-)
-
-ts, charges, positions, velocities = get_dust_backtrace(
-    directory=data.directory,
-    istep=-1,
-    dust=dust,
-    dt=data.inp.dt,
-    max_step=10_000,
-    use_adaptive_dt=False,
-)
-```
-
 ## 共有ライブラリのパスを明示指定する
 
 通常はラッパが OS を自動判定して同梱の共有ライブラリを読み込みますが、

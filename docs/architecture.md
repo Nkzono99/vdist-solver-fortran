@@ -15,7 +15,7 @@ src/                  Fortran ソース (fpm でビルド)
   utils/              小さな共通ヘルパ
   vdsolverf.f90       アンブレラモジュール (m_vdsolverf)。C API を再公開
 vdsolverf/            Python パッケージ
-  core/               データクラス (Particle, DustParticle, PhaseGrid)
+  core/               データクラス (Particle, PhaseGrid)
   emses/              ctypes ラッパ、一時入力ビルダ、geotype ヘルパ
 fpm.toml              fpm ビルド設定 (共有ライブラリ、テスト自動検出)
 Makefile              `fpm install` と OS 別の共有ライブラリリンクをラップ
@@ -39,28 +39,26 @@ m_vdsolverf                           (src/vdsolverf.f90)
                     ├── m_field
                     ├── m_probabilities
                     ├── m_simulator
-                    ├── m_dust_charge_simulator
                     └── m_solver
 ```
 
 C シンボルを公開するのは `m_emses_solver` だけです。ビルダモジュールが
 シミュレータの構築 (raycast 確率の配線を含む) と `destroy_simulator` に
 よるクリーンアップを担当します。C API から辿れるすべてはアンブレラを
-通るので、Python 利用者から見える入口は 3 つ (`get_backtraces`,
-`get_probabilities`, `get_backtrace_dust`) だけです。
+通るので、Python 利用者から見える入口は `get_backtraces` と
+`get_probabilities` です。
 
 ## Python パッケージ
 
 ```
-vdsolverf.core         Particle, DustParticle, PhaseGrid データクラス
+vdsolverf.core         Particle, PhaseGrid データクラス
 vdsolverf.emses.wrapper
   _load_dll(...)       プラットフォームに応じた共有ライブラリを解決
   get_backtrace(...)   単一粒子用のコンビニエンスラッパ
   get_backtraces(...)  多粒子 ctypes 呼び出し
   get_probabilities(...)
-  get_dust_backtrace(...)
-  create_relocated_ebvalues / create_relocated_current_values
-                       emout から EB / 電流場配列を組み立てる
+  create_relocated_ebvalues
+                       emout から EB 場配列を組み立てる
 vdsolverf.emses.tmpolary_input
   TempolaryInput       emout から最小限の plasma-vdsolverf.inp を書き出して
                        終了時に削除するコンテキストマネージャ
@@ -71,8 +69,8 @@ vdsolverf.emses.geotype
 
 ## 境界を越える流れ
 
-1. Python が EB 場 (ダストモードでは電流場も) を `bind(c)` サブルーチン
-   で宣言された形状に合わせて `numpy` 配列に詰めます。引数アライメント
+1. Python が EB 場を `bind(c)` サブルーチンで宣言された形状に合わせて
+   `numpy` 配列に詰めます。引数アライメント
    規則は
    [`.claude/rules/fortran-python-interop.md`](../.claude/rules/fortran-python-interop.md)
    を参照。

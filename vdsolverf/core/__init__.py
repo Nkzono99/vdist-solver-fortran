@@ -1,2 +1,2 @@
-from .particles import Particle, DustParticle
+from .particles import Particle
 from .phase_grid import Lim, PhaseGrid

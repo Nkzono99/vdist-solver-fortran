@@ -7,8 +7,7 @@ program test_public_api
 
     use m_emses_solver, only: es_get_probabilities => get_probabilities, &
                               es_get_backtraces => get_backtraces
-    use m_emses_simulator_builder, only: b_create_simulator => create_simulator, &
-                                         b_create_dust_charge_simulator => create_dust_charge_simulator
+    use m_emses_simulator_builder, only: b_create_simulator => create_simulator
     use m_vdsolverf, only: u_get_backtraces => get_backtraces, &
                            u_get_probabilities => get_probabilities
 

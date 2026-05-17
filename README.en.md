@@ -58,7 +58,7 @@ namelist `/emissn/` — see the
 
 | Document | Summary |
 |---|---|
-| [Usage](docs/usage.en.md) | Python recipes: single and multi-particle backtrace, phase-space probability, dust charging |
+| [Usage](docs/usage.en.md) | Python recipes: single and multi-particle backtrace, phase-space probability |
 | [Namelist reference](docs/namelist.en.md) | Supported `plasma.inp` groups and parameters |
 | [Physics](docs/physics.en.md) | Liouville theorem, Maxwellian emission, raycast photoelectron |
 | [Architecture](docs/architecture.en.md) | Fortran / Python layout, module graph, extension points |
