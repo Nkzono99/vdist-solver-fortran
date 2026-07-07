@@ -1,3 +1,4 @@
+import inspect
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,24 +55,28 @@ class _FakeEstimateVelocityRangeMapFunction:
         self.coverage_sigma = None
         self.collect_moments = None
         self.show_progress = None
+        self.accumulator_cache_size = None
+        self.mean_v_pointer = None
+        self.cov_v_pointer = None
 
     def __call__(self, *args):
         self.coverage_sigma = args[8].value
         self.collect_moments = args[16].value
         self.show_progress = args[17].value
+        self.accumulator_cache_size = args[18].value
+        self.mean_v_pointer = args[27]
+        self.cov_v_pointer = args[28]
         self.n_threads = args[-1]._obj.value
-        args[18][:] = 1.0
-        args[19][:] = 2.0
-        args[20][:] = 3.0
-        args[21][:] = 4.0
-        args[22][:] = 5.0
-        args[23][:] = 6.0
-        args[24][:] = 7
-        args[25][:] = 7.0
-        args[26][:] = 0.0
-        args[27][:] = 0.0
-        args[28][:] = 0
-        args[29][:] = 1.0
+        args[19][:] = 1.0
+        args[20][:] = 2.0
+        args[21][:] = 3.0
+        args[22][:] = 4.0
+        args[23][:] = 5.0
+        args[24][:] = 6.0
+        args[25][:] = 7
+        args[26][:] = 7.0
+        args[29][:] = 0
+        args[30][:] = 1.0
 
 
 class _FakeDll:
@@ -96,6 +101,13 @@ class WrapperTypingTest(unittest.TestCase):
             hints["return"],
             Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray],
         )
+
+    def test_autorange_public_defaults_are_nonadaptive(self):
+        estimate_signature = inspect.signature(wrapper.estimate_velocity_range_map)
+        validate_signature = inspect.signature(wrapper.validate_and_expand_velocity_range_map)
+
+        self.assertIs(estimate_signature.parameters["use_adaptive_dt"].default, False)
+        self.assertIs(validate_signature.parameters["use_adaptive_dt"].default, False)
 
 
 class GetBacktracesDllTest(unittest.TestCase):
@@ -149,17 +161,22 @@ class EstimateVelocityRangeMapDllTest(unittest.TestCase):
                 dll=fake_dll,
                 n_threads=2,
                 show_progress=False,
+                accumulator_cache_size=123,
             )
 
         self.assertEqual(fake_dll.estimate_velocity_range_map.n_threads, 2)
         self.assertEqual(fake_dll.estimate_velocity_range_map.coverage_sigma, 4.0)
         self.assertEqual(fake_dll.estimate_velocity_range_map.collect_moments, 0)
         self.assertEqual(fake_dll.estimate_velocity_range_map.show_progress, 0)
+        self.assertEqual(fake_dll.estimate_velocity_range_map.accumulator_cache_size, 123)
+        self.assertFalse(bool(fake_dll.estimate_velocity_range_map.mean_v_pointer))
+        self.assertFalse(bool(fake_dll.estimate_velocity_range_map.cov_v_pointer))
         self.assertEqual(range_map.x_edges.tolist(), [0.0, 1.0])
         np.testing.assert_allclose(range_map.vx_min, [[[1.0]]])
         np.testing.assert_allclose(range_map.vx_max, [[[2.0]]])
         np.testing.assert_array_equal(range_map.count, [[[7]]])
-        np.testing.assert_allclose(range_map.mean_v, [[[[0.0, 0.0, 0.0]]]])
+        self.assertEqual(range_map.mean_v.shape, (1, 1, 1, 3))
+        self.assertTrue(np.isnan(range_map.mean_v).all())
         np.testing.assert_allclose(range_map.confidence, [[[1.0]]])
         self.assertEqual(range_map.directory, _FakeData.directory)
         self.assertEqual(range_map.metadata["directory"], str(_FakeData.directory))

@@ -47,6 +47,14 @@ probability_grid = index.reshape(probabilities)
 `probability_grid` has shape `(nz, ny, nx, nvz, nvy, nvx)`. Cells where no
 range was estimated are skipped by `create_particles()` by default.
 
+Note: `estimate_velocity_range_map` defaults to `use_adaptive_dt=False`.
+Commenting out that argument uses the ordinary time-step interpretation. When
+you want to reduce skipped cells, explicitly pass `use_adaptive_dt=True`. In
+that mode, `dt` is an approximate grid-distance limit per step, not
+`data.inp.dt` from the EMSES run. For example, `dt=0.004` with
+`max_step=30000` reaches only about 120 grid cells from the source in a
+straight path.
+
 ## Validation Pass
 
 The support particles are not a strict nonlinear envelope. When you need a
@@ -95,17 +103,37 @@ production velocity grid.
 
 | Parameter | Guideline |
 |---|---|
-| `dt` | Forward-trace step size. With `use_adaptive_dt=True`, start around `0.25` to `0.5` to limit per-step movement. |
+| `dt` | Forward-trace step size. With `use_adaptive_dt=True`, this is a grid-distance limit per step, not the EMSES `data.inp.dt`. Start around `0.25` to `0.5`. |
 | `max_step` | Maximum number of forward steps. Increase it when reflected particles need time to return. |
-| `use_adaptive_dt` | Prefer `True` for range estimation to reduce skipped cells. |
+| `use_adaptive_dt` | Defaults to `False`. Pass `True` explicitly when you want to reduce skipped cells. |
 | `coverage_sigma` | Source Maxwellian support radius. Use `3.0` for exploration, `4.0` as a default, and `5.0` for conservative runs. |
 | `coverage_mode` / `eps_rel` | With `coverage_mode="relative_density"`, the code uses `sqrt(-2 log eps_rel)`. `eps_rel=1e-6` is about `5.26 sigma`. |
 | `safety_factor` | Expands deposited min/max ranges about the center. Start with `1.25`; use `1.5` or more if tails are missed. |
 | `source_samples_per_cell` | Tangential sampling count on each source surface cell. `1` is fastest; increase it when source-surface variation is strong. |
 | `velocity_bins` | Velocity grid size per valid cell in `create_particles()`. The order is `(nvx, nvy, nvz)`. |
 | `n_threads` | Number of OpenMP threads in Fortran. Defaults to `OMP_NUM_THREADS`, or `1` if unset. |
-| `collect_moments` | Computes `mean_v` / `cov_v` when `True`. It uses more memory, so the default is `False`. |
+| `collect_moments` | Computes `mean_v` / `cov_v` when `True`. It uses more memory, so the default is `False`. When `False`, the wrapper does not allocate dense moment arrays and `range_map.mean_v` / `cov_v` are NaN views. |
 | `show_progress` | Shows a progress bar in the same style as `get_probabilities` when `True`. Set `False` to keep batch logs quiet. |
+| `accumulator_cache_size` | Number of hit cells cached by each OpenMP thread before flushing. The default is `20000`. Larger values reduce flush synchronization but use more memory. |
+
+## Memory and Parallelism
+
+`estimate_velocity_range_map` avoids deposit-time atomics by giving each thread
+a bounded sparse cache. Once a cache reaches `accumulator_cache_size`, it is
+reduced into the global range map using striped cell locks.
+
+Memory use is roughly:
+
+```text
+global dense range arrays
++ EB field
++ n_threads * accumulator_cache_size * cache_entry_size
+```
+
+The implementation no longer allocates dense thread-local arrays with shape
+`all spatial cells * n_threads`. For large grids with 112 threads, start with
+the default `accumulator_cache_size=20000` and increase it only if flush
+synchronization dominates.
 
 ## Return Values and Diagnostics
 

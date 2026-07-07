@@ -405,7 +405,7 @@ def estimate_velocity_range_map(
     istep: int,
     dt: float = 0.25,
     max_step: int = 1000,
-    use_adaptive_dt: bool = True,
+    use_adaptive_dt: bool = False,
     coverage_sigma: Union[float, None] = 4.0,
     coverage_mode: Literal["sigma", "relative_density"] = "sigma",
     eps_rel: float = 1e-6,
@@ -416,11 +416,19 @@ def estimate_velocity_range_map(
     minimum_count: int = 4,
     collect_moments: bool = False,
     show_progress: bool = True,
+    accumulator_cache_size: int = 20000,
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
     tmp_input_suffix: Union[str, None] = None,
 ) -> VelocityRangeMap:
+    """Estimate per-cell velocity ranges from EMSES source envelopes.
+
+    By default this follows the legacy backtrace/probability APIs and uses the
+    ordinary time-step interpretation. With ``use_adaptive_dt=True``, ``dt`` is
+    treated as an approximate grid-distance limit per trace step, not as the
+    EMSES simulation time step.
+    """
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
     dll = _load_dll(system, library_path)
@@ -444,6 +452,7 @@ def estimate_velocity_range_map(
         minimum_count=minimum_count,
         collect_moments=collect_moments,
         show_progress=show_progress,
+        accumulator_cache_size=accumulator_cache_size,
         dll=dll,
         n_threads=n_threads,
         tmp_input_suffix=tmp_input_suffix,
@@ -466,6 +475,7 @@ def estimate_velocity_range_map_dll(
     minimum_count: int = 4,
     collect_moments: bool = False,
     show_progress: bool = True,
+    accumulator_cache_size: int = 20000,
     n_threads: int = 1,
     tmp_input_suffix: Union[str, None] = None,
 ) -> VelocityRangeMap:
@@ -488,6 +498,7 @@ def estimate_velocity_range_map_dll(
         c_int,  # minimum_count
         c_int,  # collect_moments
         c_int,  # show_progress
+        c_int,  # accumulator_cache_size
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vx_min
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vx_max
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vy_min
@@ -496,8 +507,8 @@ def estimate_velocity_range_map_dll(
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vz_max
         np.ctypeslib.ndpointer(dtype=np.int32, ndim=3),  # count
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # weight_sum
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=4),  # mean_v
-        np.ctypeslib.ndpointer(dtype=np.float64, ndim=5),  # cov_v
+        c_void_p,  # mean_v
+        c_void_p,  # cov_v
         np.ctypeslib.ndpointer(dtype=np.int32, ndim=3),  # status
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # confidence
         POINTER(c_int),  # n_threads
@@ -517,8 +528,8 @@ def estimate_velocity_range_map_dll(
     vz_max = np.empty((nz, ny, nx), dtype=np.float64)
     count = np.empty((nz, ny, nx), dtype=np.int32)
     weight_sum = np.empty((nz, ny, nx), dtype=np.float64)
-    mean_v = np.empty((nz, ny, nx, 3), dtype=np.float64)
-    cov_v = np.empty((nz, ny, nx, 3, 3), dtype=np.float64)
+    mean_v = np.empty((nz, ny, nx, 3), dtype=np.float64) if collect_moments else None
+    cov_v = np.empty((nz, ny, nx, 3, 3), dtype=np.float64) if collect_moments else None
     status = np.empty((nz, ny, nx), dtype=np.int32)
     confidence = np.empty((nz, ny, nx), dtype=np.float64)
 
@@ -543,6 +554,9 @@ def estimate_velocity_range_map_dll(
         _minimum_count = c_int(minimum_count)
         _collect_moments = c_int(1 if collect_moments else 0)
         _show_progress = c_int(1 if show_progress else 0)
+        _accumulator_cache_size = c_int(accumulator_cache_size)
+        _mean_v = mean_v.ctypes.data_as(c_void_p) if mean_v is not None else c_void_p()
+        _cov_v = cov_v.ctypes.data_as(c_void_p) if cov_v is not None else c_void_p()
         _n_threads = c_int(n_threads)
 
         dll.estimate_velocity_range_map(
@@ -564,6 +578,7 @@ def estimate_velocity_range_map_dll(
             _minimum_count,
             _collect_moments,
             _show_progress,
+            _accumulator_cache_size,
             vx_min,
             vx_max,
             vy_min,
@@ -572,8 +587,8 @@ def estimate_velocity_range_map_dll(
             vz_max,
             count,
             weight_sum,
-            mean_v,
-            cov_v,
+            _mean_v,
+            _cov_v,
             status,
             confidence,
             byref(_n_threads),
@@ -613,6 +628,7 @@ def estimate_velocity_range_map_dll(
             "minimum_count": minimum_count,
             "collect_moments": collect_moments,
             "show_progress": show_progress,
+            "accumulator_cache_size": accumulator_cache_size,
             "n_threads": n_threads,
         },
         directory=data.directory,
@@ -630,7 +646,7 @@ def validate_and_expand_velocity_range_map(
     edge_threshold: float = 1e-3,
     expand_factor: float = 1.5,
     max_iter: int = 2,
-    use_adaptive_dt: bool = True,
+    use_adaptive_dt: bool = False,
     max_probability_types: int = 100,
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,

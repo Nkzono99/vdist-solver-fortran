@@ -1,10 +1,11 @@
 module m_emses_autorange
     !! Deterministic source-envelope tracing for per-cell velocity ranges.
 
-    use, intrinsic :: iso_c_binding, only: c_double, c_int
+    use, intrinsic :: iso_c_binding, only: c_associated, c_double, c_f_pointer, c_int, c_int64_t, c_ptr
     use, intrinsic :: ieee_arithmetic, only: ieee_quiet_nan, ieee_value
 
-!$  use omp_lib, only: omp_get_thread_num, omp_set_num_threads
+!$  use omp_lib, only: omp_destroy_lock, omp_get_thread_num, omp_init_lock, omp_lock_kind, &
+!$                     omp_set_lock, omp_set_num_threads, omp_unset_lock
 
     use forbear, only: bar_object
     use finbound, only: t_CollisionRecord
@@ -40,6 +41,7 @@ contains
         minimum_count, &
         collect_moments, &
         show_progress, &
+        accumulator_cache_size, &
         return_vx_min, &
         return_vx_max, &
         return_vy_min, &
@@ -48,8 +50,8 @@ contains
         return_vz_max, &
         return_count, &
         return_weight_sum, &
-        return_mean_v, &
-        return_cov_v, &
+        return_mean_v_ptr, &
+        return_cov_v_ptr, &
         return_status, &
         return_confidence, &
         n_threads)
@@ -68,6 +70,7 @@ contains
         integer(c_int), value, intent(in) :: minimum_count
         integer(c_int), value, intent(in) :: collect_moments
         integer(c_int), value, optional, intent(in) :: show_progress
+        integer(c_int), value, optional, intent(in) :: accumulator_cache_size
         real(c_double), intent(out) :: return_vx_min(lx, ly, lz)
         real(c_double), intent(out) :: return_vx_max(lx, ly, lz)
         real(c_double), intent(out) :: return_vy_min(lx, ly, lz)
@@ -76,30 +79,38 @@ contains
         real(c_double), intent(out) :: return_vz_max(lx, ly, lz)
         integer(c_int), intent(out) :: return_count(lx, ly, lz)
         real(c_double), intent(out) :: return_weight_sum(lx, ly, lz)
-        real(c_double), intent(out) :: return_mean_v(3, lx, ly, lz)
-        real(c_double), intent(out) :: return_cov_v(3, 3, lx, ly, lz)
+        type(c_ptr), value, intent(in) :: return_mean_v_ptr
+        type(c_ptr), value, intent(in) :: return_cov_v_ptr
         integer(c_int), intent(out) :: return_status(lx, ly, lz)
         real(c_double), intent(out) :: return_confidence(lx, ly, lz)
         integer(c_int), value, optional, intent(in) :: n_threads
 
         real(c_double) :: nan_value
         integer :: active_n_threads
+        integer :: cache_entry_limit
+        integer :: cache_hash_capacity
         logical :: collect_moments_enabled
         logical :: show_progress_enabled
         type(bar_object) :: bar
         integer :: progress_total_tasks
         integer :: progress_completed_tasks
         integer :: progress_last_percent
-        real(c_double), allocatable :: local_vx_min(:, :, :, :)
-        real(c_double), allocatable :: local_vx_max(:, :, :, :)
-        real(c_double), allocatable :: local_vy_min(:, :, :, :)
-        real(c_double), allocatable :: local_vy_max(:, :, :, :)
-        real(c_double), allocatable :: local_vz_min(:, :, :, :)
-        real(c_double), allocatable :: local_vz_max(:, :, :, :)
-        integer(c_int), allocatable :: local_count(:, :, :, :)
-        real(c_double), allocatable :: local_weight_sum(:, :, :, :)
-        real(c_double), allocatable :: local_mean_v(:, :, :, :, :)
-        real(c_double), allocatable :: local_cov_v(:, :, :, :, :, :)
+        integer(c_int64_t), allocatable :: cache_cell_index(:, :)
+        integer(c_int), allocatable :: cache_used(:)
+        integer(c_int), allocatable :: cache_count(:, :)
+        real(c_double), allocatable :: cache_vx_min(:, :)
+        real(c_double), allocatable :: cache_vx_max(:, :)
+        real(c_double), allocatable :: cache_vy_min(:, :)
+        real(c_double), allocatable :: cache_vy_max(:, :)
+        real(c_double), allocatable :: cache_vz_min(:, :)
+        real(c_double), allocatable :: cache_vz_max(:, :)
+        real(c_double), allocatable :: cache_weight_sum(:, :)
+        real(c_double), allocatable :: cache_mean_v(:, :, :)
+        real(c_double), allocatable :: cache_cov_v(:, :, :, :)
+        real(c_double), pointer :: return_mean_v(:, :, :, :)
+        real(c_double), pointer :: return_cov_v(:, :, :, :, :)
+!$      integer(omp_lock_kind), allocatable :: flush_locks(:)
+        integer, parameter :: FLUSH_LOCK_COUNT = 4096
 
         nan_value = ieee_value(0d0, ieee_quiet_nan)
         active_n_threads = 1
@@ -107,26 +118,40 @@ contains
             active_n_threads = max(1, int(n_threads))
         end if
         collect_moments_enabled = collect_moments == 1
+        if (collect_moments_enabled) then
+            collect_moments_enabled = c_associated(return_mean_v_ptr) .and. c_associated(return_cov_v_ptr)
+        end if
         show_progress_enabled = .false.
         if (present(show_progress)) then
             show_progress_enabled = show_progress == 1
         end if
+        cache_entry_limit = 20000
+        if (present(accumulator_cache_size)) then
+            cache_entry_limit = max(1, int(accumulator_cache_size))
+        end if
+        cache_hash_capacity = max(8, 2*cache_entry_limit + 1)
         progress_total_tasks = 0
         progress_completed_tasks = 0
         progress_last_percent = -1
 
 !$      call omp_set_num_threads(active_n_threads)
 
-        call initialize_thread_accumulators
-        return_status = STATUS_FALLBACK
-        return_confidence = 0d0
+        if (collect_moments_enabled) then
+            call c_f_pointer(return_mean_v_ptr, return_mean_v, [3, lx, ly, lz])
+            call c_f_pointer(return_cov_v_ptr, return_cov_v, [3, 3, lx, ly, lz])
+        end if
+
+        call initialize_output_accumulators
+        call initialize_cache_accumulators
+        call initialize_flush_locks
 
         call initialize_progress_bar
         call trace_external_boundary_sources
         call trace_emission_surface_sources
+        call flush_all_caches
         call finish_progress_bar
-        call merge_thread_accumulators
         call finalize_cells
+        call destroy_flush_locks
 
     contains
 
@@ -287,36 +312,7 @@ contains
             ret = n1*n2
         end function
 
-        subroutine initialize_thread_accumulators
-            allocate (local_vx_min(lx, ly, lz, active_n_threads))
-            allocate (local_vx_max(lx, ly, lz, active_n_threads))
-            allocate (local_vy_min(lx, ly, lz, active_n_threads))
-            allocate (local_vy_max(lx, ly, lz, active_n_threads))
-            allocate (local_vz_min(lx, ly, lz, active_n_threads))
-            allocate (local_vz_max(lx, ly, lz, active_n_threads))
-            allocate (local_count(lx, ly, lz, active_n_threads))
-            allocate (local_weight_sum(lx, ly, lz, active_n_threads))
-
-            local_vx_min = huge(1d0)
-            local_vy_min = huge(1d0)
-            local_vz_min = huge(1d0)
-            local_vx_max = -huge(1d0)
-            local_vy_max = -huge(1d0)
-            local_vz_max = -huge(1d0)
-            local_count = 0
-            local_weight_sum = 0d0
-
-            if (collect_moments_enabled) then
-                allocate (local_mean_v(3, lx, ly, lz, active_n_threads))
-                allocate (local_cov_v(3, 3, lx, ly, lz, active_n_threads))
-                local_mean_v = 0d0
-                local_cov_v = 0d0
-            end if
-        end subroutine
-
-        subroutine merge_thread_accumulators
-            integer :: ithread
-
+        subroutine initialize_output_accumulators
             return_vx_min = huge(1d0)
             return_vy_min = huge(1d0)
             return_vz_min = huge(1d0)
@@ -325,24 +321,113 @@ contains
             return_vz_max = -huge(1d0)
             return_count = 0
             return_weight_sum = 0d0
-            return_mean_v = 0d0
-            return_cov_v = 0d0
+
+            if (collect_moments_enabled) then
+                return_mean_v = 0d0
+                return_cov_v = 0d0
+            end if
+            return_status = STATUS_FALLBACK
+            return_confidence = 0d0
+        end subroutine
+
+        subroutine initialize_cache_accumulators
+            allocate (cache_cell_index(cache_hash_capacity, active_n_threads))
+            allocate (cache_used(active_n_threads))
+            allocate (cache_count(cache_hash_capacity, active_n_threads))
+            allocate (cache_weight_sum(cache_hash_capacity, active_n_threads))
+            allocate (cache_vx_min(cache_hash_capacity, active_n_threads))
+            allocate (cache_vx_max(cache_hash_capacity, active_n_threads))
+            allocate (cache_vy_min(cache_hash_capacity, active_n_threads))
+            allocate (cache_vy_max(cache_hash_capacity, active_n_threads))
+            allocate (cache_vz_min(cache_hash_capacity, active_n_threads))
+            allocate (cache_vz_max(cache_hash_capacity, active_n_threads))
+
+            cache_cell_index = 0_c_int64_t
+            cache_used = 0
+            cache_count = 0
+            cache_weight_sum = 0d0
+
+            if (collect_moments_enabled) then
+                allocate (cache_mean_v(3, cache_hash_capacity, active_n_threads))
+                allocate (cache_cov_v(3, 3, cache_hash_capacity, active_n_threads))
+                cache_mean_v = 0d0
+                cache_cov_v = 0d0
+            end if
+        end subroutine
+
+        subroutine initialize_flush_locks
+            integer :: ilock
+
+!$          allocate (flush_locks(FLUSH_LOCK_COUNT))
+!$          do ilock = 1, FLUSH_LOCK_COUNT
+!$              call omp_init_lock(flush_locks(ilock))
+!$          end do
+        end subroutine
+
+        subroutine destroy_flush_locks
+            integer :: ilock
+
+!$          if (allocated(flush_locks)) then
+!$              do ilock = 1, size(flush_locks)
+!$                  call omp_destroy_lock(flush_locks(ilock))
+!$              end do
+!$              deallocate (flush_locks)
+!$          end if
+        end subroutine
+
+        subroutine flush_all_caches
+            integer :: ithread
 
             do ithread = 1, active_n_threads
-                return_vx_min = min(return_vx_min, local_vx_min(:, :, :, ithread))
-                return_vx_max = max(return_vx_max, local_vx_max(:, :, :, ithread))
-                return_vy_min = min(return_vy_min, local_vy_min(:, :, :, ithread))
-                return_vy_max = max(return_vy_max, local_vy_max(:, :, :, ithread))
-                return_vz_min = min(return_vz_min, local_vz_min(:, :, :, ithread))
-                return_vz_max = max(return_vz_max, local_vz_max(:, :, :, ithread))
-                return_count = return_count + local_count(:, :, :, ithread)
-                return_weight_sum = return_weight_sum + local_weight_sum(:, :, :, ithread)
-
-                if (collect_moments_enabled) then
-                    return_mean_v = return_mean_v + local_mean_v(:, :, :, :, ithread)
-                    return_cov_v = return_cov_v + local_cov_v(:, :, :, :, :, ithread)
-                end if
+                call flush_worker_cache(ithread)
             end do
+        end subroutine
+
+        subroutine flush_worker_cache(ithread)
+            integer, intent(in) :: ithread
+
+            integer :: slot
+            integer :: ix, iy, iz
+            integer :: lock_id
+            integer(c_int64_t) :: cell_index
+
+            if (cache_used(ithread) <= 0) then
+                return
+            end if
+
+            do slot = 1, cache_hash_capacity
+                cell_index = cache_cell_index(slot, ithread)
+                if (cell_index == 0_c_int64_t) cycle
+
+                call decode_cell_index(cell_index, ix, iy, iz)
+                lock_id = flush_lock_index(cell_index)
+!$              call omp_set_lock(flush_locks(lock_id))
+                call reduce_cache_slot(slot, ithread, ix, iy, iz)
+!$              call omp_unset_lock(flush_locks(lock_id))
+            end do
+
+            cache_cell_index(:, ithread) = 0_c_int64_t
+            cache_used(ithread) = 0
+        end subroutine
+
+        subroutine reduce_cache_slot(slot, ithread, ix, iy, iz)
+            integer, intent(in) :: slot
+            integer, intent(in) :: ithread
+            integer, intent(in) :: ix, iy, iz
+
+            return_vx_min(ix, iy, iz) = min(return_vx_min(ix, iy, iz), cache_vx_min(slot, ithread))
+            return_vx_max(ix, iy, iz) = max(return_vx_max(ix, iy, iz), cache_vx_max(slot, ithread))
+            return_vy_min(ix, iy, iz) = min(return_vy_min(ix, iy, iz), cache_vy_min(slot, ithread))
+            return_vy_max(ix, iy, iz) = max(return_vy_max(ix, iy, iz), cache_vy_max(slot, ithread))
+            return_vz_min(ix, iy, iz) = min(return_vz_min(ix, iy, iz), cache_vz_min(slot, ithread))
+            return_vz_max(ix, iy, iz) = max(return_vz_max(ix, iy, iz), cache_vz_max(slot, ithread))
+            return_count(ix, iy, iz) = return_count(ix, iy, iz) + cache_count(slot, ithread)
+            return_weight_sum(ix, iy, iz) = return_weight_sum(ix, iy, iz) + cache_weight_sum(slot, ithread)
+
+            if (collect_moments_enabled) then
+                return_mean_v(:, ix, iy, iz) = return_mean_v(:, ix, iy, iz) + cache_mean_v(:, slot, ithread)
+                return_cov_v(:, :, ix, iy, iz) = return_cov_v(:, :, ix, iy, iz) + cache_cov_v(:, :, slot, ithread)
+            end if
         end subroutine
 
         subroutine trace_external_boundary_sources
@@ -592,7 +677,7 @@ contains
 
             integer :: ix, iy, iz
             integer :: ithread
-            integer :: i, j
+            integer(c_int64_t) :: cell_index
 
             if (position(1) < 0d0 .or. position(1) > dble(lx)) return
             if (position(2) < 0d0 .or. position(2) > dble(ly)) return
@@ -603,29 +688,165 @@ contains
             iz = min(max(int(position(3)) + 1, 1), lz)
 
             ithread = worker_index()
+            cell_index = encode_cell_index(ix, iy, iz)
 
-            local_vx_min(ix, iy, iz, ithread) = min(local_vx_min(ix, iy, iz, ithread), velocity(1))
-            local_vx_max(ix, iy, iz, ithread) = max(local_vx_max(ix, iy, iz, ithread), velocity(1))
-            local_vy_min(ix, iy, iz, ithread) = min(local_vy_min(ix, iy, iz, ithread), velocity(2))
-            local_vy_max(ix, iy, iz, ithread) = max(local_vy_max(ix, iy, iz, ithread), velocity(2))
-            local_vz_min(ix, iy, iz, ithread) = min(local_vz_min(ix, iy, iz, ithread), velocity(3))
-            local_vz_max(ix, iy, iz, ithread) = max(local_vz_max(ix, iy, iz, ithread), velocity(3))
+            call deposit_to_cache(ithread, cell_index, velocity, weight)
+        end subroutine
 
-            local_count(ix, iy, iz, ithread) = local_count(ix, iy, iz, ithread) + 1
-            local_weight_sum(ix, iy, iz, ithread) = local_weight_sum(ix, iy, iz, ithread) + weight
+        subroutine deposit_to_cache(ithread, cell_index, velocity, weight)
+            integer, intent(in) :: ithread
+            integer(c_int64_t), intent(in) :: cell_index
+            real(c_double), intent(in) :: velocity(3)
+            real(c_double), intent(in) :: weight
+
+            integer :: slot
+            logical :: found
+
+            call find_cache_slot(ithread, cell_index, slot, found)
+            if (.not. found .and. cache_used(ithread) >= cache_entry_limit) then
+                call flush_worker_cache(ithread)
+                call find_cache_slot(ithread, cell_index, slot, found)
+            end if
+
+            if (found) then
+                call update_cache_slot(slot, ithread, velocity, weight)
+            else
+                call initialize_cache_slot(slot, ithread, cell_index, velocity, weight)
+            end if
+        end subroutine
+
+        subroutine find_cache_slot(ithread, cell_index, slot, found)
+            integer, intent(in) :: ithread
+            integer(c_int64_t), intent(in) :: cell_index
+            integer, intent(out) :: slot
+            logical, intent(out) :: found
+
+            integer :: probe
+            integer :: start_slot
+
+            start_slot = cache_hash_slot(cell_index)
+            found = .false.
+            slot = start_slot
+
+            do probe = 0, cache_hash_capacity - 1
+                slot = 1 + mod(start_slot - 1 + probe, cache_hash_capacity)
+                if (cache_cell_index(slot, ithread) == cell_index) then
+                    found = .true.
+                    return
+                end if
+                if (cache_cell_index(slot, ithread) == 0_c_int64_t) then
+                    return
+                end if
+            end do
+
+            call flush_worker_cache(ithread)
+            slot = cache_hash_slot(cell_index)
+            found = .false.
+        end subroutine
+
+        subroutine initialize_cache_slot(slot, ithread, cell_index, velocity, weight)
+            integer, intent(in) :: slot
+            integer, intent(in) :: ithread
+            integer(c_int64_t), intent(in) :: cell_index
+            real(c_double), intent(in) :: velocity(3)
+            real(c_double), intent(in) :: weight
+
+            integer :: i, j
+
+            cache_cell_index(slot, ithread) = cell_index
+            cache_used(ithread) = cache_used(ithread) + 1
+            cache_vx_min(slot, ithread) = velocity(1)
+            cache_vx_max(slot, ithread) = velocity(1)
+            cache_vy_min(slot, ithread) = velocity(2)
+            cache_vy_max(slot, ithread) = velocity(2)
+            cache_vz_min(slot, ithread) = velocity(3)
+            cache_vz_max(slot, ithread) = velocity(3)
+            cache_count(slot, ithread) = 1
+            cache_weight_sum(slot, ithread) = weight
+
             if (collect_moments_enabled) then
                 do i = 1, 3
-                    local_mean_v(i, ix, iy, iz, ithread) = local_mean_v(i, ix, iy, iz, ithread) &
-                                                            + weight*velocity(i)
+                    cache_mean_v(i, slot, ithread) = weight*velocity(i)
                 end do
                 do j = 1, 3
                     do i = 1, 3
-                        local_cov_v(i, j, ix, iy, iz, ithread) = local_cov_v(i, j, ix, iy, iz, ithread) &
-                                                                  + weight*velocity(i)*velocity(j)
+                        cache_cov_v(i, j, slot, ithread) = weight*velocity(i)*velocity(j)
                     end do
                 end do
             end if
         end subroutine
+
+        subroutine update_cache_slot(slot, ithread, velocity, weight)
+            integer, intent(in) :: slot
+            integer, intent(in) :: ithread
+            real(c_double), intent(in) :: velocity(3)
+            real(c_double), intent(in) :: weight
+
+            integer :: i, j
+
+            cache_vx_min(slot, ithread) = min(cache_vx_min(slot, ithread), velocity(1))
+            cache_vx_max(slot, ithread) = max(cache_vx_max(slot, ithread), velocity(1))
+            cache_vy_min(slot, ithread) = min(cache_vy_min(slot, ithread), velocity(2))
+            cache_vy_max(slot, ithread) = max(cache_vy_max(slot, ithread), velocity(2))
+            cache_vz_min(slot, ithread) = min(cache_vz_min(slot, ithread), velocity(3))
+            cache_vz_max(slot, ithread) = max(cache_vz_max(slot, ithread), velocity(3))
+            cache_count(slot, ithread) = cache_count(slot, ithread) + 1
+            cache_weight_sum(slot, ithread) = cache_weight_sum(slot, ithread) + weight
+
+            if (collect_moments_enabled) then
+                do i = 1, 3
+                    cache_mean_v(i, slot, ithread) = cache_mean_v(i, slot, ithread) + weight*velocity(i)
+                end do
+                do j = 1, 3
+                    do i = 1, 3
+                        cache_cov_v(i, j, slot, ithread) = cache_cov_v(i, j, slot, ithread) &
+                                                            + weight*velocity(i)*velocity(j)
+                    end do
+                end do
+            end if
+        end subroutine
+
+        integer(c_int64_t) function encode_cell_index(ix, iy, iz) result(ret)
+            integer, intent(in) :: ix, iy, iz
+
+            ret = int(ix, c_int64_t) &
+                  + int(lx, c_int64_t)*(int(iy - 1, c_int64_t) &
+                  + int(ly, c_int64_t)*int(iz - 1, c_int64_t))
+        end function
+
+        subroutine decode_cell_index(cell_index, ix, iy, iz)
+            integer(c_int64_t), intent(in) :: cell_index
+            integer, intent(out) :: ix, iy, iz
+
+            integer(c_int64_t) :: linear0
+            integer(c_int64_t) :: lx64, ly64
+
+            lx64 = int(lx, c_int64_t)
+            ly64 = int(ly, c_int64_t)
+            linear0 = cell_index - 1_c_int64_t
+
+            ix = int(mod(linear0, lx64)) + 1
+            iy = int(mod(linear0/lx64, ly64)) + 1
+            iz = int(linear0/(lx64*ly64)) + 1
+        end subroutine
+
+        integer function cache_hash_slot(cell_index) result(ret)
+            integer(c_int64_t), intent(in) :: cell_index
+
+            integer(c_int64_t) :: capacity
+            integer(c_int64_t) :: hash_value
+
+            capacity = int(cache_hash_capacity, c_int64_t)
+            hash_value = mod(cell_index - 1_c_int64_t, capacity)
+            hash_value = mod(hash_value*1103515245_c_int64_t + 12345_c_int64_t, capacity)
+            ret = 1 + int(hash_value)
+        end function
+
+        integer function flush_lock_index(cell_index) result(ret)
+            integer(c_int64_t), intent(in) :: cell_index
+
+            ret = 1 + int(mod(cell_index - 1_c_int64_t, int(FLUSH_LOCK_COUNT, c_int64_t)))
+        end function
 
         integer function worker_index() result(ret)
             ret = 1
@@ -651,8 +872,10 @@ contains
                             return_vy_max(ix, iy, iz) = nan_value
                             return_vz_min(ix, iy, iz) = nan_value
                             return_vz_max(ix, iy, iz) = nan_value
-                            return_mean_v(:, ix, iy, iz) = nan_value
-                            return_cov_v(:, :, ix, iy, iz) = nan_value
+                            if (collect_moments_enabled) then
+                                return_mean_v(:, ix, iy, iz) = nan_value
+                                return_cov_v(:, :, ix, iy, iz) = nan_value
+                            end if
                             return_status(ix, iy, iz) = STATUS_FALLBACK
                             return_confidence(ix, iy, iz) = 0d0
                             cycle
@@ -668,9 +891,6 @@ contains
                                         - mean(i)*mean(j)
                                 end do
                             end do
-                        else
-                            return_mean_v(:, ix, iy, iz) = nan_value
-                            return_cov_v(:, :, ix, iy, iz) = nan_value
                         end if
 
                         call expand_range(return_vx_min(ix, iy, iz), return_vx_max(ix, iy, iz))

@@ -44,6 +44,7 @@ contains
         minimum_count, &
         collect_moments, &
         show_progress, &
+        accumulator_cache_size, &
         return_vx_min, &
         return_vx_max, &
         return_vy_min, &
@@ -52,8 +53,8 @@ contains
         return_vz_max, &
         return_count, &
         return_weight_sum, &
-        return_mean_v, &
-        return_cov_v, &
+        return_mean_v_ptr, &
+        return_cov_v_ptr, &
         return_status, &
         return_confidence, &
         n_threads &
@@ -96,6 +97,8 @@ contains
             !! Flag to collect mean/cov velocity diagnostics
         integer(c_int), value, intent(in) :: show_progress
             !! Flag to show progress bar logging
+        integer(c_int), value, intent(in) :: accumulator_cache_size
+            !! Maximum cached hit cells per OpenMP thread before flushing
         real(c_double), intent(out) :: return_vx_min(lx, ly, lz)
         real(c_double), intent(out) :: return_vx_max(lx, ly, lz)
         real(c_double), intent(out) :: return_vy_min(lx, ly, lz)
@@ -104,8 +107,8 @@ contains
         real(c_double), intent(out) :: return_vz_max(lx, ly, lz)
         integer(c_int), intent(out) :: return_count(lx, ly, lz)
         real(c_double), intent(out) :: return_weight_sum(lx, ly, lz)
-        real(c_double), intent(out) :: return_mean_v(3, lx, ly, lz)
-        real(c_double), intent(out) :: return_cov_v(3, 3, lx, ly, lz)
+        type(c_ptr), value, intent(in) :: return_mean_v_ptr
+        type(c_ptr), value, intent(in) :: return_cov_v_ptr
         integer(c_int), intent(out) :: return_status(lx, ly, lz)
         real(c_double), intent(out) :: return_confidence(lx, ly, lz)
         integer(c_int), optional, intent(in) :: n_threads
@@ -133,6 +136,7 @@ contains
             minimum_count, &
             collect_moments, &
             show_progress, &
+            accumulator_cache_size, &
             return_vx_min, &
             return_vx_max, &
             return_vy_min, &
@@ -141,8 +145,8 @@ contains
             return_vz_max, &
             return_count, &
             return_weight_sum, &
-            return_mean_v, &
-            return_cov_v, &
+            return_mean_v_ptr, &
+            return_cov_v_ptr, &
             return_status, &
             return_confidence, &
             n_threads)

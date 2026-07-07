@@ -47,6 +47,13 @@ probability_grid = index.reshape(probabilities)
 `probability_grid` の形状は `(nz, ny, nx, nvz, nvy, nvx)` です。速度範囲が
 推定できなかったセルは、`create_particles()` の既定ではスキップされます。
 
+注意: `estimate_velocity_range_map` は既定で `use_adaptive_dt=False` です。
+引数行をコメントアウトすると通常の時間刻み解釈になります。セル飛びを抑えたい
+場合は `use_adaptive_dt=True` を明示してください。その場合の `dt` は EMSES の
+`data.inp.dt` ではなく、1 step で進む格子距離の目安です。たとえば
+`dt=0.004`, `max_step=30000` では、直線的に進んでも約 120 grid 分しか
+source から届きません。
+
 ## validation 付きの使い方
 
 sigma point 的な support 粒子は厳密な envelope ではないため、必要なら粗い
@@ -95,17 +102,37 @@ range_map = validate_and_expand_velocity_range_map(
 
 | 引数 | 目安 |
 |---|---|
-| `dt` | forward trace の刻み。`use_adaptive_dt=True` では 1 step の移動量を抑えるため、`0.25` から `0.5` 程度を初期値にする。 |
+| `dt` | forward trace の刻み。`use_adaptive_dt=True` では 1 step の格子移動量の目安になり、EMSES の `data.inp.dt` ではない。`0.25` から `0.5` 程度を初期値にする。 |
 | `max_step` | source から対象領域を十分覆うまでの最大 step 数。反射後に戻る粒子も見たい場合は長めにする。 |
-| `use_adaptive_dt` | セル飛びを避けるため、範囲推定では `True` を基本にする。 |
+| `use_adaptive_dt` | 既定は `False`。セル飛びを避ける場合は `True` を明示する。 |
 | `coverage_sigma` | source Maxwellian の support 半径。探索用は `3.0`、標準は `4.0`、保守的には `5.0`。 |
 | `coverage_mode` / `eps_rel` | `coverage_mode="relative_density"` なら `eps_rel` から `sqrt(-2 log eps_rel)` を使う。`eps_rel=1e-6` は約 `5.26 sigma`。 |
 | `safety_factor` | deposit 後の min/max を中心から拡張する係数。標準は `1.25`、取りこぼしが疑わしい場合は `1.5` 以上。 |
 | `source_samples_per_cell` | source 面の接線方向 sampling 数。`1` が最速。source 面上の空間変化が強い場合は増やす。 |
 | `velocity_bins` | `create_particles()` でセルごとに作る速度格子数。返り値の順序は `(nvx, nvy, nvz)`。 |
 | `n_threads` | Fortran 側の OpenMP thread 数。未指定時は `OMP_NUM_THREADS`、なければ `1`。 |
-| `collect_moments` | `True` で `mean_v` / `cov_v` を計算する。メモリ使用量が増えるため既定は `False`。 |
+| `collect_moments` | `True` で `mean_v` / `cov_v` を計算する。メモリ使用量が増えるため既定は `False`。`False` の場合は巨大な moments 配列を確保せず、`range_map.mean_v` / `cov_v` は NaN view になる。 |
 | `show_progress` | `True` で `get_probabilities` と同じ形式の progress bar を表示する。バッチログを抑えたい場合は `False`。 |
+| `accumulator_cache_size` | 各 OpenMP thread が flush まで保持する hit cell 数。既定は `20000`。大きいほど flush 同期は減るがメモリは増える。 |
+
+## メモリと並列化
+
+`estimate_velocity_range_map` は、deposit ごとの atomic を避けるために各
+thread に bounded sparse cache を持ちます。cache が
+`accumulator_cache_size` に達すると、cell lock stripe で global range map
+へまとめて reduction します。
+
+メモリ使用量はおおよそ次の形です。
+
+```text
+global dense range arrays
++ EB field
++ n_threads * accumulator_cache_size * cache_entry_size
+```
+
+以前のような `全空間セル数 * n_threads` の dense thread-local 配列は確保し
+ません。大規模格子で 112 thread を使う場合も、まずは既定の
+`accumulator_cache_size=20000` から始め、flush が支配的なら増やします。
 
 ## 戻り値と diagnostics
 

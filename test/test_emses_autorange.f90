@@ -1,4 +1,6 @@
 program test_emses_autorange
+    use, intrinsic :: iso_c_binding, only: c_loc, c_null_ptr
+
     use finbound, only: t_BoundaryList, new_BoundaryList
 
     use m_allcom, only: max_nepl, max_nspec, nemd, nepl, nflag_emit, &
@@ -31,8 +33,8 @@ contains
         real(8) :: vy_min(lx, ly, lz), vy_max(lx, ly, lz)
         real(8) :: vz_min(lx, ly, lz), vz_max(lx, ly, lz)
         real(8) :: weight_sum(lx, ly, lz)
-        real(8) :: mean_v(3, lx, ly, lz)
-        real(8) :: cov_v(3, 3, lx, ly, lz)
+        real(8), target :: mean_v(3, lx, ly, lz)
+        real(8), target :: cov_v(3, 3, lx, ly, lz)
         real(8) :: confidence(lx, ly, lz)
         integer :: count(lx, ly, lz)
         integer :: status(lx, ly, lz)
@@ -63,6 +65,7 @@ contains
             minimum_count=1, &
             collect_moments=1, &
             show_progress=0, &
+            accumulator_cache_size=2, &
             return_vx_min=vx_min, &
             return_vx_max=vx_max, &
             return_vy_min=vy_min, &
@@ -71,8 +74,8 @@ contains
             return_vz_max=vz_max, &
             return_count=count, &
             return_weight_sum=weight_sum, &
-            return_mean_v=mean_v, &
-            return_cov_v=cov_v, &
+            return_mean_v_ptr=c_loc(mean_v), &
+            return_cov_v_ptr=c_loc(cov_v), &
             return_status=status, &
             return_confidence=confidence)
 
@@ -177,8 +180,6 @@ contains
         type(tp_Probability), allocatable :: probability_functions(:)
         real(8) :: values(6, 0:lx, 0:ly, 0:lz)
         real(8) :: weight_sum(lx, ly, lz)
-        real(8) :: mean_v(3, lx, ly, lz)
-        real(8) :: cov_v(3, 3, lx, ly, lz)
         real(8) :: confidence(lx, ly, lz)
         integer :: status(lx, ly, lz)
         integer :: boundary_conditions(3)
@@ -210,6 +211,7 @@ contains
             minimum_count=1, &
             collect_moments=0, &
             show_progress=0, &
+            accumulator_cache_size=2, &
             n_threads=n_threads, &
             return_vx_min=vx_min, &
             return_vx_max=vx_max, &
@@ -219,8 +221,8 @@ contains
             return_vz_max=vz_max, &
             return_count=count, &
             return_weight_sum=weight_sum, &
-            return_mean_v=mean_v, &
-            return_cov_v=cov_v, &
+            return_mean_v_ptr=c_null_ptr, &
+            return_cov_v_ptr=c_null_ptr, &
             return_status=status, &
             return_confidence=confidence)
     end subroutine

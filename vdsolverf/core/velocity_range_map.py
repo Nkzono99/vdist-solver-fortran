@@ -187,6 +187,8 @@ class VelocityRangeMap:
 
         self.count = np.asarray(self.count, dtype=np.int32)
         cell_shape = self.count.shape
+        self._mean_v_stored = self.mean_v is not None
+        self._cov_v_stored = self.cov_v is not None
 
         if self.weight_sum is None:
             self.weight_sum = np.zeros(cell_shape, dtype=np.float64)
@@ -194,12 +196,18 @@ class VelocityRangeMap:
             self.weight_sum = np.asarray(self.weight_sum, dtype=np.float64)
 
         if self.mean_v is None:
-            self.mean_v = np.full(cell_shape + (3,), np.nan, dtype=np.float64)
+            self.mean_v = np.broadcast_to(
+                np.array(np.nan, dtype=np.float64),
+                cell_shape + (3,),
+            )
         else:
             self.mean_v = np.asarray(self.mean_v, dtype=np.float64)
 
         if self.cov_v is None:
-            self.cov_v = np.full(cell_shape + (3, 3), np.nan, dtype=np.float64)
+            self.cov_v = np.broadcast_to(
+                np.array(np.nan, dtype=np.float64),
+                cell_shape + (3, 3),
+            )
         else:
             self.cov_v = np.asarray(self.cov_v, dtype=np.float64)
 
@@ -346,8 +354,8 @@ class VelocityRangeMap:
             vz_max=self.vz_max,
             count=self.count,
             weight_sum=self.weight_sum,
-            mean_v=self.mean_v,
-            cov_v=self.cov_v,
+            mean_v=self.mean_v if self._mean_v_stored else np.array([], dtype=np.float64),
+            cov_v=self.cov_v if self._cov_v_stored else np.array([], dtype=np.float64),
             status=self.status,
             confidence=self.confidence,
             metadata_json=np.array(json.dumps(_json_ready(self.metadata))),
@@ -398,8 +406,8 @@ class VelocityRangeMap:
                 vz_max=data["vz_max"],
                 count=data["count"],
                 weight_sum=data["weight_sum"],
-                mean_v=data["mean_v"],
-                cov_v=data["cov_v"],
+                mean_v=None if data["mean_v"].size == 0 else data["mean_v"],
+                cov_v=None if data["cov_v"].size == 0 else data["cov_v"],
                 status=data["status"],
                 confidence=data["confidence"],
                 metadata=metadata,
