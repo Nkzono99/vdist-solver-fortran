@@ -274,6 +274,8 @@ contains
                     return_velocities(:, ipcl) = record%particle%velocity(:)
                 else
                     return_probabilities(ipcl) = -1.0d0
+                    return_positions(:, ipcl) = record%particle%position(:)
+                    return_velocities(:, ipcl) = record%particle%velocity(:)
                 end if
             end block
         end do
