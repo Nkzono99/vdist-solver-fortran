@@ -124,6 +124,49 @@ probabilities, ret_particles = get_probabilities(
 )
 ```
 
+## Estimate per-cell velocity ranges before solving probabilities
+
+You can forward-trace deterministic support particles from EMSES open-boundary
+and emission-surface source distributions in Fortran, producing per-cell
+velocity ranges. The returned `VelocityRangeMap` stores separate `vx/vy/vz`
+ranges for each spatial cell, and `create_particles()` flattens those adaptive
+ranges into a particle list accepted by `get_probabilities`.
+
+```python
+from vdsolverf.emses import estimate_velocity_range_map, get_probabilities
+
+range_map = estimate_velocity_range_map(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    dt=0.25,
+    max_step=30_000,
+    use_adaptive_dt=True,
+    coverage_sigma=4.0,
+    safety_factor=1.25,
+    collect_moments=False,
+)
+
+particles, index = range_map.create_particles(velocity_bins=(16, 8, 16))
+
+probabilities, ret_particles = get_probabilities(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    particles=particles,
+    dt=data.inp.dt,
+    max_step=30_000,
+    use_adaptive_dt=False,
+)
+
+probability_grid = index.reshape(probabilities)
+```
+
+`range_map.count` is the number of envelope support-point hits. It is a
+diagnostic sampling count, not a physical density. Cells with `count == 0`
+are skipped by `create_particles()` by default. Pass `collect_moments=True`
+when you also need the `mean_v` / `cov_v` diagnostics.
+
 ## MPI particle parallelism
 
 The existing `vdsolverf.emses.get_*` functions remain the OpenMP/threaded

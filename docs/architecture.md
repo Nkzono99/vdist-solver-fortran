@@ -45,18 +45,21 @@ m_vdsolverf                           (src/vdsolverf.f90)
 C シンボルを公開するのは `m_emses_solver` だけです。ビルダモジュールが
 シミュレータの構築 (raycast 確率の配線を含む) と `destroy_simulator` に
 よるクリーンアップを担当します。C API から辿れるすべてはアンブレラを
-通るので、Python 利用者から見える入口は `get_backtraces` と
-`get_probabilities` です。
+通るので、Python 利用者から見える入口は `get_backtraces`、
+`get_probabilities`、`estimate_velocity_range_map` です。
 
 ## Python パッケージ
 
 ```
-vdsolverf.core         Particle, PhaseGrid データクラス
+vdsolverf.core         Particle, PhaseGrid, VelocityRangeMap データクラス
 vdsolverf.emses.wrapper
   _load_dll(...)       プラットフォームに応じた共有ライブラリを解決
   get_backtrace(...)   単一粒子用のコンビニエンスラッパ
   get_backtraces(...)  多粒子 ctypes 呼び出し
   get_probabilities(...)
+  estimate_velocity_range_map(...)
+                       EMSES source envelope を Fortran 側で forward trace し、
+                       セルごとの速度範囲と diagnostics を返す
   create_relocated_ebvalues
                        emout から EB 場配列を組み立てる。`phibk` /
                        `phibksp*` がある場合は蓄積電荷由来 E を分離し、

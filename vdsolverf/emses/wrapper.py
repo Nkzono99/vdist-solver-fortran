@@ -9,7 +9,7 @@ import emout
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from ..core import Particle
+from ..core import Particle, VelocityRangeMap
 from .tmpolary_input import TempolaryInput
 
 VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX = (
@@ -397,6 +397,311 @@ def get_probabilities_dll(
     return_probabilities[return_probabilities == -1] = np.nan
 
     return return_probabilities, return_particles
+
+
+def estimate_velocity_range_map(
+    directory: PathLike,
+    ispec: int,
+    istep: int,
+    dt: float = 0.25,
+    max_step: int = 1000,
+    use_adaptive_dt: bool = True,
+    coverage_sigma: Union[float, None] = 4.0,
+    coverage_mode: Literal["sigma", "relative_density"] = "sigma",
+    eps_rel: float = 1e-6,
+    safety_factor: float = 1.25,
+    max_probability_types: int = 100,
+    source_samples_per_cell: int = 1,
+    velocity_sample_mode: Literal["ellipsoid"] = "ellipsoid",
+    minimum_count: int = 4,
+    collect_moments: bool = False,
+    system: Literal["auto", "linux", "darwin", "windows"] = "auto",
+    library_path: PathLike = None,
+    n_threads: Union[int, None] = None,
+    tmp_input_suffix: Union[str, None] = None,
+) -> VelocityRangeMap:
+    n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
+
+    dll = _load_dll(system, library_path)
+
+    return estimate_velocity_range_map_dll(
+        directory=directory,
+        ispec=ispec,
+        istep=istep,
+        dt=dt,
+        max_step=max_step,
+        use_adaptive_dt=use_adaptive_dt,
+        coverage_sigma=_resolve_coverage_sigma(
+            coverage_sigma,
+            coverage_mode=coverage_mode,
+            eps_rel=eps_rel,
+        ),
+        safety_factor=safety_factor,
+        max_probability_types=max_probability_types,
+        source_samples_per_cell=source_samples_per_cell,
+        velocity_sample_mode=velocity_sample_mode,
+        minimum_count=minimum_count,
+        collect_moments=collect_moments,
+        dll=dll,
+        n_threads=n_threads,
+        tmp_input_suffix=tmp_input_suffix,
+    )
+
+
+def estimate_velocity_range_map_dll(
+    directory: PathLike,
+    ispec: int,
+    istep: int,
+    dt: float,
+    max_step: int,
+    use_adaptive_dt: bool,
+    coverage_sigma: float,
+    safety_factor: float,
+    max_probability_types: int,
+    dll: Union[CDLL, "WinDLL"],
+    source_samples_per_cell: int = 1,
+    velocity_sample_mode: Literal["ellipsoid"] = "ellipsoid",
+    minimum_count: int = 4,
+    collect_moments: bool = False,
+    n_threads: int = 1,
+    tmp_input_suffix: Union[str, None] = None,
+) -> VelocityRangeMap:
+    dll.estimate_velocity_range_map.argtypes = [
+        c_char_p,  # inppath
+        c_int,  # length
+        c_int,  # lx
+        c_int,  # ly
+        c_int,  # lz
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=4),  # ebvalues
+        c_int,  # ispec
+        c_double,  # dt
+        c_double,  # coverage_sigma
+        c_double,  # safety_factor
+        c_int,  # max_step
+        c_int,  # use_adaptive_dt
+        c_int,  # max_probability_types
+        c_int,  # source_samples_per_cell
+        c_int,  # velocity_sample_mode
+        c_int,  # minimum_count
+        c_int,  # collect_moments
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vx_min
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vx_max
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vy_min
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vy_max
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vz_min
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vz_max
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=3),  # count
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # weight_sum
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=4),  # mean_v
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=5),  # cov_v
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=3),  # status
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # confidence
+        POINTER(c_int),  # n_threads
+    ]
+    dll.estimate_velocity_range_map.restype = None
+
+    data = emout.Emout(directory)
+
+    ebvalues = create_relocated_ebvalues(data, istep, ispec=ispec)
+    nz, ny, nx = data.inp.nz, data.inp.ny, data.inp.nx
+
+    vx_min = np.empty((nz, ny, nx), dtype=np.float64)
+    vx_max = np.empty((nz, ny, nx), dtype=np.float64)
+    vy_min = np.empty((nz, ny, nx), dtype=np.float64)
+    vy_max = np.empty((nz, ny, nx), dtype=np.float64)
+    vz_min = np.empty((nz, ny, nx), dtype=np.float64)
+    vz_max = np.empty((nz, ny, nx), dtype=np.float64)
+    count = np.empty((nz, ny, nx), dtype=np.int32)
+    weight_sum = np.empty((nz, ny, nx), dtype=np.float64)
+    mean_v = np.empty((nz, ny, nx, 3), dtype=np.float64)
+    cov_v = np.empty((nz, ny, nx, 3, 3), dtype=np.float64)
+    status = np.empty((nz, ny, nx), dtype=np.int32)
+    confidence = np.empty((nz, ny, nx), dtype=np.float64)
+
+    with TempolaryInput(data, suffix=tmp_input_suffix) as tmpinp:
+        inppath = tmpinp.tmppath
+        inppath_str = str(inppath.resolve())
+
+        _inppath = create_string_buffer(inppath_str.encode())
+        _length = c_int(len(inppath_str))
+        _nx = c_int(nx)
+        _ny = c_int(ny)
+        _nz = c_int(nz)
+        _ispec = c_int(ispec + 1)
+        _dt = c_double(dt)
+        _coverage_sigma = c_double(coverage_sigma)
+        _safety_factor = c_double(safety_factor)
+        _max_step = c_int(max_step)
+        _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
+        _max_probability_types = c_int(max_probability_types)
+        _source_samples_per_cell = c_int(source_samples_per_cell)
+        _velocity_sample_mode = c_int(_velocity_sample_mode_code(velocity_sample_mode))
+        _minimum_count = c_int(minimum_count)
+        _collect_moments = c_int(1 if collect_moments else 0)
+        _n_threads = c_int(n_threads)
+
+        dll.estimate_velocity_range_map(
+            _inppath,
+            _length,
+            _nx,
+            _ny,
+            _nz,
+            ebvalues,
+            _ispec,
+            _dt,
+            _coverage_sigma,
+            _safety_factor,
+            _max_step,
+            _use_adaptive_dt,
+            _max_probability_types,
+            _source_samples_per_cell,
+            _velocity_sample_mode,
+            _minimum_count,
+            _collect_moments,
+            vx_min,
+            vx_max,
+            vy_min,
+            vy_max,
+            vz_min,
+            vz_max,
+            count,
+            weight_sum,
+            mean_v,
+            cov_v,
+            status,
+            confidence,
+            byref(_n_threads),
+        )
+
+    invalid = count <= 0
+    for values in (vx_min, vx_max, vy_min, vy_max, vz_min, vz_max):
+        values[invalid] = np.nan
+
+    return VelocityRangeMap(
+        x_edges=np.arange(nx + 1, dtype=np.float64),
+        y_edges=np.arange(ny + 1, dtype=np.float64),
+        z_edges=np.arange(nz + 1, dtype=np.float64),
+        vx_min=vx_min,
+        vx_max=vx_max,
+        vy_min=vy_min,
+        vy_max=vy_max,
+        vz_min=vz_min,
+        vz_max=vz_max,
+        count=count,
+        weight_sum=weight_sum,
+        mean_v=mean_v,
+        cov_v=cov_v,
+        status=status,
+        confidence=confidence,
+        metadata={
+            "coverage_sigma": coverage_sigma,
+            "safety_factor": safety_factor,
+            "source_samples_per_cell": source_samples_per_cell,
+            "velocity_sample_mode": velocity_sample_mode,
+            "minimum_count": minimum_count,
+            "collect_moments": collect_moments,
+        },
+    )
+
+
+def validate_and_expand_velocity_range_map(
+    range_map: VelocityRangeMap,
+    directory: PathLike,
+    ispec: int,
+    istep: int,
+    dt: float,
+    max_step: int,
+    coarse_bins: Tuple[int, int, int] = (8, 4, 8),
+    edge_threshold: float = 1e-3,
+    expand_factor: float = 1.5,
+    max_iter: int = 2,
+    use_adaptive_dt: bool = True,
+    max_probability_types: int = 100,
+    system: Literal["auto", "linux", "darwin", "windows"] = "auto",
+    library_path: PathLike = None,
+    n_threads: Union[int, None] = None,
+    tmp_input_suffix: Union[str, None] = None,
+) -> VelocityRangeMap:
+    for _ in range(max_iter):
+        particles, index = range_map.create_particles(coarse_bins)
+        if not particles:
+            break
+
+        probabilities, _ = get_probabilities(
+            directory=directory,
+            ispec=ispec,
+            istep=istep,
+            particles=particles,
+            dt=dt,
+            max_step=max_step,
+            use_adaptive_dt=use_adaptive_dt,
+            max_probability_types=max_probability_types,
+            system=system,
+            library_path=library_path,
+            n_threads=n_threads,
+            tmp_input_suffix=tmp_input_suffix,
+        )
+        prob_grid = index.reshape(probabilities)
+        expand_mask = _edge_probability_mask(prob_grid, edge_threshold)
+        if not expand_mask.any():
+            break
+
+        range_map.expand_cells(expand_mask, expand_factor)
+        range_map.status[expand_mask] = 3
+
+    return range_map
+
+
+def _edge_probability_mask(prob_grid: np.ndarray, edge_threshold: float) -> np.ndarray:
+    nz, ny, nx = prob_grid.shape[:3]
+    ret = np.zeros((nz, ny, nx), dtype=bool)
+
+    edge = np.zeros(prob_grid.shape[3:], dtype=bool)
+    edge[0, :, :] = True
+    edge[-1, :, :] = True
+    edge[:, 0, :] = True
+    edge[:, -1, :] = True
+    edge[:, :, 0] = True
+    edge[:, :, -1] = True
+
+    for iz in range(nz):
+        for iy in range(ny):
+            for ix in range(nx):
+                cell = prob_grid[iz, iy, ix]
+                if np.isnan(cell).all():
+                    continue
+                cell_max = np.nanmax(cell)
+                if not np.isfinite(cell_max) or cell_max <= 0:
+                    continue
+                edge_max = np.nanmax(cell[edge])
+                ret[iz, iy, ix] = np.isfinite(edge_max) and (
+                    edge_max / cell_max > edge_threshold
+                )
+
+    return ret
+
+
+def _resolve_coverage_sigma(
+    coverage_sigma: Union[float, None],
+    *,
+    coverage_mode: Literal["sigma", "relative_density"],
+    eps_rel: float,
+) -> float:
+    if coverage_mode == "sigma":
+        if coverage_sigma is None:
+            raise ValueError("coverage_sigma is required when coverage_mode='sigma'")
+        return float(coverage_sigma)
+    if coverage_mode == "relative_density":
+        if eps_rel <= 0 or eps_rel >= 1:
+            raise ValueError("eps_rel must be between 0 and 1")
+        return float(np.sqrt(-2.0 * np.log(eps_rel)))
+    raise ValueError(f"Unsupported coverage_mode: {coverage_mode}")
+
+
+def _velocity_sample_mode_code(mode: Literal["ellipsoid"]) -> int:
+    if mode == "ellipsoid":
+        return 0
+    raise ValueError(f"Unsupported velocity_sample_mode: {mode}")
 
 
 def create_relocated_ebvalues(

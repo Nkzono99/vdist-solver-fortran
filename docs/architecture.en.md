@@ -45,18 +45,21 @@ m_vdsolverf                           (src/vdsolverf.f90)
 `m_emses_solver` is the only module that exposes C symbols. The builder
 module handles simulator construction (including the raycast probability
 wiring) and cleanup via `destroy_simulator`. Everything reachable from the
-C API lives through the umbrella, so Python consumers see `get_backtraces`
-and `get_probabilities`.
+C API lives through the umbrella, so Python consumers see `get_backtraces`,
+`get_probabilities`, and `estimate_velocity_range_map`.
 
 ## Python package
 
 ```
-vdsolverf.core         Particle, PhaseGrid dataclasses
+vdsolverf.core         Particle, PhaseGrid, VelocityRangeMap dataclasses
 vdsolverf.emses.wrapper
   _load_dll(...)       Resolves the platform-specific shared library
   get_backtrace(...)   Single-particle convenience wrapper
   get_backtraces(...)  Multi-particle ctypes call
   get_probabilities(...)
+  estimate_velocity_range_map(...)
+                       Forward-traces EMSES source envelopes in Fortran and
+                       returns per-cell velocity ranges plus diagnostics.
   create_relocated_ebvalues
                        Assembles EB field arrays from emout. When `phibk` /
                        `phibksp*` exists, separates accumulated-charge E and

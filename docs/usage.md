@@ -122,6 +122,48 @@ probabilities, ret_particles = get_probabilities(
 )
 ```
 
+## セルごとの速度範囲を推定してから確率を解く
+
+EMSES の open boundary と emission surface の source 分布から support
+粒子を Fortran 側で forward trace し、空間セルごとの速度範囲を推定できます。
+戻り値の `VelocityRangeMap` はセルごとに異なる `vx/vy/vz` 範囲を持ち、
+`create_particles()` で `get_probabilities` に渡す粒子列へ flatten できます。
+
+```python
+from vdsolverf.emses import estimate_velocity_range_map, get_probabilities
+
+range_map = estimate_velocity_range_map(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    dt=0.25,
+    max_step=30_000,
+    use_adaptive_dt=True,
+    coverage_sigma=4.0,
+    safety_factor=1.25,
+    collect_moments=False,
+)
+
+particles, index = range_map.create_particles(velocity_bins=(16, 8, 16))
+
+probabilities, ret_particles = get_probabilities(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    particles=particles,
+    dt=data.inp.dt,
+    max_step=30_000,
+    use_adaptive_dt=False,
+)
+
+probability_grid = index.reshape(probabilities)
+```
+
+`range_map.count` は envelope support point の hit 数で、物理密度ではなく
+診断値です。`count == 0` のセルは `create_particles()` の既定では
+スキップされます。速度の `mean_v` / `cov_v` 診断も必要な場合は
+`collect_moments=True` を指定します。
+
 ## MPI 粒子並列
 
 既存の `vdsolverf.emses.get_*` はそのまま OpenMP/スレッド並列の入口です。

@@ -15,6 +15,7 @@ module m_emses_solver
 
     use m_vdsolverf_core
     use m_allcom, only: qm
+    use m_emses_autorange, only: estimate_velocity_range_map_impl
     use m_emses_simulator_builder, only: create_simulator, destroy_simulator
 
     implicit none
@@ -22,8 +23,128 @@ module m_emses_solver
     private
     public get_probabilities
     public get_backtraces
+    public estimate_velocity_range_map
 
 contains
+
+    subroutine estimate_velocity_range_map( &
+        inppath, &
+        length, &
+        lx, ly, lz, &
+        ebvalues, &
+        ispec, &
+        dt, &
+        coverage_sigma, &
+        safety_factor, &
+        max_step, &
+        use_adaptive_dt, &
+        max_probability_types, &
+        source_samples_per_cell, &
+        velocity_sample_mode, &
+        minimum_count, &
+        collect_moments, &
+        return_vx_min, &
+        return_vx_max, &
+        return_vy_min, &
+        return_vy_max, &
+        return_vz_min, &
+        return_vz_max, &
+        return_count, &
+        return_weight_sum, &
+        return_mean_v, &
+        return_cov_v, &
+        return_status, &
+        return_confidence, &
+        n_threads &
+        ) bind(c)
+        !! Estimate per-cell velocity ranges by forward-tracing source envelopes.
+
+        character(1, c_char), intent(in) :: inppath(*)
+            !! Path to the input file
+        integer(c_int), value, intent(in) :: length
+            !! Length of the input path
+        integer(c_int), value, intent(in) :: lx
+            !! Number of grid cells in the x direction
+        integer(c_int), value, intent(in) :: ly
+            !! Number of grid cells in the y direction
+        integer(c_int), value, intent(in) :: lz
+            !! Number of grid cells in the z direction
+        real(c_double), intent(in) :: ebvalues(9, lx + 1, ly + 1, lz + 1)
+            !! Relocated E/B values plus staggered accumulated-charge E values
+        integer(c_int), value, intent(in) :: ispec
+            !! Species index
+        real(c_double), value, intent(in) :: dt
+            !! Forward trace step width
+        real(c_double), value, intent(in) :: coverage_sigma
+            !! Source support radius in units of the diagonal thermal scales
+        real(c_double), value, intent(in) :: safety_factor
+            !! Multiplicative expansion applied to deposited min/max ranges
+        integer(c_int), value, intent(in) :: max_step
+            !! Maximum number of forward steps
+        integer(c_int), value, intent(in) :: use_adaptive_dt
+            !! Flag to use adaptive time step
+        integer(c_int), value, intent(in) :: max_probability_types
+            !! Maximum number of probability types
+        integer(c_int), value, intent(in) :: source_samples_per_cell
+            !! Number of samples per tangential source cell direction
+        integer(c_int), value, intent(in) :: velocity_sample_mode
+            !! Reserved velocity support selector. 0 is ellipsoid support.
+        integer(c_int), value, intent(in) :: minimum_count
+            !! Count threshold used for LOW_COUNT diagnostics
+        integer(c_int), value, intent(in) :: collect_moments
+            !! Flag to collect mean/cov velocity diagnostics
+        real(c_double), intent(out) :: return_vx_min(lx, ly, lz)
+        real(c_double), intent(out) :: return_vx_max(lx, ly, lz)
+        real(c_double), intent(out) :: return_vy_min(lx, ly, lz)
+        real(c_double), intent(out) :: return_vy_max(lx, ly, lz)
+        real(c_double), intent(out) :: return_vz_min(lx, ly, lz)
+        real(c_double), intent(out) :: return_vz_max(lx, ly, lz)
+        integer(c_int), intent(out) :: return_count(lx, ly, lz)
+        real(c_double), intent(out) :: return_weight_sum(lx, ly, lz)
+        real(c_double), intent(out) :: return_mean_v(3, lx, ly, lz)
+        real(c_double), intent(out) :: return_cov_v(3, 3, lx, ly, lz)
+        integer(c_int), intent(out) :: return_status(lx, ly, lz)
+        real(c_double), intent(out) :: return_confidence(lx, ly, lz)
+        integer(c_int), optional, intent(in) :: n_threads
+            !! Number of OpenMP threads for source-envelope tracing
+
+        type(t_ESSimulator) :: simulator
+
+        simulator = create_simulator(inppath, length, &
+                                     lx, ly, lz, &
+                                     ebvalues, &
+                                     ispec, &
+                                     max_probability_types)
+
+        call estimate_velocity_range_map_impl( &
+            simulator, &
+            ispec, &
+            lx, ly, lz, &
+            dt, &
+            coverage_sigma, &
+            safety_factor, &
+            max_step, &
+            use_adaptive_dt, &
+            source_samples_per_cell, &
+            velocity_sample_mode, &
+            minimum_count, &
+            collect_moments, &
+            return_vx_min, &
+            return_vx_max, &
+            return_vy_min, &
+            return_vy_max, &
+            return_vz_min, &
+            return_vz_max, &
+            return_count, &
+            return_weight_sum, &
+            return_mean_v, &
+            return_cov_v, &
+            return_status, &
+            return_confidence, &
+            n_threads)
+
+        call destroy_simulator(simulator)
+    end subroutine
 
     subroutine get_backtraces( &
         inppath, &
