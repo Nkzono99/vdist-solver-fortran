@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from itertools import product
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -161,13 +162,23 @@ class PhaseGrid:
         List[Particle]
             list of particles
         """
-        phases = self.create_grid()
         particles = []
 
-        for phase in phases.reshape(-1, phases.shape[-1]):
-            pos = phase[:3].copy()
-            vel = phase[3:].copy()
-            pcl = Particle(pos, vel)
-            particles.append(pcl)
+        axes = (
+            np.linspace(*self.zlim.tolist()),
+            np.linspace(*self.ylim.tolist()),
+            np.linspace(*self.xlim.tolist()),
+            np.linspace(*self.vzlim.tolist()),
+            np.linspace(*self.vylim.tolist()),
+            np.linspace(*self.vxlim.tolist()),
+        )
+
+        for z, y, x, vz, vy, vx in product(*axes):
+            particles.append(
+                Particle(
+                    np.array([x, y, z], dtype=np.float64),
+                    np.array([vx, vy, vz], dtype=np.float64),
+                )
+            )
 
         return particles
