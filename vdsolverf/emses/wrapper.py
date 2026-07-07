@@ -67,7 +67,7 @@ def get_backtrace(
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
     tmp_input_suffix: Union[str, None] = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
     dll = _load_dll(system, library_path)
 
@@ -120,7 +120,7 @@ def get_backtraces(
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
     tmp_input_suffix: Union[str, None] = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
     dll = _load_dll(system, library_path)
@@ -164,9 +164,9 @@ def get_backtraces_dll(
     use_adaptive_dt: bool,
     max_probability_types: int,
     dll: Union[CDLL, "WinDLL"],
-    n_threads: Union[int, None] = None,
+    n_threads: Union[int, None] = 1,
     tmp_input_suffix: Union[str, None] = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     dll.get_backtraces.argtypes = [
         c_char_p,  # inppath
         c_int,  # length
@@ -224,7 +224,7 @@ def get_backtraces_dll(
         _output_interval = c_int(output_interval)
         _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
         _max_probability_types = c_int(max_probability_types)
-        _n_threads = c_int(n_threads)
+        _n_threads = c_int(1 if n_threads is None else n_threads)
 
         dll.get_backtraces(
             _inppath,
