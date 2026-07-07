@@ -86,6 +86,7 @@ contains
 
         allocate (ret%traces(max_output_steps))
         allocate (ret%ts(max_output_steps))
+        ret%probability = -1d0
         ret%traces(1) = pcl
 
         do istep = 2, max_step
@@ -147,6 +148,9 @@ contains
 
         pcl = particle
         call self%simulator%apply_boundary_condition(pcl)
+        ret%probability = -1d0
+        ret%particle = pcl
+        ret%t = pcl%t
 
         do i = 1, max_step
             block
@@ -166,6 +170,7 @@ contains
                 if (record%is_collided) then
                     ret%is_valid = .true.
                     ret%particle = pcl
+                    ret%t = pcl%t
 
                     probability_function = self%simulator%probability_functions(record%material%tag)
                     ret%probability = probability_function%at(pcl%position, pcl%velocity)
@@ -175,6 +180,8 @@ contains
         end do
 
         ret%is_valid = .false.
+        ret%particle = pcl
+        ret%t = pcl%t
     end function
 
 end module
