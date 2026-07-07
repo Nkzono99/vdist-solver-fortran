@@ -124,6 +124,48 @@ probabilities, ret_particles = get_probabilities(
 )
 ```
 
+## Adaptive Velocity-Space Search With Octree
+
+Instead of evaluating a uniform velocity grid, subdivide each spatial point's
+velocity box with an octree and focus samples where probability changes. The
+heavy evaluation runs in Fortran and is OpenMP-parallel over spatial points.
+
+```python
+from vdsolverf.core import PhaseGrid
+from vdsolverf.emses import get_probabilities_octree
+
+phase_grid = PhaseGrid(
+    x=(120, 180, 16),
+    y=64,
+    z=(300, 420, 16),
+    vx=(-8.0e6, 8.0e6, 2),
+    vy=(-4.0e6, 4.0e6, 2),
+    vz=(-8.0e6, 8.0e6, 2),
+)
+
+octree = get_probabilities_octree(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    phase_grid=phase_grid,
+    dt=data.inp.dt,
+    max_step=30_000,
+    scout_bins=(11, 9, 11),
+    max_depth=5,
+    n_threads=32,
+)
+
+mask = octree.spatial_index == 0
+v = octree.velocities[mask]
+p = octree.probabilities[mask]
+```
+
+The result is a compact sample/leaf representation, not a dense 6D array.
+Increase `scout_bins` and `max_samples_per_cell` when you need to capture
+multiple narrow velocity lobes. See
+[Octree velocity-space probability solver](octree_probabilities.en.md) for the
+full API and tuning notes.
+
 ## Estimate per-cell velocity ranges before solving probabilities
 
 You can forward-trace deterministic support particles from EMSES open-boundary

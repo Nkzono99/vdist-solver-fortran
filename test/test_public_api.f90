@@ -6,11 +6,13 @@ program test_public_api
     !! reaching runtime here is itself the positive test result.
 
     use m_emses_solver, only: es_get_probabilities => get_probabilities, &
+                              es_get_probabilities_octree => get_probabilities_octree, &
                               es_get_backtraces => get_backtraces, &
                               es_estimate_velocity_range_map => estimate_velocity_range_map
     use m_emses_simulator_builder, only: b_create_simulator => create_simulator
     use m_vdsolverf, only: u_get_backtraces => get_backtraces, &
                            u_get_probabilities => get_probabilities, &
+                           u_get_probabilities_octree => get_probabilities_octree, &
                            u_estimate_velocity_range_map => estimate_velocity_range_map
 
     implicit none

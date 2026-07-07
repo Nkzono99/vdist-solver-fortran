@@ -16,12 +16,14 @@ module m_emses_solver
     use m_vdsolverf_core
     use m_allcom, only: qm
     use m_emses_autorange, only: estimate_velocity_range_map_impl
+    use m_emses_octree_probabilities, only: get_probabilities_octree_impl
     use m_emses_simulator_builder, only: create_simulator, destroy_simulator
 
     implicit none
 
     private
     public get_probabilities
+    public get_probabilities_octree
     public get_backtraces
     public estimate_velocity_range_map
 
@@ -150,6 +152,161 @@ contains
             return_status, &
             return_confidence, &
             n_threads)
+
+        call destroy_simulator(simulator)
+    end subroutine
+
+    subroutine get_probabilities_octree( &
+        inppath, &
+        length, &
+        lx, ly, lz, &
+        ebvalues, &
+        ispec, &
+        nspatial, &
+        spatial_points, &
+        velocity_bounds, &
+        dt, &
+        max_step, &
+        use_adaptive_dt, &
+        max_probability_types, &
+        scout_nvx, &
+        scout_nvy, &
+        scout_nvz, &
+        max_depth, &
+        max_samples_per_cell, &
+        max_leaves_per_cell, &
+        refine_threshold_rel, &
+        edge_threshold_rel, &
+        expand_factor, &
+        max_expansions, &
+        return_sample_spatial_index, &
+        return_velocities, &
+        return_probabilities, &
+        return_leaf_spatial_index, &
+        return_leaf_bounds, &
+        return_leaf_value_min, &
+        return_leaf_value_max, &
+        return_leaf_depth, &
+        return_leaf_sample_start, &
+        return_leaf_sample_count, &
+        return_status, &
+        return_sample_count, &
+        return_leaf_count, &
+        return_actual_sample_count, &
+        return_actual_leaf_count, &
+        n_threads &
+        ) bind(c)
+        !! Evaluate adaptive velocity octrees at one or more spatial points.
+
+        character(1, c_char), intent(in) :: inppath(*)
+            !! Path to the input file
+        integer(c_int), value, intent(in) :: length
+            !! Length of the input path
+        integer(c_int), value, intent(in) :: lx
+            !! Number of grid cells in the x direction
+        integer(c_int), value, intent(in) :: ly
+            !! Number of grid cells in the y direction
+        integer(c_int), value, intent(in) :: lz
+            !! Number of grid cells in the z direction
+        real(c_double), intent(in) :: ebvalues(9, lx + 1, ly + 1, lz + 1)
+            !! Relocated E/B values plus staggered accumulated-charge E values
+        integer(c_int), value, intent(in) :: ispec
+            !! Species index
+        integer(c_int), value, intent(in) :: nspatial
+            !! Number of spatial points
+        real(c_double), intent(in) :: spatial_points(3, nspatial)
+            !! Spatial positions to evaluate
+        real(c_double), intent(in) :: velocity_bounds(6, nspatial)
+            !! Per-position velocity bounds: vxmin/vxmax/vymin/vymax/vzmin/vzmax
+        real(c_double), value, intent(in) :: dt
+            !! Backtrace time step
+        integer(c_int), value, intent(in) :: max_step
+            !! Maximum backtrace steps
+        integer(c_int), value, intent(in) :: use_adaptive_dt
+            !! Flag to use adaptive time step
+        integer(c_int), value, intent(in) :: max_probability_types
+            !! Maximum number of probability types
+        integer(c_int), value, intent(in) :: scout_nvx
+            !! Number of scout samples in vx for the root box
+        integer(c_int), value, intent(in) :: scout_nvy
+            !! Number of scout samples in vy for the root box
+        integer(c_int), value, intent(in) :: scout_nvz
+            !! Number of scout samples in vz for the root box
+        integer(c_int), value, intent(in) :: max_depth
+            !! Maximum octree subdivision depth
+        integer(c_int), value, intent(in) :: max_samples_per_cell
+            !! Fixed output stride for samples per spatial point
+        integer(c_int), value, intent(in) :: max_leaves_per_cell
+            !! Fixed output stride for leaves per spatial point
+        real(c_double), value, intent(in) :: refine_threshold_rel
+            !! Refine boxes whose sampled relative range exceeds this threshold
+        real(c_double), value, intent(in) :: edge_threshold_rel
+            !! Root expansion edge threshold
+        real(c_double), value, intent(in) :: expand_factor
+            !! Multiplicative root expansion factor
+        integer(c_int), value, intent(in) :: max_expansions
+            !! Maximum root expansion iterations
+        integer(c_int), intent(out) :: return_sample_spatial_index(nspatial*max_samples_per_cell)
+        real(c_double), intent(out) :: return_velocities(3, nspatial*max_samples_per_cell)
+        real(c_double), intent(out) :: return_probabilities(nspatial*max_samples_per_cell)
+        integer(c_int), intent(out) :: return_leaf_spatial_index(nspatial*max_leaves_per_cell)
+        real(c_double), intent(out) :: return_leaf_bounds(6, nspatial*max_leaves_per_cell)
+        real(c_double), intent(out) :: return_leaf_value_min(nspatial*max_leaves_per_cell)
+        real(c_double), intent(out) :: return_leaf_value_max(nspatial*max_leaves_per_cell)
+        integer(c_int), intent(out) :: return_leaf_depth(nspatial*max_leaves_per_cell)
+        integer(c_int), intent(out) :: return_leaf_sample_start(nspatial*max_leaves_per_cell)
+        integer(c_int), intent(out) :: return_leaf_sample_count(nspatial*max_leaves_per_cell)
+        integer(c_int), intent(out) :: return_status(nspatial)
+        integer(c_int), intent(out) :: return_sample_count(nspatial)
+        integer(c_int), intent(out) :: return_leaf_count(nspatial)
+        integer(c_int), intent(out) :: return_actual_sample_count
+        integer(c_int), intent(out) :: return_actual_leaf_count
+        integer(c_int), optional, intent(in) :: n_threads
+            !! Number of OpenMP threads
+
+        type(t_ESSimulator) :: simulator
+        integer(c_int) :: scout_bins(3)
+
+        simulator = create_simulator(inppath, length, &
+                                     lx, ly, lz, &
+                                     ebvalues, &
+                                     ispec, &
+                                     max_probability_types)
+
+        scout_bins = [scout_nvx, scout_nvy, scout_nvz]
+        call get_probabilities_octree_impl( &
+            simulator=simulator, &
+            ispec=ispec, &
+            nspatial=nspatial, &
+            spatial_points=spatial_points, &
+            velocity_bounds=velocity_bounds, &
+            dt=dt, &
+            max_step=max_step, &
+            use_adaptive_dt=use_adaptive_dt, &
+            scout_bins=scout_bins, &
+            max_depth=max_depth, &
+            max_samples_per_cell=max_samples_per_cell, &
+            max_leaves_per_cell=max_leaves_per_cell, &
+            refine_threshold_rel=refine_threshold_rel, &
+            edge_threshold_rel=edge_threshold_rel, &
+            expand_factor=expand_factor, &
+            max_expansions=max_expansions, &
+            return_sample_spatial_index=return_sample_spatial_index, &
+            return_velocities=return_velocities, &
+            return_probabilities=return_probabilities, &
+            return_leaf_spatial_index=return_leaf_spatial_index, &
+            return_leaf_bounds=return_leaf_bounds, &
+            return_leaf_value_min=return_leaf_value_min, &
+            return_leaf_value_max=return_leaf_value_max, &
+            return_leaf_depth=return_leaf_depth, &
+            return_leaf_sample_start=return_leaf_sample_start, &
+            return_leaf_sample_count=return_leaf_sample_count, &
+            return_status=return_status, &
+            return_sample_count=return_sample_count, &
+            return_leaf_count=return_leaf_count, &
+            return_actual_sample_count=return_actual_sample_count, &
+            return_actual_leaf_count=return_actual_leaf_count, &
+            n_threads=n_threads)
 
         call destroy_simulator(simulator)
     end subroutine

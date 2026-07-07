@@ -77,6 +77,8 @@ ts, probability, positions, velocities = get_backtrace(
 | ドキュメント | 概要 |
 |---|---|
 | [使用方法](docs/usage.md) | Python レシピ集: 単一/多粒子バックトレース、位相空間確率 |
+| [速度空間 Octree 確率ソルバ](docs/octree_probabilities.md) | adaptive/sparse な速度空間探索と可視化用の sample/leaf 出力 |
+| [速度範囲自動推定](docs/autorange.md) | セルごとの速度範囲推定、validation、diagnostics |
 | [Namelist リファレンス](docs/namelist.md) | サポートしている `plasma.inp` のグループとパラメータ |
 | [物理モデル](docs/physics.md) | リウビル定理、Maxwellian 放出、raycast 光電子 |
 | [アーキテクチャ](docs/architecture.md) | Fortran / Python レイアウト、モジュール依存、拡張ポイント |

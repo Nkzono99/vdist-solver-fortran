@@ -9,7 +9,7 @@ import emout
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from ..core import Particle, VelocityRangeMap
+from ..core import Particle, PhaseGrid, VelocityOctreeResult, VelocityRangeMap
 from .tmpolary_input import TempolaryInput
 
 VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX = (
@@ -306,6 +306,273 @@ def get_probabilities(
     return result
 
 
+def get_probabilities_octree(
+    directory: PathLike,
+    ispec: int,
+    istep: int,
+    dt: float,
+    max_step: int,
+    *,
+    phase_grid: Union[PhaseGrid, None] = None,
+    position=None,
+    velocity_bounds=None,
+    use_adaptive_dt: bool = False,
+    max_probability_types: int = 100,
+    scout_bins: Tuple[int, int, int] = (9, 9, 9),
+    max_depth: int = 6,
+    max_samples_per_cell: int = 50_000,
+    max_leaves_per_cell: int = 4096,
+    refine_threshold_rel: float = 1e-4,
+    edge_threshold_rel: float = 1e-4,
+    expand_factor: float = 1.5,
+    max_expansions: int = 3,
+    system: Literal["auto", "linux", "darwin", "windows"] = "auto",
+    library_path: PathLike = None,
+    n_threads: Union[int, None] = None,
+    tmp_input_suffix: Union[str, None] = None,
+) -> VelocityOctreeResult:
+    n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
+    dll = _load_dll(system, library_path)
+
+    return get_probabilities_octree_dll(
+        directory=directory,
+        ispec=ispec,
+        istep=istep,
+        phase_grid=phase_grid,
+        position=position,
+        velocity_bounds=velocity_bounds,
+        dt=dt,
+        max_step=max_step,
+        use_adaptive_dt=use_adaptive_dt,
+        max_probability_types=max_probability_types,
+        scout_bins=scout_bins,
+        max_depth=max_depth,
+        max_samples_per_cell=max_samples_per_cell,
+        max_leaves_per_cell=max_leaves_per_cell,
+        refine_threshold_rel=refine_threshold_rel,
+        edge_threshold_rel=edge_threshold_rel,
+        expand_factor=expand_factor,
+        max_expansions=max_expansions,
+        dll=dll,
+        n_threads=n_threads,
+        tmp_input_suffix=tmp_input_suffix,
+    )
+
+
+def get_probabilities_octree_dll(
+    directory: PathLike,
+    ispec: int,
+    istep: int,
+    phase_grid: Union[PhaseGrid, None],
+    position,
+    velocity_bounds,
+    dt: float,
+    max_step: int,
+    use_adaptive_dt: bool,
+    max_probability_types: int,
+    scout_bins: Tuple[int, int, int],
+    max_depth: int,
+    max_samples_per_cell: int,
+    max_leaves_per_cell: int,
+    refine_threshold_rel: float,
+    edge_threshold_rel: float,
+    expand_factor: float,
+    max_expansions: int,
+    dll: Union[CDLL, "WinDLL"],
+    n_threads: int = 1,
+    tmp_input_suffix: Union[str, None] = None,
+) -> VelocityOctreeResult:
+    dll.get_probabilities_octree.argtypes = [
+        c_char_p,  # inppath
+        c_int,  # length
+        c_int,  # lx
+        c_int,  # ly
+        c_int,  # lz
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=4),  # ebvalues
+        c_int,  # ispec
+        c_int,  # nspatial
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # spatial_points
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # velocity_bounds
+        c_double,  # dt
+        c_int,  # max_step
+        c_int,  # use_adaptive_dt
+        c_int,  # max_probability_types
+        c_int,  # scout_nvx
+        c_int,  # scout_nvy
+        c_int,  # scout_nvz
+        c_int,  # max_depth
+        c_int,  # max_samples_per_cell
+        c_int,  # max_leaves_per_cell
+        c_double,  # refine_threshold_rel
+        c_double,  # edge_threshold_rel
+        c_double,  # expand_factor
+        c_int,  # max_expansions
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_sample_spatial_index
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_velocities
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_probabilities
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_leaf_spatial_index
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=2),  # return_leaf_bounds
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_leaf_value_min
+        np.ctypeslib.ndpointer(dtype=np.float64, ndim=1),  # return_leaf_value_max
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_leaf_depth
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_leaf_sample_start
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_leaf_sample_count
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_status
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_sample_count
+        np.ctypeslib.ndpointer(dtype=np.int32, ndim=1),  # return_leaf_count
+        POINTER(c_int),  # return_actual_sample_count
+        POINTER(c_int),  # return_actual_leaf_count
+        POINTER(c_int),  # n_threads
+    ]
+    dll.get_probabilities_octree.restype = None
+
+    spatial_points, velocity_bounds_array = _prepare_octree_inputs(
+        phase_grid=phase_grid,
+        position=position,
+        velocity_bounds=velocity_bounds,
+    )
+    nspatial = spatial_points.shape[0]
+    _validate_octree_parameters(
+        scout_bins=scout_bins,
+        max_depth=max_depth,
+        max_samples_per_cell=max_samples_per_cell,
+        max_leaves_per_cell=max_leaves_per_cell,
+        refine_threshold_rel=refine_threshold_rel,
+        edge_threshold_rel=edge_threshold_rel,
+        expand_factor=expand_factor,
+        max_expansions=max_expansions,
+    )
+
+    data = emout.Emout(directory)
+    ebvalues = create_relocated_ebvalues(data, istep, ispec=ispec)
+
+    sample_capacity = nspatial * max_samples_per_cell
+    leaf_capacity = nspatial * max_leaves_per_cell
+
+    return_sample_spatial_index = np.empty(sample_capacity, dtype=np.int32)
+    return_velocities = np.empty((sample_capacity, 3), dtype=np.float64)
+    return_probabilities = np.empty(sample_capacity, dtype=np.float64)
+    return_leaf_spatial_index = np.empty(leaf_capacity, dtype=np.int32)
+    return_leaf_bounds = np.empty((leaf_capacity, 6), dtype=np.float64)
+    return_leaf_value_min = np.empty(leaf_capacity, dtype=np.float64)
+    return_leaf_value_max = np.empty(leaf_capacity, dtype=np.float64)
+    return_leaf_depth = np.empty(leaf_capacity, dtype=np.int32)
+    return_leaf_sample_start = np.empty(leaf_capacity, dtype=np.int32)
+    return_leaf_sample_count = np.empty(leaf_capacity, dtype=np.int32)
+    return_status = np.empty(nspatial, dtype=np.int32)
+    return_sample_count = np.empty(nspatial, dtype=np.int32)
+    return_leaf_count = np.empty(nspatial, dtype=np.int32)
+
+    with TempolaryInput(data, suffix=tmp_input_suffix) as tmpinp:
+        inppath = tmpinp.tmppath
+        inppath_str = str(inppath.resolve())
+
+        _inppath = create_string_buffer(inppath_str.encode())
+        _length = c_int(len(inppath_str))
+        _nx = c_int(data.inp.nx)
+        _ny = c_int(data.inp.ny)
+        _nz = c_int(data.inp.nz)
+        _ispec = c_int(ispec + 1)
+        _nspatial = c_int(nspatial)
+        _dt = c_double(dt)
+        _max_step = c_int(max_step)
+        _use_adaptive_dt = c_int(1 if use_adaptive_dt else 0)
+        _max_probability_types = c_int(max_probability_types)
+        _scout_nvx = c_int(scout_bins[0])
+        _scout_nvy = c_int(scout_bins[1])
+        _scout_nvz = c_int(scout_bins[2])
+        _max_depth = c_int(max_depth)
+        _max_samples_per_cell = c_int(max_samples_per_cell)
+        _max_leaves_per_cell = c_int(max_leaves_per_cell)
+        _refine_threshold_rel = c_double(refine_threshold_rel)
+        _edge_threshold_rel = c_double(edge_threshold_rel)
+        _expand_factor = c_double(expand_factor)
+        _max_expansions = c_int(max_expansions)
+        _actual_sample_count = c_int(0)
+        _actual_leaf_count = c_int(0)
+        _n_threads = c_int(n_threads)
+
+        dll.get_probabilities_octree(
+            _inppath,
+            _length,
+            _nx,
+            _ny,
+            _nz,
+            ebvalues,
+            _ispec,
+            _nspatial,
+            spatial_points,
+            velocity_bounds_array,
+            _dt,
+            _max_step,
+            _use_adaptive_dt,
+            _max_probability_types,
+            _scout_nvx,
+            _scout_nvy,
+            _scout_nvz,
+            _max_depth,
+            _max_samples_per_cell,
+            _max_leaves_per_cell,
+            _refine_threshold_rel,
+            _edge_threshold_rel,
+            _expand_factor,
+            _max_expansions,
+            return_sample_spatial_index,
+            return_velocities,
+            return_probabilities,
+            return_leaf_spatial_index,
+            return_leaf_bounds,
+            return_leaf_value_min,
+            return_leaf_value_max,
+            return_leaf_depth,
+            return_leaf_sample_start,
+            return_leaf_sample_count,
+            return_status,
+            return_sample_count,
+            return_leaf_count,
+            byref(_actual_sample_count),
+            byref(_actual_leaf_count),
+            byref(_n_threads),
+        )
+
+    return_probabilities[return_probabilities == -1] = np.nan
+    return _compact_octree_result(
+        spatial_points=spatial_points,
+        sample_spatial_index=return_sample_spatial_index,
+        velocities=return_velocities,
+        probabilities=return_probabilities,
+        leaf_spatial_index=return_leaf_spatial_index,
+        leaf_bounds=return_leaf_bounds,
+        leaf_value_min=return_leaf_value_min,
+        leaf_value_max=return_leaf_value_max,
+        leaf_depth=return_leaf_depth,
+        leaf_sample_start=return_leaf_sample_start,
+        leaf_sample_count=return_leaf_sample_count,
+        status=return_status,
+        sample_count=return_sample_count,
+        leaf_count=return_leaf_count,
+        max_samples_per_cell=max_samples_per_cell,
+        max_leaves_per_cell=max_leaves_per_cell,
+        metadata={
+            "directory": str(data.directory),
+            "ispec": ispec,
+            "istep": istep,
+            "dt": dt,
+            "max_step": max_step,
+            "use_adaptive_dt": use_adaptive_dt,
+            "scout_bins": tuple(scout_bins),
+            "max_depth": max_depth,
+            "max_samples_per_cell": max_samples_per_cell,
+            "max_leaves_per_cell": max_leaves_per_cell,
+            "refine_threshold_rel": refine_threshold_rel,
+            "edge_threshold_rel": edge_threshold_rel,
+            "expand_factor": expand_factor,
+            "max_expansions": max_expansions,
+            "n_threads": n_threads,
+        },
+    )
+
+
 def get_probabilities_dll(
     directory: PathLike,
     ispec: int,
@@ -397,6 +664,158 @@ def get_probabilities_dll(
     return_probabilities[return_probabilities == -1] = np.nan
 
     return return_probabilities, return_particles
+
+
+def _prepare_octree_inputs(
+    *,
+    phase_grid: Union[PhaseGrid, None],
+    position,
+    velocity_bounds,
+) -> Tuple[np.ndarray, np.ndarray]:
+    has_phase_grid = phase_grid is not None
+    has_single_point = position is not None or velocity_bounds is not None
+
+    if has_phase_grid and has_single_point:
+        raise ValueError("pass either phase_grid or position/velocity_bounds, not both")
+    if not has_phase_grid and not has_single_point:
+        raise ValueError("phase_grid or position/velocity_bounds is required")
+
+    if has_phase_grid:
+        x_values = np.linspace(*phase_grid.xlim.tolist())
+        y_values = np.linspace(*phase_grid.ylim.tolist())
+        z_values = np.linspace(*phase_grid.zlim.tolist())
+        spatial_points = np.array(
+            [[x, y, z] for z in z_values for y in y_values for x in x_values],
+            dtype=np.float64,
+        )
+        bounds = np.array(
+            [
+                phase_grid.vxlim.start,
+                phase_grid.vxlim.end,
+                phase_grid.vylim.start,
+                phase_grid.vylim.end,
+                phase_grid.vzlim.start,
+                phase_grid.vzlim.end,
+            ],
+            dtype=np.float64,
+        )
+        velocity_bounds_array = np.repeat(bounds[None, :], spatial_points.shape[0], axis=0)
+        return spatial_points, np.ascontiguousarray(velocity_bounds_array)
+
+    if position is None or velocity_bounds is None:
+        raise ValueError("position and velocity_bounds must be passed together")
+
+    spatial_points = np.asarray(position, dtype=np.float64)
+    if spatial_points.shape == (3,):
+        spatial_points = spatial_points.reshape(1, 3)
+    if spatial_points.ndim != 2 or spatial_points.shape[1] != 3:
+        raise ValueError("position must have shape (3,) or (nspatial, 3)")
+
+    bounds_array = np.asarray(velocity_bounds, dtype=np.float64)
+    if bounds_array.shape == (3, 2):
+        bounds_array = bounds_array.reshape(1, 6)
+    elif bounds_array.shape == (6,):
+        bounds_array = bounds_array.reshape(1, 6)
+    elif bounds_array.ndim == 3 and bounds_array.shape[1:] == (3, 2):
+        bounds_array = bounds_array.reshape(bounds_array.shape[0], 6)
+    elif bounds_array.ndim != 2 or bounds_array.shape[1] != 6:
+        raise ValueError(
+            "velocity_bounds must have shape (3, 2), (6,), (nspatial, 3, 2), or (nspatial, 6)"
+        )
+
+    if bounds_array.shape[0] == 1 and spatial_points.shape[0] > 1:
+        bounds_array = np.repeat(bounds_array, spatial_points.shape[0], axis=0)
+    if bounds_array.shape[0] != spatial_points.shape[0]:
+        raise ValueError("velocity_bounds length must match position length")
+
+    return np.ascontiguousarray(spatial_points), np.ascontiguousarray(bounds_array)
+
+
+def _validate_octree_parameters(
+    *,
+    scout_bins: Tuple[int, int, int],
+    max_depth: int,
+    max_samples_per_cell: int,
+    max_leaves_per_cell: int,
+    refine_threshold_rel: float,
+    edge_threshold_rel: float,
+    expand_factor: float,
+    max_expansions: int,
+):
+    if len(scout_bins) != 3 or min(scout_bins) < 2:
+        raise ValueError("scout_bins must contain three integers >= 2")
+    if max_depth < 0:
+        raise ValueError("max_depth must be non-negative")
+    if max_samples_per_cell < 1:
+        raise ValueError("max_samples_per_cell must be positive")
+    if max_leaves_per_cell < 1:
+        raise ValueError("max_leaves_per_cell must be positive")
+    if refine_threshold_rel < 0:
+        raise ValueError("refine_threshold_rel must be non-negative")
+    if edge_threshold_rel < 0:
+        raise ValueError("edge_threshold_rel must be non-negative")
+    if expand_factor < 1:
+        raise ValueError("expand_factor must be >= 1")
+    if max_expansions < 0:
+        raise ValueError("max_expansions must be non-negative")
+
+
+def _compact_octree_result(
+    *,
+    spatial_points: np.ndarray,
+    sample_spatial_index: np.ndarray,
+    velocities: np.ndarray,
+    probabilities: np.ndarray,
+    leaf_spatial_index: np.ndarray,
+    leaf_bounds: np.ndarray,
+    leaf_value_min: np.ndarray,
+    leaf_value_max: np.ndarray,
+    leaf_depth: np.ndarray,
+    leaf_sample_start: np.ndarray,
+    leaf_sample_count: np.ndarray,
+    status: np.ndarray,
+    sample_count: np.ndarray,
+    leaf_count: np.ndarray,
+    max_samples_per_cell: int,
+    max_leaves_per_cell: int,
+    metadata: dict,
+) -> VelocityOctreeResult:
+    sample_indexes = []
+    leaf_indexes = []
+    nspatial = spatial_points.shape[0]
+
+    for ispatial in range(nspatial):
+        sample_start = ispatial * max_samples_per_cell
+        sample_stop = sample_start + int(sample_count[ispatial])
+        sample_indexes.extend(range(sample_start, sample_stop))
+
+        leaf_start = ispatial * max_leaves_per_cell
+        leaf_stop = leaf_start + int(leaf_count[ispatial])
+        leaf_indexes.extend(range(leaf_start, leaf_stop))
+
+    sample_indexes = np.array(sample_indexes, dtype=np.int64)
+    leaf_indexes = np.array(leaf_indexes, dtype=np.int64)
+
+    compact_probabilities = probabilities[sample_indexes].copy()
+    compact_probabilities[compact_probabilities == -1] = np.nan
+
+    return VelocityOctreeResult(
+        spatial_points=spatial_points,
+        velocities=velocities[sample_indexes].copy(),
+        probabilities=compact_probabilities,
+        spatial_index=sample_spatial_index[sample_indexes].copy(),
+        leaf_spatial_index=leaf_spatial_index[leaf_indexes].copy(),
+        leaf_bounds=leaf_bounds[leaf_indexes].copy(),
+        leaf_value_min=leaf_value_min[leaf_indexes].copy(),
+        leaf_value_max=leaf_value_max[leaf_indexes].copy(),
+        leaf_depth=leaf_depth[leaf_indexes].copy(),
+        leaf_sample_start=leaf_sample_start[leaf_indexes].copy(),
+        leaf_sample_count=leaf_sample_count[leaf_indexes].copy(),
+        status=status.copy(),
+        sample_count=sample_count.copy(),
+        leaf_count=leaf_count.copy(),
+        metadata=metadata,
+    )
 
 
 def estimate_velocity_range_map(

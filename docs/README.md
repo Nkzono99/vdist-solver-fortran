@@ -11,6 +11,7 @@
 |---|---|
 | [使用方法](usage.md) | Python 側のレシピ集 (単一バックトレース、多粒子バックトレース、位相空間確率ソルバ) |
 | [速度範囲自動推定](autorange.md) | `estimate_velocity_range_map` によるセルごとの速度範囲推定、validation、diagnostics、性能メモ |
+| [Octree 速度空間確率ソルバ](octree_probabilities.md) | `get_probabilities_octree` による sparse/adaptive な速度空間探索、戻り値、容量設定 |
 | [Namelist リファレンス](namelist.md) | サポートする EMSES `plasma.inp` グループ (`/ptcond/`, `/emissn/`) と raycast 光電子用パラメータ |
 | [物理モデル](physics.md) | リウビル定理、Maxwellian 表面放出、raycast 光電子モデル |
 | [アーキテクチャ](architecture.md) | リポジトリ構成、Fortran/Python の境界、モジュールの責務 |
@@ -19,7 +20,8 @@
 ## 読者別の入口
 
 - **EMSES の後処理を回す研究者** — [使用方法](usage.md)、
-  [速度範囲自動推定](autorange.md) と
+  [速度範囲自動推定](autorange.md)、
+  [Octree 速度空間確率ソルバ](octree_probabilities.md) と
   [Namelist リファレンス](namelist.md) から。
 - **Fortran / Python を編集する貢献者** — [アーキテクチャ](architecture.md) を
   ざっと確認してから [開発ガイド](development.md)。

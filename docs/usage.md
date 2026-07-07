@@ -122,6 +122,46 @@ probabilities, ret_particles = get_probabilities(
 )
 ```
 
+## Octree で速度空間を adaptive に探索する
+
+速度空間の全点を一様格子で解く代わりに、各空間点で速度 box を octree に分割し、
+確率が変化する領域を重点的に評価できます。重い計算は Fortran 側で実行され、
+空間点方向に OpenMP 並列化されます。
+
+```python
+from vdsolverf.core import PhaseGrid
+from vdsolverf.emses import get_probabilities_octree
+
+phase_grid = PhaseGrid(
+    x=(120, 180, 16),
+    y=64,
+    z=(300, 420, 16),
+    vx=(-8.0e6, 8.0e6, 2),
+    vy=(-4.0e6, 4.0e6, 2),
+    vz=(-8.0e6, 8.0e6, 2),
+)
+
+octree = get_probabilities_octree(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    phase_grid=phase_grid,
+    dt=data.inp.dt,
+    max_step=30_000,
+    scout_bins=(11, 9, 11),
+    max_depth=5,
+    n_threads=32,
+)
+
+mask = octree.spatial_index == 0
+v = octree.velocities[mask]
+p = octree.probabilities[mask]
+```
+
+戻り値は dense 6D 配列ではなく、compact な sample/leaf 配列です。複数の狭い
+速度ローブを拾いたい場合は `scout_bins` と `max_samples_per_cell` を増やします。
+詳しくは [Octree 速度空間確率ソルバ](octree_probabilities.md) を参照してください。
+
 ## セルごとの速度範囲を推定してから確率を解く
 
 EMSES の open boundary と emission surface の source 分布から support

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from vdsolverf.core import Particle
+from vdsolverf.core import Particle, PhaseGrid
 from vdsolverf.emses import wrapper
 
 
@@ -79,10 +79,92 @@ class _FakeEstimateVelocityRangeMapFunction:
         args[30][:] = 1.0
 
 
+class _FakeGetProbabilitiesOctreeFunction:
+    def __init__(self):
+        self.argtypes = None
+        self.restype = None
+        self.n_threads = None
+        self.nspatial = None
+        self.max_samples_per_cell = None
+        self.max_leaves_per_cell = None
+
+    def __call__(self, *args):
+        self.nspatial = args[7].value
+        self.max_samples_per_cell = args[18].value
+        self.max_leaves_per_cell = args[19].value
+        self.n_threads = args[-1]._obj.value
+
+        sample_stride = self.max_samples_per_cell
+        leaf_stride = self.max_leaves_per_cell
+
+        sample_spatial_index = args[24]
+        velocities = args[25]
+        probabilities = args[26]
+        leaf_spatial_index = args[27]
+        leaf_bounds = args[28]
+        leaf_value_min = args[29]
+        leaf_value_max = args[30]
+        leaf_depth = args[31]
+        leaf_sample_start = args[32]
+        leaf_sample_count = args[33]
+        status = args[34]
+        sample_count = args[35]
+        leaf_count = args[36]
+        actual_sample_count = args[37]._obj
+        actual_leaf_count = args[38]._obj
+
+        sample_spatial_index[:] = -1
+        velocities[:] = 0.0
+        probabilities[:] = -1.0
+        leaf_spatial_index[:] = -1
+        leaf_bounds[:] = 0.0
+        leaf_value_min[:] = 0.0
+        leaf_value_max[:] = 0.0
+        leaf_depth[:] = 0
+        leaf_sample_start[:] = 0
+        leaf_sample_count[:] = 0
+
+        sample_spatial_index[0] = 0
+        velocities[0, :] = [1.0, 2.0, 3.0]
+        probabilities[0] = 0.25
+        sample_spatial_index[1] = 0
+        velocities[1, :] = [4.0, 5.0, 6.0]
+        probabilities[1] = 0.5
+
+        second_offset = sample_stride
+        sample_spatial_index[second_offset] = 1
+        velocities[second_offset, :] = [7.0, 8.0, 9.0]
+        probabilities[second_offset] = -1.0
+
+        leaf_spatial_index[0] = 0
+        leaf_bounds[0, :] = [-1.0, 1.0, -2.0, 2.0, -3.0, 3.0]
+        leaf_value_min[0] = 0.25
+        leaf_value_max[0] = 0.5
+        leaf_depth[0] = 1
+        leaf_sample_start[0] = 0
+        leaf_sample_count[0] = 2
+
+        second_leaf_offset = leaf_stride
+        leaf_spatial_index[second_leaf_offset] = 1
+        leaf_bounds[second_leaf_offset, :] = [-4.0, 4.0, -5.0, 5.0, -6.0, 6.0]
+        leaf_value_min[second_leaf_offset] = 0.0
+        leaf_value_max[second_leaf_offset] = 0.0
+        leaf_depth[second_leaf_offset] = 0
+        leaf_sample_start[second_leaf_offset] = second_offset
+        leaf_sample_count[second_leaf_offset] = 1
+
+        status[:] = [0, 1]
+        sample_count[:] = [2, 1]
+        leaf_count[:] = [1, 1]
+        actual_sample_count.value = 3
+        actual_leaf_count.value = 2
+
+
 class _FakeDll:
     def __init__(self):
         self.get_backtraces = _FakeBacktracesFunction()
         self.estimate_velocity_range_map = _FakeEstimateVelocityRangeMapFunction()
+        self.get_probabilities_octree = _FakeGetProbabilitiesOctreeFunction()
 
 
 class WrapperTypingTest(unittest.TestCase):
@@ -182,6 +264,87 @@ class EstimateVelocityRangeMapDllTest(unittest.TestCase):
         self.assertEqual(range_map.metadata["directory"], str(_FakeData.directory))
         self.assertEqual(range_map.metadata["ispec"], 0)
         self.assertEqual(range_map.metadata["istep"], 0)
+
+
+class GetProbabilitiesOctreeDllTest(unittest.TestCase):
+    def test_phase_grid_call_returns_compacted_octree_result(self):
+        fake_dll = _FakeDll()
+        phase_grid = PhaseGrid(
+            x=(0.0, 1.0, 2),
+            y=0.0,
+            z=0.0,
+            vx=(-1.0, 1.0, 2),
+            vy=(-2.0, 2.0, 2),
+            vz=(-3.0, 3.0, 2),
+        )
+
+        with patch.object(wrapper.emout, "Emout", return_value=_FakeData()), \
+             patch.object(
+                 wrapper,
+                 "create_relocated_ebvalues",
+                 return_value=np.zeros((2, 2, 2, 9), dtype=np.float64),
+             ), \
+             patch.object(wrapper, "TempolaryInput", _FakeTemporaryInput):
+            result = wrapper.get_probabilities_octree_dll(
+                directory="unused",
+                ispec=0,
+                istep=0,
+                phase_grid=phase_grid,
+                position=None,
+                velocity_bounds=None,
+                dt=0.25,
+                max_step=4,
+                use_adaptive_dt=False,
+                max_probability_types=100,
+                scout_bins=(3, 3, 3),
+                max_depth=2,
+                max_samples_per_cell=3,
+                max_leaves_per_cell=2,
+                refine_threshold_rel=1e-4,
+                edge_threshold_rel=1e-4,
+                expand_factor=1.5,
+                max_expansions=1,
+                dll=fake_dll,
+                n_threads=2,
+            )
+
+        self.assertEqual(fake_dll.get_probabilities_octree.n_threads, 2)
+        self.assertEqual(fake_dll.get_probabilities_octree.nspatial, 2)
+        self.assertEqual(fake_dll.get_probabilities_octree.max_samples_per_cell, 3)
+        np.testing.assert_allclose(result.spatial_points, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+        np.testing.assert_array_equal(result.spatial_index, [0, 0, 1])
+        np.testing.assert_allclose(result.velocities, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
+        self.assertTrue(np.isnan(result.probabilities[-1]))
+        np.testing.assert_array_equal(result.leaf_spatial_index, [0, 1])
+        np.testing.assert_array_equal(result.sample_count, [2, 1])
+        np.testing.assert_array_equal(result.leaf_count, [1, 1])
+
+    def test_rejects_ambiguous_octree_input_forms(self):
+        with self.assertRaises(ValueError):
+            wrapper._prepare_octree_inputs(
+                phase_grid=PhaseGrid(0.0, 0.0, 0.0, (-1.0, 1.0, 2), (-1.0, 1.0, 2), (-1.0, 1.0, 2)),
+                position=[0.0, 0.0, 0.0],
+                velocity_bounds=((-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0)),
+            )
+
+    def test_accepts_per_spatial_octree_velocity_bounds(self):
+        spatial_points, velocity_bounds = wrapper._prepare_octree_inputs(
+            phase_grid=None,
+            position=[[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]],
+            velocity_bounds=[
+                [-1.0, 1.0, -2.0, 2.0, -3.0, 3.0],
+                [-4.0, 4.0, -5.0, 5.0, -6.0, 6.0],
+            ],
+        )
+
+        np.testing.assert_allclose(spatial_points, [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]])
+        np.testing.assert_allclose(
+            velocity_bounds,
+            [
+                [-1.0, 1.0, -2.0, 2.0, -3.0, 3.0],
+                [-4.0, 4.0, -5.0, 5.0, -6.0, 6.0],
+            ],
+        )
 
 
 class VelocityRangeValidationTest(unittest.TestCase):
