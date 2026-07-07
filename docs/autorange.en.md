@@ -126,6 +126,58 @@ shape `(nz, ny, nx)`.
 `index.reshape(probabilities)` maps flattened probabilities back to
 `(nz, ny, nx, nvz, nvy, nvx)`.
 
+## Cell-Level Access
+
+Use `range_map[iz, iy, ix]` to inspect or sample a single spatial cell. It
+returns a `VelocityRangeCell` view.
+
+```python
+cell = range_map[iz, iy, ix]
+
+print(cell.position)     # cell center [x, y, z]
+print(cell.vmin)         # [vx_min, vy_min, vz_min]
+print(cell.vmax)         # [vx_max, vy_max, vz_max]
+print(cell.count)
+print(cell.status)
+
+vx, vy, vz = cell.velocity_axes((16, 8, 8))
+particles, index = cell.create_particles(velocity_bins=(16, 8, 8))
+probabilities, _ = get_probabilities(..., particles=particles)
+
+cell_probability = index.reshape(probabilities)
+# shape: (nvz, nvy, nvx)
+```
+
+For invalid cells, `cell.valid == False`, and `cell.create_particles()` returns
+an empty particle list by default.
+
+## Saving and Loading
+
+A `VelocityRangeMap` returned by `estimate_velocity_range_map` remembers the
+source `data.directory`, `ispec`, and `istep`. Therefore, `save()` without
+arguments writes to the default file name:
+
+```python
+path = range_map.save()
+print(path)
+# data.directory / "vdsolverf-velocity-range-map-ispec0-istep-1.npz"
+```
+
+Load from the same default path with:
+
+```python
+from vdsolverf.core import VelocityRangeMap
+
+range_map = VelocityRangeMap.load(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+)
+```
+
+Use `range_map.save("path/to/range-map.npz")` for an explicit path, and
+`VelocityRangeMap.load("path/to/range-map.npz")` to load from one.
+
 ## Reflection and Scope
 
 Forward tracing uses the actual EM fields and boundaries, so reflection caused

@@ -126,6 +126,60 @@ range_map = validate_and_expand_velocity_range_map(
 `index.reshape(probabilities)` を使うと、flatten された確率を
 `(nz, ny, nx, nvz, nvy, nvx)` に戻せます。
 
+## セル単位アクセス
+
+単一セルだけを詳しく見たい場合は、`range_map[iz, iy, ix]` で
+`VelocityRangeCell` view を取得できます。
+
+```python
+cell = range_map[iz, iy, ix]
+
+print(cell.position)     # セル中心 [x, y, z]
+print(cell.vmin)         # [vx_min, vy_min, vz_min]
+print(cell.vmax)         # [vx_max, vy_max, vz_max]
+print(cell.count)
+print(cell.status)
+
+vx, vy, vz = cell.velocity_axes((16, 8, 8))
+particles, index = cell.create_particles(velocity_bins=(16, 8, 8))
+probabilities, _ = get_probabilities(..., particles=particles)
+
+cell_probability = index.reshape(probabilities)
+# shape: (nvz, nvy, nvx)
+```
+
+無効セルでは `cell.valid == False` になり、`cell.create_particles()` は既定で
+空の粒子列を返します。
+
+## 保存とロード
+
+`estimate_velocity_range_map` で作った `VelocityRangeMap` は元の
+`data.directory`、`ispec`、`istep` を保持します。そのため、引数なしの
+`save()` で次の既定名に保存できます。
+
+```python
+path = range_map.save()
+print(path)
+# data.directory / "vdsolverf-velocity-range-map-ispec0-istep-1.npz"
+```
+
+ロードするときは、同じ `directory` / `ispec` / `istep` から既定パスを
+組み立てられます。
+
+```python
+from vdsolverf.core import VelocityRangeMap
+
+range_map = VelocityRangeMap.load(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+)
+```
+
+任意のパスに保存する場合は `range_map.save("path/to/range-map.npz")`、
+任意のパスから読む場合は `VelocityRangeMap.load("path/to/range-map.npz")`
+を使います。
+
 ## 反射と適用範囲
 
 forward trace は実際の EM field と境界を使って粒子を進めるため、電位分布に

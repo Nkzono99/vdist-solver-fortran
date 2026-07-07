@@ -51,7 +51,7 @@ C API lives through the umbrella, so Python consumers see `get_backtraces`,
 ## Python package
 
 ```
-vdsolverf.core         Particle, PhaseGrid, VelocityRangeMap dataclasses
+vdsolverf.core         Particle, PhaseGrid, VelocityRangeMap / VelocityRangeCell dataclasses
 vdsolverf.emses.wrapper
   _load_dll(...)       Resolves the platform-specific shared library
   get_backtrace(...)   Single-particle convenience wrapper

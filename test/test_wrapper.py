@@ -18,6 +18,7 @@ class _FakeInput:
 
 class _FakeData:
     inp = _FakeInput()
+    directory = Path("/tmp/vdsolverf-fake-run")
 
 
 class _FakeTemporaryInput:
@@ -156,6 +157,10 @@ class EstimateVelocityRangeMapDllTest(unittest.TestCase):
         np.testing.assert_array_equal(range_map.count, [[[7]]])
         np.testing.assert_allclose(range_map.mean_v, [[[[0.0, 0.0, 0.0]]]])
         np.testing.assert_allclose(range_map.confidence, [[[1.0]]])
+        self.assertEqual(range_map.directory, _FakeData.directory)
+        self.assertEqual(range_map.metadata["directory"], str(_FakeData.directory))
+        self.assertEqual(range_map.metadata["ispec"], 0)
+        self.assertEqual(range_map.metadata["istep"], 0)
 
 
 class VelocityRangeValidationTest(unittest.TestCase):

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from itertools import product
-from typing import Dict, List, Tuple
+import json
+from pathlib import Path
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 
@@ -8,6 +10,7 @@ from .particles import Particle
 
 
 VelocityBins = Tuple[int, int, int]
+PathLike = Union[str, Path]
 
 
 @dataclass
@@ -26,6 +29,123 @@ class VelocityRangeIndex:
         result = np.full(self.shape, fill_value, dtype=result_dtype)
         result.reshape(-1)[self.flat_indices] = values
         return result
+
+
+@dataclass(frozen=True)
+class VelocityRangeCell:
+    range_map: "VelocityRangeMap"
+    iz: int
+    iy: int
+    ix: int
+
+    @property
+    def index(self) -> Tuple[int, int, int]:
+        return self.iz, self.iy, self.ix
+
+    @property
+    def position(self) -> np.ndarray:
+        return np.array(
+            [
+                0.5 * (self.range_map.x_edges[self.ix] + self.range_map.x_edges[self.ix + 1]),
+                0.5 * (self.range_map.y_edges[self.iy] + self.range_map.y_edges[self.iy + 1]),
+                0.5 * (self.range_map.z_edges[self.iz] + self.range_map.z_edges[self.iz + 1]),
+            ],
+            dtype=np.float64,
+        )
+
+    @property
+    def vmin(self) -> np.ndarray:
+        return np.array(
+            [
+                self.range_map.vx_min[self.index],
+                self.range_map.vy_min[self.index],
+                self.range_map.vz_min[self.index],
+            ],
+            dtype=np.float64,
+        )
+
+    @property
+    def vmax(self) -> np.ndarray:
+        return np.array(
+            [
+                self.range_map.vx_max[self.index],
+                self.range_map.vy_max[self.index],
+                self.range_map.vz_max[self.index],
+            ],
+            dtype=np.float64,
+        )
+
+    @property
+    def count(self) -> int:
+        return int(self.range_map.count[self.index])
+
+    @property
+    def weight_sum(self) -> float:
+        return float(self.range_map.weight_sum[self.index])
+
+    @property
+    def mean_v(self) -> np.ndarray:
+        return self.range_map.mean_v[self.index]
+
+    @property
+    def cov_v(self) -> np.ndarray:
+        return self.range_map.cov_v[self.index]
+
+    @property
+    def status(self) -> int:
+        return int(self.range_map.status[self.index])
+
+    @property
+    def confidence(self) -> float:
+        return float(self.range_map.confidence[self.index])
+
+    @property
+    def valid(self) -> bool:
+        return bool(self.range_map.valid_mask[self.index])
+
+    def velocity_axes(self, velocity_bins: VelocityBins) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        nvx, nvy, nvz = velocity_bins
+        if min(nvx, nvy, nvz) < 1:
+            raise ValueError("velocity_bins must contain positive integers")
+
+        return (
+            np.linspace(self.range_map.vx_min[self.index], self.range_map.vx_max[self.index], nvx),
+            np.linspace(self.range_map.vy_min[self.index], self.range_map.vy_max[self.index], nvy),
+            np.linspace(self.range_map.vz_min[self.index], self.range_map.vz_max[self.index], nvz),
+        )
+
+    def create_particles(
+        self,
+        velocity_bins: VelocityBins,
+        *,
+        include_invalid: bool = False,
+    ) -> Tuple[List[Particle], VelocityRangeIndex]:
+        nvx, nvy, nvz = velocity_bins
+        if min(nvx, nvy, nvz) < 1:
+            raise ValueError("velocity_bins must contain positive integers")
+
+        shape = (nvz, nvy, nvx)
+        if not include_invalid and not self.valid:
+            return [], VelocityRangeIndex(shape, np.array([], dtype=np.int64))
+
+        vx_values, vy_values, vz_values = self.velocity_axes(velocity_bins)
+        position = self.position
+        particles: List[Particle] = []
+        flat_indices = []
+
+        for ivz, ivy, ivx in product(range(nvz), range(nvy), range(nvx)):
+            particles.append(
+                Particle(
+                    position.copy(),
+                    np.array(
+                        [vx_values[ivx], vy_values[ivy], vz_values[ivz]],
+                        dtype=np.float64,
+                    ),
+                )
+            )
+            flat_indices.append(np.ravel_multi_index((ivz, ivy, ivx), shape))
+
+        return particles, VelocityRangeIndex(shape, np.array(flat_indices, dtype=np.int64))
 
 
 @dataclass
@@ -48,6 +168,7 @@ class VelocityRangeMap:
     status: np.ndarray = None
     confidence: np.ndarray = None
     metadata: Dict = field(default_factory=dict)
+    directory: PathLike = None
 
     def __post_init__(self):
         self.x_edges = np.asarray(self.x_edges, dtype=np.float64)
@@ -92,7 +213,22 @@ class VelocityRangeMap:
         else:
             self.confidence = np.asarray(self.confidence, dtype=np.float64)
 
+        self.metadata = dict(self.metadata)
+        if self.directory is not None:
+            self.directory = Path(self.directory)
+
         self._validate_shapes()
+
+    def __getitem__(self, key) -> VelocityRangeCell:
+        if not isinstance(key, tuple) or len(key) != 3:
+            raise IndexError("VelocityRangeMap expects indices as range_map[iz, iy, ix]")
+
+        iz, iy, ix = (
+            self._normalize_index(key[0], self.cell_shape[0], "z"),
+            self._normalize_index(key[1], self.cell_shape[1], "y"),
+            self._normalize_index(key[2], self.cell_shape[2], "x"),
+        )
+        return VelocityRangeCell(self, iz, iy, ix)
 
     @property
     def cell_shape(self) -> Tuple[int, int, int]:
@@ -159,6 +295,134 @@ class VelocityRangeMap:
 
         return particles, VelocityRangeIndex(shape, np.array(flat_indices, dtype=np.int64))
 
+    def default_path(self, filename: str = None) -> Path:
+        if self.directory is None:
+            raise ValueError("directory is required to build the default range-map path")
+
+        return self.default_path_for(
+            self.directory,
+            ispec=self.metadata.get("ispec"),
+            istep=self.metadata.get("istep"),
+            filename=filename,
+        )
+
+    def save(
+        self,
+        path: PathLike = None,
+        *,
+        directory: PathLike = None,
+        filename: str = None,
+    ) -> Path:
+        if path is not None and (directory is not None or filename is not None):
+            raise ValueError("pass either path or directory/filename, not both")
+
+        stored_directory = self.directory
+        if path is None:
+            save_directory = Path(directory) if directory is not None else self.directory
+            if save_directory is None:
+                raise ValueError("path or directory is required to save a range map")
+            path = self.default_path_for(
+                save_directory,
+                ispec=self.metadata.get("ispec"),
+                istep=self.metadata.get("istep"),
+                filename=filename,
+            )
+            if stored_directory is None:
+                stored_directory = save_directory
+        else:
+            path = Path(path)
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            path,
+            x_edges=self.x_edges,
+            y_edges=self.y_edges,
+            z_edges=self.z_edges,
+            vx_min=self.vx_min,
+            vx_max=self.vx_max,
+            vy_min=self.vy_min,
+            vy_max=self.vy_max,
+            vz_min=self.vz_min,
+            vz_max=self.vz_max,
+            count=self.count,
+            weight_sum=self.weight_sum,
+            mean_v=self.mean_v,
+            cov_v=self.cov_v,
+            status=self.status,
+            confidence=self.confidence,
+            metadata_json=np.array(json.dumps(_json_ready(self.metadata))),
+            directory=np.array("" if stored_directory is None else str(stored_directory)),
+        )
+        return path
+
+    @classmethod
+    def load(
+        cls,
+        path: PathLike = None,
+        *,
+        directory: PathLike = None,
+        ispec: int = None,
+        istep: int = None,
+        filename: str = None,
+    ) -> "VelocityRangeMap":
+        if path is not None and (directory is not None or filename is not None):
+            raise ValueError("pass either path or directory/filename, not both")
+
+        load_directory = None if directory is None else Path(directory)
+        if path is None:
+            if load_directory is None:
+                raise ValueError("path or directory is required to load a range map")
+            path = cls.default_path_for(
+                load_directory,
+                ispec=ispec,
+                istep=istep,
+                filename=filename,
+            )
+        else:
+            path = Path(path)
+
+        with np.load(path, allow_pickle=False) as data:
+            metadata = json.loads(str(data["metadata_json"].item()))
+            stored_directory = str(data["directory"].item())
+            map_directory = Path(stored_directory) if stored_directory else load_directory
+
+            return cls(
+                x_edges=data["x_edges"],
+                y_edges=data["y_edges"],
+                z_edges=data["z_edges"],
+                vx_min=data["vx_min"],
+                vx_max=data["vx_max"],
+                vy_min=data["vy_min"],
+                vy_max=data["vy_max"],
+                vz_min=data["vz_min"],
+                vz_max=data["vz_max"],
+                count=data["count"],
+                weight_sum=data["weight_sum"],
+                mean_v=data["mean_v"],
+                cov_v=data["cov_v"],
+                status=data["status"],
+                confidence=data["confidence"],
+                metadata=metadata,
+                directory=map_directory,
+            )
+
+    @staticmethod
+    def default_filename_for(ispec: int = None, istep: int = None) -> str:
+        if ispec is not None and istep is not None:
+            return f"vdsolverf-velocity-range-map-ispec{int(ispec)}-istep{int(istep)}.npz"
+        return "vdsolverf-velocity-range-map.npz"
+
+    @classmethod
+    def default_path_for(
+        cls,
+        directory: PathLike,
+        *,
+        ispec: int = None,
+        istep: int = None,
+        filename: str = None,
+    ) -> Path:
+        return Path(directory) / (filename or cls.default_filename_for(ispec, istep))
+
     def expand_cells(self, mask: np.ndarray, factor: float):
         if factor <= 0:
             raise ValueError("factor must be positive")
@@ -206,3 +470,29 @@ class VelocityRangeMap:
             raise ValueError("mean_v shape must be count.shape + (3,)")
         if self.cov_v.shape != expected + (3, 3):
             raise ValueError("cov_v shape must be count.shape + (3, 3)")
+
+    @staticmethod
+    def _normalize_index(value, size: int, axis_name: str) -> int:
+        if isinstance(value, slice):
+            raise IndexError("VelocityRangeMap cell access does not support slices")
+
+        index = int(value)
+        if index < 0:
+            index += size
+        if index < 0 or index >= size:
+            raise IndexError(f"{axis_name} index out of range")
+        return index
+
+
+def _json_ready(value):
+    if isinstance(value, dict):
+        return {str(key): _json_ready(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_ready(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return _json_ready(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, Path):
+        return str(value)
+    return value

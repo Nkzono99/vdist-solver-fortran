@@ -594,13 +594,21 @@ def estimate_velocity_range_map_dll(
         status=status,
         confidence=confidence,
         metadata={
+            "directory": str(data.directory),
+            "ispec": ispec,
+            "istep": istep,
+            "dt": dt,
+            "max_step": max_step,
+            "use_adaptive_dt": use_adaptive_dt,
             "coverage_sigma": coverage_sigma,
             "safety_factor": safety_factor,
             "source_samples_per_cell": source_samples_per_cell,
             "velocity_sample_mode": velocity_sample_mode,
             "minimum_count": minimum_count,
             "collect_moments": collect_moments,
+            "n_threads": n_threads,
         },
+        directory=data.directory,
     )
 
 

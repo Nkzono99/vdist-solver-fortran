@@ -51,7 +51,7 @@ C シンボルを公開するのは `m_emses_solver` だけです。ビルダモ
 ## Python パッケージ
 
 ```
-vdsolverf.core         Particle, PhaseGrid, VelocityRangeMap データクラス
+vdsolverf.core         Particle, PhaseGrid, VelocityRangeMap / VelocityRangeCell データクラス
 vdsolverf.emses.wrapper
   _load_dll(...)       プラットフォームに応じた共有ライブラリを解決
   get_backtrace(...)   単一粒子用のコンビニエンスラッパ
