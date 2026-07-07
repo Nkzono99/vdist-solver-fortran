@@ -105,6 +105,7 @@ range_map = validate_and_expand_velocity_range_map(
 | `velocity_bins` | `create_particles()` でセルごとに作る速度格子数。返り値の順序は `(nvx, nvy, nvz)`。 |
 | `n_threads` | Fortran 側の OpenMP thread 数。未指定時は `OMP_NUM_THREADS`、なければ `1`。 |
 | `collect_moments` | `True` で `mean_v` / `cov_v` を計算する。メモリ使用量が増えるため既定は `False`。 |
+| `show_progress` | `True` で `get_probabilities` と同じ形式の progress bar を表示する。バッチログを抑えたい場合は `False`。 |
 
 ## 戻り値と diagnostics
 

@@ -6,6 +6,7 @@ module m_emses_autorange
 
 !$  use omp_lib, only: omp_get_thread_num, omp_set_num_threads
 
+    use forbear, only: bar_object
     use finbound, only: t_CollisionRecord
 
     use m_vdsolverf_core
@@ -38,6 +39,7 @@ contains
         velocity_sample_mode, &
         minimum_count, &
         collect_moments, &
+        show_progress, &
         return_vx_min, &
         return_vx_max, &
         return_vy_min, &
@@ -65,6 +67,7 @@ contains
         integer(c_int), value, intent(in) :: velocity_sample_mode
         integer(c_int), value, intent(in) :: minimum_count
         integer(c_int), value, intent(in) :: collect_moments
+        integer(c_int), value, optional, intent(in) :: show_progress
         real(c_double), intent(out) :: return_vx_min(lx, ly, lz)
         real(c_double), intent(out) :: return_vx_max(lx, ly, lz)
         real(c_double), intent(out) :: return_vy_min(lx, ly, lz)
@@ -82,6 +85,11 @@ contains
         real(c_double) :: nan_value
         integer :: active_n_threads
         logical :: collect_moments_enabled
+        logical :: show_progress_enabled
+        type(bar_object) :: bar
+        integer :: progress_total_tasks
+        integer :: progress_completed_tasks
+        integer :: progress_last_percent
         real(c_double), allocatable :: local_vx_min(:, :, :, :)
         real(c_double), allocatable :: local_vx_max(:, :, :, :)
         real(c_double), allocatable :: local_vy_min(:, :, :, :)
@@ -99,6 +107,13 @@ contains
             active_n_threads = max(1, int(n_threads))
         end if
         collect_moments_enabled = collect_moments == 1
+        show_progress_enabled = .false.
+        if (present(show_progress)) then
+            show_progress_enabled = show_progress == 1
+        end if
+        progress_total_tasks = 0
+        progress_completed_tasks = 0
+        progress_last_percent = -1
 
 !$      call omp_set_num_threads(active_n_threads)
 
@@ -106,12 +121,171 @@ contains
         return_status = STATUS_FALLBACK
         return_confidence = 0d0
 
+        call initialize_progress_bar
         call trace_external_boundary_sources
         call trace_emission_surface_sources
+        call finish_progress_bar
         call merge_thread_accumulators
         call finalize_cells
 
     contains
+
+        subroutine initialize_progress_bar
+            if (.not. show_progress_enabled) then
+                return
+            end if
+
+            progress_total_tasks = count_external_boundary_source_tasks() &
+                                   + count_emission_surface_source_tasks()
+            if (progress_total_tasks <= 0) then
+                show_progress_enabled = .false.
+                return
+            end if
+
+            call bar%initialize(filled_char_string='+', &
+                                prefix_string='progress |', &
+                                suffix_string='| ', &
+                                add_progress_percent=.true.)
+            call bar%start
+        end subroutine
+
+        subroutine finish_progress_bar
+            if (.not. show_progress_enabled) then
+                return
+            end if
+
+            call bar%update(current=1d0)
+            call bar%destroy
+        end subroutine
+
+        subroutine record_progress_task
+            real(c_double) :: progress_fraction
+            integer :: progress_percent
+
+            if (.not. show_progress_enabled) then
+                return
+            end if
+
+!$omp      critical(emses_autorange_progress)
+            progress_completed_tasks = progress_completed_tasks + 1
+            progress_fraction = min(0.99d0, dble(progress_completed_tasks)/dble(progress_total_tasks))
+            progress_percent = int(100d0*progress_fraction)
+            if (progress_percent > progress_last_percent) then
+                call bar%update(current=progress_fraction)
+                progress_last_percent = progress_percent
+            end if
+!$omp      end critical(emses_autorange_progress)
+        end subroutine
+
+        integer function count_external_boundary_source_tasks() result(ret)
+            integer :: axis
+            real(c_double) :: patch_min(3), patch_max(3)
+            real(c_double) :: vmean(3), vthermal(3)
+
+            ret = 0
+            if (nflag_emit(ispec) /= 0) then
+                return
+            end if
+
+            vmean = vdri_vector(ispec)
+            vthermal = abs(vth_vector(ispec))
+
+            do axis = 1, 3
+                if (npbnd(axis, ispec) /= 2) then
+                    cycle
+                end if
+
+                patch_min = [0d0, 0d0, 0d0]
+                patch_max = [dble(lx), dble(ly), dble(lz)]
+
+                patch_min(axis) = 0d0
+                patch_max(axis) = 0d0
+                if (.not. (axis == 3 .and. zssurf >= 0d0)) then
+                    ret = ret + count_source_patch_tasks(axis, 1, patch_min, patch_max, vmean, vthermal)
+                end if
+
+                patch_min = [0d0, 0d0, 0d0]
+                patch_max = [dble(lx), dble(ly), dble(lz)]
+                patch_min(axis) = dble(dim_size(axis))
+                patch_max(axis) = patch_min(axis)
+                ret = ret + count_source_patch_tasks(axis, -1, patch_min, patch_max, vmean, vthermal)
+            end do
+        end function
+
+        integer function count_emission_surface_source_tasks() result(ret)
+            integer :: iepl
+            integer :: iepl_start
+            integer :: iepl_end
+            integer :: normal_axis
+            integer :: normal_sign
+            real(c_double) :: patch_min(3), patch_max(3)
+            real(c_double) :: vmean(3), vthermal(3)
+
+            ret = 0
+            if (nepl(ispec) == 0) then
+                return
+            end if
+
+            if (ispec == 1) then
+                iepl_start = 1
+            else
+                iepl_start = sum(nepl(1:ispec - 1)) + 1
+            end if
+            iepl_end = sum(nepl(1:ispec))
+
+            do iepl = iepl_start, iepl_end
+                normal_axis = abs(nemd(iepl))
+                if (normal_axis < 1 .or. normal_axis > 3) then
+                    cycle
+                end if
+
+                if (nemd(iepl) > 0) then
+                    normal_sign = 1
+                else
+                    normal_sign = -1
+                end if
+
+                patch_min = [xmine(iepl), ymine(iepl), zmine(iepl)]
+                patch_max = [xmaxe(iepl), ymaxe(iepl), zmaxe(iepl)]
+                vmean = emission_vdri_vector(ispec, iepl)
+                vthermal = abs(emission_vth_vector(ispec, iepl))
+
+                ret = ret + count_source_patch_tasks(normal_axis, normal_sign, patch_min, patch_max, vmean, vthermal)
+            end do
+        end function
+
+        integer function count_source_patch_tasks(normal_axis, normal_sign, patch_min, patch_max, vmean, vthermal) result(ret)
+            integer, intent(in) :: normal_axis
+            integer, intent(in) :: normal_sign
+            real(c_double), intent(in) :: patch_min(3), patch_max(3)
+            real(c_double), intent(in) :: vmean(3), vthermal(3)
+
+            integer :: tangent1, tangent2
+            integer :: c1_start, c1_end, c2_start, c2_end
+            integer :: n1, n2
+            real(c_double) :: velocities(3, 32)
+            integer :: nvel
+
+            ret = 0
+            call tangent_axes(normal_axis, tangent1, tangent2)
+            call build_velocity_support(vmean, vthermal, normal_axis, normal_sign, velocities, nvel)
+            if (nvel <= 0) then
+                return
+            end if
+
+            c1_start = first_cell(patch_min(tangent1), dim_size(tangent1))
+            c1_end = last_cell(patch_max(tangent1), dim_size(tangent1))
+            c2_start = first_cell(patch_min(tangent2), dim_size(tangent2))
+            c2_end = last_cell(patch_max(tangent2), dim_size(tangent2))
+
+            n1 = c1_end - c1_start + 1
+            n2 = c2_end - c2_start + 1
+            if (n1 <= 0 .or. n2 <= 0) then
+                return
+            end if
+
+            ret = n1*n2
+        end function
 
         subroutine initialize_thread_accumulators
             allocate (local_vx_min(lx, ly, lz, active_n_threads))
@@ -290,11 +464,17 @@ contains
 
                     low2 = max(patch_min(tangent2), dble(c2))
                     high2 = min(patch_max(tangent2), dble(c2 + 1))
-                    if (high2 <= low2) cycle
+                    if (high2 <= low2) then
+                        call record_progress_task
+                        cycle
+                    end if
 
                     low1 = max(patch_min(tangent1), dble(c1))
                     high1 = min(patch_max(tangent1), dble(c1 + 1))
-                    if (high1 <= low1) cycle
+                    if (high1 <= low1) then
+                        call record_progress_task
+                        cycle
+                    end if
 
                     do s2 = 1, nsub
                         do s1 = 1, nsub
@@ -308,6 +488,7 @@ contains
                             end do
                         end do
                     end do
+                    call record_progress_task
                 end do
                 !$omp end parallel do
             else
@@ -319,11 +500,17 @@ contains
 
                     low2 = max(patch_min(tangent2), dble(c2))
                     high2 = min(patch_max(tangent2), dble(c2 + 1))
-                    if (high2 <= low2) cycle
+                    if (high2 <= low2) then
+                        call record_progress_task
+                        cycle
+                    end if
 
                     low1 = max(patch_min(tangent1), dble(c1))
                     high1 = min(patch_max(tangent1), dble(c1 + 1))
-                    if (high1 <= low1) cycle
+                    if (high1 <= low1) then
+                        call record_progress_task
+                        cycle
+                    end if
 
                     do s2 = 1, nsub
                         do s1 = 1, nsub
@@ -337,6 +524,7 @@ contains
                             end do
                         end do
                     end do
+                    call record_progress_task
                 end do
                 !$omp end parallel do
             end if

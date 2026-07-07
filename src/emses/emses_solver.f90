@@ -43,6 +43,7 @@ contains
         velocity_sample_mode, &
         minimum_count, &
         collect_moments, &
+        show_progress, &
         return_vx_min, &
         return_vx_max, &
         return_vy_min, &
@@ -93,6 +94,8 @@ contains
             !! Count threshold used for LOW_COUNT diagnostics
         integer(c_int), value, intent(in) :: collect_moments
             !! Flag to collect mean/cov velocity diagnostics
+        integer(c_int), value, intent(in) :: show_progress
+            !! Flag to show progress bar logging
         real(c_double), intent(out) :: return_vx_min(lx, ly, lz)
         real(c_double), intent(out) :: return_vx_max(lx, ly, lz)
         real(c_double), intent(out) :: return_vy_min(lx, ly, lz)
@@ -129,6 +132,7 @@ contains
             velocity_sample_mode, &
             minimum_count, &
             collect_moments, &
+            show_progress, &
             return_vx_min, &
             return_vx_max, &
             return_vy_min, &

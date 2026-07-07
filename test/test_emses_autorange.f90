@@ -62,6 +62,7 @@ contains
             velocity_sample_mode=0, &
             minimum_count=1, &
             collect_moments=1, &
+            show_progress=0, &
             return_vx_min=vx_min, &
             return_vx_max=vx_max, &
             return_vy_min=vy_min, &
@@ -208,6 +209,7 @@ contains
             velocity_sample_mode=0, &
             minimum_count=1, &
             collect_moments=0, &
+            show_progress=0, &
             n_threads=n_threads, &
             return_vx_min=vx_min, &
             return_vx_max=vx_max, &

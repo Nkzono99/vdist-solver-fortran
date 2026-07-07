@@ -415,6 +415,7 @@ def estimate_velocity_range_map(
     velocity_sample_mode: Literal["ellipsoid"] = "ellipsoid",
     minimum_count: int = 4,
     collect_moments: bool = False,
+    show_progress: bool = True,
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
@@ -442,6 +443,7 @@ def estimate_velocity_range_map(
         velocity_sample_mode=velocity_sample_mode,
         minimum_count=minimum_count,
         collect_moments=collect_moments,
+        show_progress=show_progress,
         dll=dll,
         n_threads=n_threads,
         tmp_input_suffix=tmp_input_suffix,
@@ -463,6 +465,7 @@ def estimate_velocity_range_map_dll(
     velocity_sample_mode: Literal["ellipsoid"] = "ellipsoid",
     minimum_count: int = 4,
     collect_moments: bool = False,
+    show_progress: bool = True,
     n_threads: int = 1,
     tmp_input_suffix: Union[str, None] = None,
 ) -> VelocityRangeMap:
@@ -484,6 +487,7 @@ def estimate_velocity_range_map_dll(
         c_int,  # velocity_sample_mode
         c_int,  # minimum_count
         c_int,  # collect_moments
+        c_int,  # show_progress
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vx_min
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vx_max
         np.ctypeslib.ndpointer(dtype=np.float64, ndim=3),  # vy_min
@@ -538,6 +542,7 @@ def estimate_velocity_range_map_dll(
         _velocity_sample_mode = c_int(_velocity_sample_mode_code(velocity_sample_mode))
         _minimum_count = c_int(minimum_count)
         _collect_moments = c_int(1 if collect_moments else 0)
+        _show_progress = c_int(1 if show_progress else 0)
         _n_threads = c_int(n_threads)
 
         dll.estimate_velocity_range_map(
@@ -558,6 +563,7 @@ def estimate_velocity_range_map_dll(
             _velocity_sample_mode,
             _minimum_count,
             _collect_moments,
+            _show_progress,
             vx_min,
             vx_max,
             vy_min,
@@ -606,6 +612,7 @@ def estimate_velocity_range_map_dll(
             "velocity_sample_mode": velocity_sample_mode,
             "minimum_count": minimum_count,
             "collect_moments": collect_moments,
+            "show_progress": show_progress,
             "n_threads": n_threads,
         },
         directory=data.directory,

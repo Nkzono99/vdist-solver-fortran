@@ -105,6 +105,7 @@ production velocity grid.
 | `velocity_bins` | Velocity grid size per valid cell in `create_particles()`. The order is `(nvx, nvy, nvz)`. |
 | `n_threads` | Number of OpenMP threads in Fortran. Defaults to `OMP_NUM_THREADS`, or `1` if unset. |
 | `collect_moments` | Computes `mean_v` / `cov_v` when `True`. It uses more memory, so the default is `False`. |
+| `show_progress` | Shows a progress bar in the same style as `get_probabilities` when `True`. Set `False` to keep batch logs quiet. |
 
 ## Return Values and Diagnostics
 

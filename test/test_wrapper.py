@@ -53,23 +53,25 @@ class _FakeEstimateVelocityRangeMapFunction:
         self.n_threads = None
         self.coverage_sigma = None
         self.collect_moments = None
+        self.show_progress = None
 
     def __call__(self, *args):
         self.coverage_sigma = args[8].value
         self.collect_moments = args[16].value
+        self.show_progress = args[17].value
         self.n_threads = args[-1]._obj.value
-        args[17][:] = 1.0
-        args[18][:] = 2.0
-        args[19][:] = 3.0
-        args[20][:] = 4.0
-        args[21][:] = 5.0
-        args[22][:] = 6.0
-        args[23][:] = 7
-        args[24][:] = 7.0
-        args[25][:] = 0.0
+        args[18][:] = 1.0
+        args[19][:] = 2.0
+        args[20][:] = 3.0
+        args[21][:] = 4.0
+        args[22][:] = 5.0
+        args[23][:] = 6.0
+        args[24][:] = 7
+        args[25][:] = 7.0
         args[26][:] = 0.0
-        args[27][:] = 0
-        args[28][:] = 1.0
+        args[27][:] = 0.0
+        args[28][:] = 0
+        args[29][:] = 1.0
 
 
 class _FakeDll:
@@ -146,11 +148,13 @@ class EstimateVelocityRangeMapDllTest(unittest.TestCase):
                 max_probability_types=100,
                 dll=fake_dll,
                 n_threads=2,
+                show_progress=False,
             )
 
         self.assertEqual(fake_dll.estimate_velocity_range_map.n_threads, 2)
         self.assertEqual(fake_dll.estimate_velocity_range_map.coverage_sigma, 4.0)
         self.assertEqual(fake_dll.estimate_velocity_range_map.collect_moments, 0)
+        self.assertEqual(fake_dll.estimate_velocity_range_map.show_progress, 0)
         self.assertEqual(range_map.x_edges.tolist(), [0.0, 1.0])
         np.testing.assert_allclose(range_map.vx_min, [[[1.0]]])
         np.testing.assert_allclose(range_map.vx_max, [[[2.0]]])

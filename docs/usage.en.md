@@ -145,6 +145,7 @@ range_map = estimate_velocity_range_map(
     coverage_sigma=4.0,
     safety_factor=1.25,
     collect_moments=False,
+    show_progress=True,  # Default. Set False to keep logs quiet.
 )
 
 particles, index = range_map.create_particles(velocity_bins=(16, 8, 16))
