@@ -165,7 +165,9 @@ probability_grid = index.reshape(probabilities)
 `range_map.count` is the number of envelope support-point hits. It is a
 diagnostic sampling count, not a physical density. Cells with `count == 0`
 are skipped by `create_particles()` by default. Pass `collect_moments=True`
-when you also need the `mean_v` / `cov_v` diagnostics.
+when you also need the `mean_v` / `cov_v` diagnostics. See
+[Per-cell velocity range autorange](autorange.en.md) for parameter choices
+and validation.
 
 ## MPI particle parallelism
 

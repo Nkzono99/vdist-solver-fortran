@@ -162,7 +162,8 @@ probability_grid = index.reshape(probabilities)
 `range_map.count` は envelope support point の hit 数で、物理密度ではなく
 診断値です。`count == 0` のセルは `create_particles()` の既定では
 スキップされます。速度の `mean_v` / `cov_v` 診断も必要な場合は
-`collect_moments=True` を指定します。
+`collect_moments=True` を指定します。詳しい引数の選び方と validation は
+[セルごとの速度範囲自動推定](autorange.md) を参照してください。
 
 ## MPI 粒子並列
 
