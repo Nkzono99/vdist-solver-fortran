@@ -126,6 +126,53 @@ range_map = validate_and_expand_velocity_range_map(
 `index.reshape(probabilities)` を使うと、flatten された確率を
 `(nz, ny, nx, nvz, nvy, nvx)` に戻せます。
 
+## 速度範囲と 6 次元分布へのアクセス
+
+`VelocityRangeMap` は 6 次元分布そのものではなく、各空間セルの速度範囲を
+保持します。保存される速度軸情報は、セルごとの min/max です。
+
+```python
+range_map.vx_min      # shape: (nz, ny, nx)
+range_map.vx_max
+range_map.vy_min
+range_map.vy_max
+range_map.vz_min
+range_map.vz_max
+range_map.valid_mask  # shape: (nz, ny, nx)
+```
+
+あるセルの速度軸は、可視化時に指定する `velocity_bins` から復元します。
+
+```python
+iz, iy, ix = 10, 20, 30
+nvx, nvy, nvz = 16, 8, 8
+
+vx = np.linspace(range_map.vx_min[iz, iy, ix], range_map.vx_max[iz, iy, ix], nvx)
+vy = np.linspace(range_map.vy_min[iz, iy, ix], range_map.vy_max[iz, iy, ix], nvy)
+vz = np.linspace(range_map.vz_min[iz, iy, ix], range_map.vz_max[iz, iy, ix], nvz)
+```
+
+`get_probabilities` の結果を 6 次元配列として見る場合は、
+`create_particles()` が返す `index` を使います。
+
+```python
+velocity_bins = (16, 8, 8)  # (nvx, nvy, nvz)
+particles, index = range_map.create_particles(velocity_bins=velocity_bins)
+
+probabilities, _ = get_probabilities(..., particles=particles)
+prob_grid = index.reshape(probabilities)
+
+print(prob_grid.shape)
+# (nz, ny, nx, nvz, nvy, nvx)
+
+cell_probability = prob_grid[iz, iy, ix]
+# shape: (nvz, nvy, nvx)
+```
+
+`range_map.save()` で保存されるのは `vx_min/vx_max` などの範囲と diagnostics
+です。`prob_grid` や `vx/vy/vz` の全格子点は保存されません。したがって、
+ロード後も同じ `velocity_bins` を指定すれば同じ速度軸を復元できます。
+
 ## セル単位アクセス
 
 単一セルだけを詳しく見たい場合は、`range_map[iz, iy, ix]` で

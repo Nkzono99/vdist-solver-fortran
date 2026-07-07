@@ -126,6 +126,55 @@ shape `(nz, ny, nx)`.
 `index.reshape(probabilities)` maps flattened probabilities back to
 `(nz, ny, nx, nvz, nvy, nvx)`.
 
+## Accessing Velocity Ranges and 6D Distributions
+
+`VelocityRangeMap` does not store the 6D probability distribution itself. It
+stores the per-cell velocity ranges. The saved velocity-axis information is
+the min/max pair for each spatial cell.
+
+```python
+range_map.vx_min      # shape: (nz, ny, nx)
+range_map.vx_max
+range_map.vy_min
+range_map.vy_max
+range_map.vz_min
+range_map.vz_max
+range_map.valid_mask  # shape: (nz, ny, nx)
+```
+
+Recover the velocity axes for one cell from the `velocity_bins` used for
+visualization or particle creation.
+
+```python
+iz, iy, ix = 10, 20, 30
+nvx, nvy, nvz = 16, 8, 8
+
+vx = np.linspace(range_map.vx_min[iz, iy, ix], range_map.vx_max[iz, iy, ix], nvx)
+vy = np.linspace(range_map.vy_min[iz, iy, ix], range_map.vy_max[iz, iy, ix], nvy)
+vz = np.linspace(range_map.vz_min[iz, iy, ix], range_map.vz_max[iz, iy, ix], nvz)
+```
+
+Use the `index` returned by `create_particles()` to view `get_probabilities`
+results as a 6D array.
+
+```python
+velocity_bins = (16, 8, 8)  # (nvx, nvy, nvz)
+particles, index = range_map.create_particles(velocity_bins=velocity_bins)
+
+probabilities, _ = get_probabilities(..., particles=particles)
+prob_grid = index.reshape(probabilities)
+
+print(prob_grid.shape)
+# (nz, ny, nx, nvz, nvy, nvx)
+
+cell_probability = prob_grid[iz, iy, ix]
+# shape: (nvz, nvy, nvx)
+```
+
+`range_map.save()` stores the range arrays such as `vx_min/vx_max` plus
+diagnostics. It does not store `prob_grid` or every `vx/vy/vz` grid point.
+After loading, pass the same `velocity_bins` to reconstruct the same axes.
+
 ## Cell-Level Access
 
 Use `range_map[iz, iy, ix]` to inspect or sample a single spatial cell. It
