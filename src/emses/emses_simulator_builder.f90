@@ -395,7 +395,7 @@ contains
 
                     flux = curf(ispec)
                     if (curfs(iepl) >= 0d0) then
-                        flux = curfs(ispec)
+                        flux = curfs(iepl)
                     end if
 
                     density = solve_density_from_flux_erf( &
