@@ -45,6 +45,15 @@ result = get_probabilities_octree(
 velocity box になります。octree では `vx/vy/vz` の bin 数は使わず、範囲だけを
 使います。
 
+`PhaseGrid` の3要素タプルは `(start, end, count)` です。例えば
+`x=(120, 180, 16)` は 120 から 180 までの 16 点を `np.linspace` で作る指定で、
+刻み幅 16 ではありません。
+
+上の `max_depth=5`, `max_samples_per_cell=80_000`,
+`max_leaves_per_cell=4096` は、全 box を depth 5 まで完全に評価する容量ではなく、
+実務用の budget-limited 例です。status `2` または `4` が多い場合は容量を
+増やすか、velocity box を分割して評価してください。
+
 ## 任意の空間点とセル別速度範囲
 
 `PhaseGrid` の代わりに、空間点配列とセル別の速度範囲を渡せます。
@@ -86,23 +95,35 @@ result = get_probabilities_octree(
 | `velocities` | `(nsample, 3)` | 評価した速度サンプル |
 | `probabilities` | `(nsample,)` | サンプルごとの確率。未到達は `nan` |
 | `spatial_index` | `(nsample,)` | 各サンプルが属する空間点 index |
-| `leaf_bounds` | `(nleaf, 6)` | 評価した octree box の速度範囲 |
+| `leaf_bounds` | `(nleaf, 6)` | 評価した octree box の速度範囲。分割済みの中間 box も含む |
 | `leaf_value_min/max` | `(nleaf,)` | box 内サンプル確率の min/max |
 | `leaf_depth` | `(nleaf,)` | octree depth |
-| `leaf_sample_start/count` | `(nleaf,)` | box に対応するサンプル範囲 |
+| `leaf_sample_start/count` | `(nleaf,)` | compact 後の `velocities/probabilities` に対する box ごとのサンプル範囲 |
 | `status` | `(nspatial,)` | 空間点ごとの status |
 | `sample_count`, `leaf_count` | `(nspatial,)` | 空間点ごとの出力数 |
+| `metadata` | `dict` | 実行時パラメータ、`actual_sample_count`、`actual_leaf_count` |
 
 status は以下です。
 
 | 値 | 意味 |
 |---:|---|
 | `0` | OK |
-| `1` | root box 内に有効確率が見つからない |
+| `1` | root box 内に正の確率 signal が見つからない |
 | `2` | `max_samples_per_cell` に到達 |
-| `3` | edge validation により root box を拡張しきった |
+| `3` | root box が少なくとも1回拡張された。端の signal が残っているとは限らない |
 | `4` | `max_leaves_per_cell` に到達 |
 | `5` | velocity bounds が不正 |
+
+非ゼロ status の空間点にも scout sample や部分的な sample が返ることがあります。
+可視化や後段処理では、先に status を確認してください。
+
+```python
+import numpy as np
+
+bad = np.flatnonzero(result.status != 0)
+if bad.size:
+    print("non-OK octree points:", bad[:10], "status:", result.status[bad[:10]])
+```
 
 ## 可視化
 
@@ -112,9 +133,11 @@ status は以下です。
 import numpy as np
 
 i = 0
-mask = result.spatial_index == i
-v = result.velocities[mask]
-p = result.probabilities[mask]
+if result.status[i] != 0:
+    print("warning: non-OK octree status", result.status[i])
+
+v = result.velocities_for_spatial(i)
+p = result.probabilities_for_spatial(i)
 
 valid = np.isfinite(p)
 # 例: vx-vz 平面へ scatter
@@ -122,11 +145,22 @@ ax.scatter(v[valid, 0], v[valid, 2], c=p[valid], s=2)
 ```
 
 octree box の射影を見たい場合は `leaf_spatial_index` と `leaf_bounds` を使います。
+ここでの `leaf_*` は出力互換のための名前で、terminal leaf だけでなく、split 判定
+前に評価された中間 box も含みます。
 
 ```python
-leaf_mask = result.leaf_spatial_index == i
+leaf_mask = result.leaf_mask(i)
 boxes = result.leaf_bounds[leaf_mask]
 value_range = result.leaf_value_max[leaf_mask] - result.leaf_value_min[leaf_mask]
+```
+
+ある leaf に属するサンプルは、compact 済み配列へ直接 slice できます。
+
+```python
+leaf_index = np.flatnonzero(leaf_mask)[0]
+sample_slice = result.leaf_sample_slice(leaf_index)
+leaf_velocities = result.velocities[sample_slice]
+leaf_probabilities = result.probabilities[sample_slice]
 ```
 
 ## 探索パラメータ

@@ -17,6 +17,7 @@ module m_emses_octree_probabilities
     public STATUS_OK
     public STATUS_NO_SIGNAL
     public STATUS_SAMPLE_LIMIT_REACHED
+    public STATUS_ROOT_EXPANDED
     public STATUS_EXPANSION_LIMIT_REACHED
     public STATUS_OUTPUT_CAPACITY_EXCEEDED
     public STATUS_INVALID_BOUNDS
@@ -24,7 +25,8 @@ module m_emses_octree_probabilities
     integer(c_int), parameter :: STATUS_OK = 0
     integer(c_int), parameter :: STATUS_NO_SIGNAL = 1
     integer(c_int), parameter :: STATUS_SAMPLE_LIMIT_REACHED = 2
-    integer(c_int), parameter :: STATUS_EXPANSION_LIMIT_REACHED = 3
+    integer(c_int), parameter :: STATUS_ROOT_EXPANDED = 3
+    integer(c_int), parameter :: STATUS_EXPANSION_LIMIT_REACHED = STATUS_ROOT_EXPANDED
     integer(c_int), parameter :: STATUS_OUTPUT_CAPACITY_EXCEEDED = 4
     integer(c_int), parameter :: STATUS_INVALID_BOUNDS = 5
 
@@ -199,7 +201,7 @@ contains
                 if (pmax <= 0d0) return
                 if (edge_pmax/max(pmax, tiny(1d0)) <= edge_threshold_rel) return
                 call expand_bounds(bounds, expand_factor)
-                status = STATUS_EXPANSION_LIMIT_REACHED
+                status = STATUS_ROOT_EXPANDED
             end do
         end subroutine
 
@@ -333,14 +335,17 @@ contains
                         index = [ivx, ivy, ivz]
                         velocity = velocity_at_grid(bounds, index, bins)
                         prob = evaluate_probability(solver, spatial_points(:, ispatial), velocity)
+                        if (append_samples) then
+                            call append_sample(ispatial, velocity, prob, status)
+                            if (status == STATUS_SAMPLE_LIMIT_REACHED) then
+                                if (pmin == huge(1d0)) pmin = 0d0
+                                return
+                            end if
+                            sample_added = sample_added + 1
+                        end if
                         score = max(0d0, prob)
                         pmin = min(pmin, score)
                         pmax = max(pmax, score)
-                        if (append_samples) then
-                            call append_sample(ispatial, velocity, prob, status)
-                            if (status == STATUS_SAMPLE_LIMIT_REACHED) return
-                            sample_added = sample_added + 1
-                        end if
                     end do
                 end do
             end do

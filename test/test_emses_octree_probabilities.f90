@@ -4,6 +4,8 @@ program test_emses_octree_probabilities
                         t_Boundary, t_PlaneXYZ, new_PlaneX
     use m_emses_octree_probabilities, only: STATUS_OK, STATUS_SAMPLE_LIMIT_REACHED, &
                                             STATUS_NO_SIGNAL, &
+                                            STATUS_OUTPUT_CAPACITY_EXCEEDED, &
+                                            STATUS_INVALID_BOUNDS, &
                                             get_probabilities_octree_impl
     use m_field, only: t_VectorFieldGrid, new_VectorFieldGrid
     use m_particle, only: new_Particle
@@ -15,8 +17,10 @@ program test_emses_octree_probabilities
     implicit none
 
     call test_octree_samples_two_velocity_lobes()
+    call test_octree_reports_invalid_bounds()
     call test_octree_reports_no_signal()
     call test_octree_reports_sample_limit()
+    call test_octree_reports_leaf_capacity()
     call test_octree_parallel_matches_serial_counts()
 
     print *, "test_emses_octree_probabilities: all tests passed."
@@ -131,6 +135,61 @@ contains
         call assert_true("octree samples negative-vx lobe", has_left_lobe)
         call assert_true("octree samples positive-vx lobe", has_right_lobe)
         call assert_true("octree preserves invalid probability sentinel", has_invalid_sample)
+    end subroutine
+
+    subroutine test_octree_reports_invalid_bounds()
+        integer, parameter :: nspatial = 1
+        integer, parameter :: max_samples_per_cell = 8
+        integer, parameter :: max_leaves_per_cell = 4
+        integer, parameter :: sample_capacity = nspatial*max_samples_per_cell
+        integer, parameter :: leaf_capacity = nspatial*max_leaves_per_cell
+
+        type(t_ESSimulator) :: simulator
+        real(8) :: spatial_points(3, nspatial)
+        real(8) :: velocity_bounds(6, nspatial)
+        integer :: sample_spatial_index(sample_capacity)
+        real(8) :: velocities(3, sample_capacity)
+        real(8) :: probabilities(sample_capacity)
+        integer :: leaf_spatial_index(leaf_capacity)
+        real(8) :: leaf_bounds(6, leaf_capacity)
+        real(8) :: leaf_value_min(leaf_capacity)
+        real(8) :: leaf_value_max(leaf_capacity)
+        integer :: leaf_depth(leaf_capacity)
+        integer :: leaf_sample_start(leaf_capacity)
+        integer :: leaf_sample_count(leaf_capacity)
+        integer :: status(nspatial)
+        integer :: sample_count(nspatial)
+        integer :: leaf_count(nspatial)
+        integer :: actual_sample_count
+        integer :: actual_leaf_count
+        integer :: scout_bins(3)
+
+        qm(1) = 1d0
+        simulator = build_two_plane_simulator()
+        spatial_points(:, 1) = [1d0, 0.5d0, 0.5d0]
+        velocity_bounds(:, 1) = [2d0, -2d0, -0.5d0, 0.5d0, -0.5d0, 0.5d0]
+        scout_bins = [3, 3, 3]
+
+        call get_probabilities_octree_impl( &
+            simulator=simulator, ispec=1, nspatial=nspatial, &
+            spatial_points=spatial_points, velocity_bounds=velocity_bounds, &
+            dt=0.3d0, max_step=16, use_adaptive_dt=0, scout_bins=scout_bins, &
+            max_depth=1, max_samples_per_cell=max_samples_per_cell, &
+            max_leaves_per_cell=max_leaves_per_cell, refine_threshold_rel=1d-4, &
+            edge_threshold_rel=1d-4, expand_factor=1.25d0, max_expansions=0, &
+            return_sample_spatial_index=sample_spatial_index, &
+            return_velocities=velocities, return_probabilities=probabilities, &
+            return_leaf_spatial_index=leaf_spatial_index, return_leaf_bounds=leaf_bounds, &
+            return_leaf_value_min=leaf_value_min, return_leaf_value_max=leaf_value_max, &
+            return_leaf_depth=leaf_depth, return_leaf_sample_start=leaf_sample_start, &
+            return_leaf_sample_count=leaf_sample_count, return_status=status, &
+            return_sample_count=sample_count, return_leaf_count=leaf_count, &
+            return_actual_sample_count=actual_sample_count, &
+            return_actual_leaf_count=actual_leaf_count, n_threads=1)
+
+        call assert_equal_int("octree reports invalid bounds", status(1), STATUS_INVALID_BOUNDS)
+        call assert_equal_int("invalid bounds produce no samples", sample_count(1), 0)
+        call assert_equal_int("invalid bounds produce no leaves", leaf_count(1), 0)
     end subroutine
 
     subroutine test_octree_reports_no_signal()
@@ -276,6 +335,61 @@ contains
         call assert_equal_int("octree reports sample limit", status(1), STATUS_SAMPLE_LIMIT_REACHED)
         call assert_equal_int("octree caps samples at configured stride", &
                               sample_count(1), max_samples_per_cell)
+    end subroutine
+
+    subroutine test_octree_reports_leaf_capacity()
+        integer, parameter :: nspatial = 1
+        integer, parameter :: max_samples_per_cell = 128
+        integer, parameter :: max_leaves_per_cell = 1
+        integer, parameter :: sample_capacity = nspatial*max_samples_per_cell
+        integer, parameter :: leaf_capacity = nspatial*max_leaves_per_cell
+
+        type(t_ESSimulator) :: simulator
+        real(8) :: spatial_points(3, nspatial)
+        real(8) :: velocity_bounds(6, nspatial)
+        integer :: sample_spatial_index(sample_capacity)
+        real(8) :: velocities(3, sample_capacity)
+        real(8) :: probabilities(sample_capacity)
+        integer :: leaf_spatial_index(leaf_capacity)
+        real(8) :: leaf_bounds(6, leaf_capacity)
+        real(8) :: leaf_value_min(leaf_capacity)
+        real(8) :: leaf_value_max(leaf_capacity)
+        integer :: leaf_depth(leaf_capacity)
+        integer :: leaf_sample_start(leaf_capacity)
+        integer :: leaf_sample_count(leaf_capacity)
+        integer :: status(nspatial)
+        integer :: sample_count(nspatial)
+        integer :: leaf_count(nspatial)
+        integer :: actual_sample_count
+        integer :: actual_leaf_count
+        integer :: scout_bins(3)
+
+        qm(1) = 1d0
+        simulator = build_two_plane_simulator()
+        spatial_points(:, 1) = [1d0, 0.5d0, 0.5d0]
+        velocity_bounds(:, 1) = [-2d0, 2d0, -0.5d0, 0.5d0, -0.5d0, 0.5d0]
+        scout_bins = [5, 3, 3]
+
+        call get_probabilities_octree_impl( &
+            simulator=simulator, ispec=1, nspatial=nspatial, &
+            spatial_points=spatial_points, velocity_bounds=velocity_bounds, &
+            dt=0.3d0, max_step=16, use_adaptive_dt=0, scout_bins=scout_bins, &
+            max_depth=2, max_samples_per_cell=max_samples_per_cell, &
+            max_leaves_per_cell=max_leaves_per_cell, refine_threshold_rel=1d-4, &
+            edge_threshold_rel=1d-4, expand_factor=1.25d0, max_expansions=0, &
+            return_sample_spatial_index=sample_spatial_index, &
+            return_velocities=velocities, return_probabilities=probabilities, &
+            return_leaf_spatial_index=leaf_spatial_index, return_leaf_bounds=leaf_bounds, &
+            return_leaf_value_min=leaf_value_min, return_leaf_value_max=leaf_value_max, &
+            return_leaf_depth=leaf_depth, return_leaf_sample_start=leaf_sample_start, &
+            return_leaf_sample_count=leaf_sample_count, return_status=status, &
+            return_sample_count=sample_count, return_leaf_count=leaf_count, &
+            return_actual_sample_count=actual_sample_count, &
+            return_actual_leaf_count=actual_leaf_count, n_threads=1)
+
+        call assert_equal_int("octree reports leaf capacity", status(1), STATUS_OUTPUT_CAPACITY_EXCEEDED)
+        call assert_equal_int("octree caps leaves at configured stride", &
+                              leaf_count(1), max_leaves_per_cell)
     end subroutine
 
     subroutine test_octree_parallel_matches_serial_counts()

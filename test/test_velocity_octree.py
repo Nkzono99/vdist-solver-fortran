@@ -31,6 +31,50 @@ class VelocityOctreeResultTest(unittest.TestCase):
         np.testing.assert_array_equal(result.valid_probability_mask, [True, False])
         self.assertEqual(result.metadata["max_depth"], 3)
 
+        np.testing.assert_array_equal(result.sample_mask(1), [False, True])
+        np.testing.assert_array_equal(result.leaf_mask(0), [True])
+        np.testing.assert_allclose(result.velocities_for_spatial(0), [[10.0, 0.0, 0.0]])
+        np.testing.assert_allclose(result.probabilities_for_spatial(1), [np.nan])
+        self.assertEqual(result.leaf_sample_slice(0), slice(0, 2))
+
+    def test_rejects_inconsistent_sample_count(self):
+        with self.assertRaises(ValueError):
+            VelocityOctreeResult(
+                spatial_points=np.array([[1.0, 2.0, 3.0]]),
+                velocities=np.array([[10.0, 0.0, 0.0]]),
+                probabilities=np.array([0.5]),
+                spatial_index=np.array([0], dtype=np.int32),
+                leaf_spatial_index=np.array([], dtype=np.int32),
+                leaf_bounds=np.empty((0, 6), dtype=np.float64),
+                leaf_value_min=np.array([], dtype=np.float64),
+                leaf_value_max=np.array([], dtype=np.float64),
+                leaf_depth=np.array([], dtype=np.int32),
+                leaf_sample_start=np.array([], dtype=np.int32),
+                leaf_sample_count=np.array([], dtype=np.int32),
+                status=np.array([0], dtype=np.int32),
+                sample_count=np.array([2], dtype=np.int32),
+                leaf_count=np.array([0], dtype=np.int32),
+            )
+
+    def test_rejects_leaf_sample_slice_outside_compact_samples(self):
+        with self.assertRaises(ValueError):
+            VelocityOctreeResult(
+                spatial_points=np.array([[1.0, 2.0, 3.0]]),
+                velocities=np.array([[10.0, 0.0, 0.0]]),
+                probabilities=np.array([0.5]),
+                spatial_index=np.array([0], dtype=np.int32),
+                leaf_spatial_index=np.array([0], dtype=np.int32),
+                leaf_bounds=np.array([[-1.0, 1.0, -2.0, 2.0, -3.0, 3.0]]),
+                leaf_value_min=np.array([0.5]),
+                leaf_value_max=np.array([0.5]),
+                leaf_depth=np.array([0], dtype=np.int32),
+                leaf_sample_start=np.array([1], dtype=np.int32),
+                leaf_sample_count=np.array([1], dtype=np.int32),
+                status=np.array([0], dtype=np.int32),
+                sample_count=np.array([1], dtype=np.int32),
+                leaf_count=np.array([1], dtype=np.int32),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

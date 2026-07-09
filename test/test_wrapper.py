@@ -150,7 +150,7 @@ class _FakeGetProbabilitiesOctreeFunction:
         leaf_value_min[second_leaf_offset] = 0.0
         leaf_value_max[second_leaf_offset] = 0.0
         leaf_depth[second_leaf_offset] = 0
-        leaf_sample_start[second_leaf_offset] = second_offset
+        leaf_sample_start[second_leaf_offset] = 0
         leaf_sample_count[second_leaf_offset] = 1
 
         status[:] = [0, 1]
@@ -316,8 +316,12 @@ class GetProbabilitiesOctreeDllTest(unittest.TestCase):
         np.testing.assert_allclose(result.velocities, [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
         self.assertTrue(np.isnan(result.probabilities[-1]))
         np.testing.assert_array_equal(result.leaf_spatial_index, [0, 1])
+        np.testing.assert_array_equal(result.leaf_sample_start, [0, 2])
+        self.assertEqual(result.leaf_sample_slice(1), slice(2, 3))
         np.testing.assert_array_equal(result.sample_count, [2, 1])
         np.testing.assert_array_equal(result.leaf_count, [1, 1])
+        self.assertEqual(result.metadata["actual_sample_count"], 3)
+        self.assertEqual(result.metadata["actual_leaf_count"], 2)
 
     def test_rejects_ambiguous_octree_input_forms(self):
         with self.assertRaises(ValueError):
@@ -338,6 +342,40 @@ class GetProbabilitiesOctreeDllTest(unittest.TestCase):
         )
 
         np.testing.assert_allclose(spatial_points, [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]])
+        np.testing.assert_allclose(
+            velocity_bounds,
+            [
+                [-1.0, 1.0, -2.0, 2.0, -3.0, 3.0],
+                [-4.0, 4.0, -5.0, 5.0, -6.0, 6.0],
+            ],
+        )
+
+    def test_broadcasts_single_octree_velocity_bounds_to_all_positions(self):
+        spatial_points, velocity_bounds = wrapper._prepare_octree_inputs(
+            phase_grid=None,
+            position=[[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]],
+            velocity_bounds=[[-1.0, 1.0], [-2.0, 2.0], [-3.0, 3.0]],
+        )
+
+        np.testing.assert_allclose(spatial_points, [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]])
+        np.testing.assert_allclose(
+            velocity_bounds,
+            [
+                [-1.0, 1.0, -2.0, 2.0, -3.0, 3.0],
+                [-1.0, 1.0, -2.0, 2.0, -3.0, 3.0],
+            ],
+        )
+
+    def test_accepts_per_spatial_octree_bounds_as_axis_pairs(self):
+        _, velocity_bounds = wrapper._prepare_octree_inputs(
+            phase_grid=None,
+            position=[[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]],
+            velocity_bounds=[
+                [[-1.0, 1.0], [-2.0, 2.0], [-3.0, 3.0]],
+                [[-4.0, 4.0], [-5.0, 5.0], [-6.0, 6.0]],
+            ],
+        )
+
         np.testing.assert_allclose(
             velocity_bounds,
             [

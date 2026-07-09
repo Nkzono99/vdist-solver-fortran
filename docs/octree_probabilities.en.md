@@ -45,6 +45,15 @@ result = get_probabilities_octree(
 velocity box for every spatial point. The velocity bin counts in `PhaseGrid` are
 not used by the octree, only the velocity limits are used.
 
+Three-element `PhaseGrid` tuples mean `(start, end, count)`. For example,
+`x=(120, 180, 16)` creates 16 points between 120 and 180 with `np.linspace`;
+it does not mean a stride of 16.
+
+The `max_depth=5`, `max_samples_per_cell=80_000`, and
+`max_leaves_per_cell=4096` values above are a budget-limited practical example,
+not enough capacity for a full worst-case depth-5 tree. Increase capacities or
+split the velocity box manually when many points return status `2` or `4`.
+
 ## Arbitrary Points And Per-Point Bounds
 
 You can pass explicit spatial points and per-point velocity bounds instead of a
@@ -87,23 +96,35 @@ box arrays, not a dense 6D grid.
 | `velocities` | `(nsample, 3)` | Velocity samples |
 | `probabilities` | `(nsample,)` | Probability at each sample; misses are `nan` |
 | `spatial_index` | `(nsample,)` | Spatial point index for each sample |
-| `leaf_bounds` | `(nleaf, 6)` | Velocity bounds of evaluated octree boxes |
+| `leaf_bounds` | `(nleaf, 6)` | Velocity bounds of evaluated octree boxes, including split intermediate boxes |
 | `leaf_value_min/max` | `(nleaf,)` | Min/max sampled probability in each box |
 | `leaf_depth` | `(nleaf,)` | Octree depth |
-| `leaf_sample_start/count` | `(nleaf,)` | Sample span for each box |
+| `leaf_sample_start/count` | `(nleaf,)` | Sample span for each box in the compact `velocities/probabilities` arrays |
 | `status` | `(nspatial,)` | Per-spatial status |
 | `sample_count`, `leaf_count` | `(nspatial,)` | Per-spatial output counts |
+| `metadata` | `dict` | Runtime parameters, `actual_sample_count`, and `actual_leaf_count` |
 
 Status values:
 
 | Value | Meaning |
 |---:|---|
 | `0` | OK |
-| `1` | No valid probability was found in the root box |
+| `1` | No positive probability signal was found in the root box |
 | `2` | `max_samples_per_cell` was reached |
-| `3` | Root expansion was exhausted while edge signal remained |
+| `3` | The root box was expanded at least once. Edge signal may or may not remain |
 | `4` | `max_leaves_per_cell` was reached |
 | `5` | Invalid velocity bounds |
+
+Nonzero status points can still contain scout or partial samples. Check status
+before visualization or downstream reductions.
+
+```python
+import numpy as np
+
+bad = np.flatnonzero(result.status != 0)
+if bad.size:
+    print("non-OK octree points:", bad[:10], "status:", result.status[bad[:10]])
+```
 
 ## Visualization
 
@@ -113,20 +134,33 @@ Select samples for one spatial point with `spatial_index`.
 import numpy as np
 
 i = 0
-mask = result.spatial_index == i
-v = result.velocities[mask]
-p = result.probabilities[mask]
+if result.status[i] != 0:
+    print("warning: non-OK octree status", result.status[i])
+
+v = result.velocities_for_spatial(i)
+p = result.probabilities_for_spatial(i)
 
 valid = np.isfinite(p)
 ax.scatter(v[valid, 0], v[valid, 2], c=p[valid], s=2)
 ```
 
 For octree box projections, use `leaf_spatial_index` and `leaf_bounds`.
+The `leaf_*` name is kept for output compatibility; these arrays include
+evaluated intermediate boxes as well as terminal leaves.
 
 ```python
-leaf_mask = result.leaf_spatial_index == i
+leaf_mask = result.leaf_mask(i)
 boxes = result.leaf_bounds[leaf_mask]
 value_range = result.leaf_value_max[leaf_mask] - result.leaf_value_min[leaf_mask]
+```
+
+To select samples that belong to one leaf, slice the compact sample arrays.
+
+```python
+leaf_index = np.flatnonzero(leaf_mask)[0]
+sample_slice = result.leaf_sample_slice(leaf_index)
+leaf_velocities = result.velocities[sample_slice]
+leaf_probabilities = result.probabilities[sample_slice]
 ```
 
 ## Parameters

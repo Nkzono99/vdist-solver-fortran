@@ -535,7 +535,6 @@ def get_probabilities_octree_dll(
             byref(_n_threads),
         )
 
-    return_probabilities[return_probabilities == -1] = np.nan
     return _compact_octree_result(
         spatial_points=spatial_points,
         sample_spatial_index=return_sample_spatial_index,
@@ -569,6 +568,8 @@ def get_probabilities_octree_dll(
             "expand_factor": expand_factor,
             "max_expansions": max_expansions,
             "n_threads": n_threads,
+            "actual_sample_count": int(_actual_sample_count.value),
+            "actual_leaf_count": int(_actual_leaf_count.value),
         },
     )
 
@@ -782,7 +783,9 @@ def _compact_octree_result(
 ) -> VelocityOctreeResult:
     sample_indexes = []
     leaf_indexes = []
+    compact_leaf_sample_start = []
     nspatial = spatial_points.shape[0]
+    compact_sample_base = 0
 
     for ispatial in range(nspatial):
         sample_start = ispatial * max_samples_per_cell
@@ -792,9 +795,15 @@ def _compact_octree_result(
         leaf_start = ispatial * max_leaves_per_cell
         leaf_stop = leaf_start + int(leaf_count[ispatial])
         leaf_indexes.extend(range(leaf_start, leaf_stop))
+        compact_leaf_sample_start.extend(
+            compact_sample_base + int(leaf_sample_start[ileaf])
+            for ileaf in range(leaf_start, leaf_stop)
+        )
+        compact_sample_base += int(sample_count[ispatial])
 
     sample_indexes = np.array(sample_indexes, dtype=np.int64)
     leaf_indexes = np.array(leaf_indexes, dtype=np.int64)
+    compact_leaf_sample_start = np.array(compact_leaf_sample_start, dtype=np.int32)
 
     compact_probabilities = probabilities[sample_indexes].copy()
     compact_probabilities[compact_probabilities == -1] = np.nan
@@ -809,7 +818,7 @@ def _compact_octree_result(
         leaf_value_min=leaf_value_min[leaf_indexes].copy(),
         leaf_value_max=leaf_value_max[leaf_indexes].copy(),
         leaf_depth=leaf_depth[leaf_indexes].copy(),
-        leaf_sample_start=leaf_sample_start[leaf_indexes].copy(),
+        leaf_sample_start=compact_leaf_sample_start,
         leaf_sample_count=leaf_sample_count[leaf_indexes].copy(),
         status=status.copy(),
         sample_count=sample_count.copy(),

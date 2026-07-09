@@ -155,9 +155,11 @@ octree = get_probabilities_octree(
     n_threads=32,
 )
 
-mask = octree.spatial_index == 0
-v = octree.velocities[mask]
-p = octree.probabilities[mask]
+if octree.status[0] != 0:
+    print("warning: non-OK octree status", octree.status[0])
+
+v = octree.velocities_for_spatial(0)
+p = octree.probabilities_for_spatial(0)
 ```
 
 The result is a compact sample/leaf representation, not a dense 6D array.
