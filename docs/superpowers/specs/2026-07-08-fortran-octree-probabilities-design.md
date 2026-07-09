@@ -145,18 +145,16 @@ For each spatial point:
 2. Evaluate a deterministic scout grid inside the root box.
 3. If probability is significant on any root boundary, expand the root bounds
    and repeat up to `max_expansions`.
-4. Create active leaves from scout-detected regions.
-5. For each active leaf, evaluate center, corners, and face centers.
-6. Compute scores:
-   - `pmax`
-   - `edge_score = p_edge_max / p_global_max`
-   - `contrast_score = (pmax - pmin) / p_global_max`
-   - `nan_fraction`
-7. Split a leaf when:
+4. Push the root box into a breadth-first queue.
+5. Sample each queued box. The root uses `scout_bins`; child boxes currently use
+   `3x3x3` samples.
+6. Split a box when:
    - `depth < max_depth`
-   - sample budget remains
-   - `pmax` is significant and either edge or contrast score is significant.
-8. Stop when no leaf requests refinement or `max_samples_per_cell` is reached.
+   - sample and leaf budgets remain
+   - `pmax > 0`
+   - `(pmax - pmin) / pmax >= refine_threshold_rel`
+7. Stop when no box requests refinement, `max_samples_per_cell` is reached, or
+   `max_leaves_per_cell` is reached.
 
 The splitter is 3D octree: every refined velocity box is split into 8 children.
 
@@ -166,9 +164,9 @@ The algorithm must not assume a single connected distribution. It supports
 multiple lobes through:
 
 - A scout grid over the entire velocity box.
-- Independent active leaves.
+- Independent queued boxes.
 - Edge expansion when any lobe reaches a velocity boundary.
-- Refinement based on local leaf scores, not only global center values.
+- Refinement based on local box scores, not only global center values.
 
 Limitations are explicit: a lobe narrower than the scout spacing can be missed.
 Users control this with `scout_bins`, `max_depth`, and
@@ -226,7 +224,7 @@ Per-spatial-point status values:
 - `0`: OK
 - `1`: NO_SIGNAL
 - `2`: SAMPLE_LIMIT_REACHED
-- `3`: EXPANSION_LIMIT_REACHED
+- `3`: ROOT_EXPANDED
 - `4`: OUTPUT_CAPACITY_EXCEEDED
 - `5`: INVALID_BOUNDS
 
@@ -247,7 +245,7 @@ Python tests:
 Fortran tests:
 
 - Octree refinement on a synthetic Gaussian probability function.
-- Two separated Gaussian lobes are both retained as active leaves.
+- Two separated Gaussian lobes are both retained in evaluated octree boxes.
 - Edge expansion triggers when a lobe touches the root velocity boundary.
 - Sample limit returns `STATUS_SAMPLE_LIMIT_REACHED`.
 - Threaded result matches serial result for deterministic inputs.

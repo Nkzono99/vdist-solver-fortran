@@ -54,6 +54,58 @@ velocity box になります。octree では `vx/vy/vz` の bin 数は使わず�
 実務用の budget-limited 例です。status `2` または `4` が多い場合は容量を
 増やすか、velocity box を分割して評価してください。
 
+## アルゴリズム概要
+
+octree は空間方向を細分化しません。各空間点に対して、指定された
+`vx/vy/vz` の root velocity box だけを 3D octree として探索します。
+各速度サンプルでは、通常の `get_probabilities` と同じく粒子をバックトレースし、
+境界到達時の確率関数を評価します。
+
+1. `velocity_bounds` から root box を作る。
+2. root box 全体を `scout_bins` の規則格子で評価する。
+3. root box の境界面に有意な確率が残る場合、`expand_factor` で box を拡張する。
+   これは `max_expansions` 回まで繰り返す。
+4. root box を queue に入れ、box ごとにサンプルする。
+   root では `scout_bins`、子 box では現在 `3x3x3` 点を評価する。
+5. box 内の `pmax > 0` かつ `(pmax - pmin) / pmax >= refine_threshold_rel`
+   なら、`max_depth` まで 8 子 box に split する。
+6. `max_samples_per_cell` または `max_leaves_per_cell` に到達した空間点は、
+   それまでの partial result と status を返す。
+
+このため、狭い速度ローブや複数の Maxwellian-like lobe がある場合でも、
+root の `scout_bins` がその近傍を一度でも拾えば局所的に細分化されます。
+逆に、root scout grid の隙間に完全に入るほど狭いローブは見逃され得ます。
+その場合は `scout_bins` を増やすか、速度範囲を複数の box に分けて
+`get_probabilities_octree` を複数回実行してください。
+
+## KUDPC での実行例
+
+`get_probabilities_octree` は Fortran/OpenMP で重いバックトレースを実行するため、
+KUDPC の login node では直接長時間実行せず、`tssrun` または batch job 内で
+実行してください。`n_threads` は確保した CPU 数に合わせます。
+
+```bash
+tssrun -p gr20001g --rsc p=1:t=32:c=32:m=64G -t 6:00 \
+  bash -lc 'export OMP_NUM_THREADS=32; .venv/bin/python run_octree.py'
+```
+
+Python 側では `n_threads` を明示するか、`OMP_NUM_THREADS` に任せます。
+
+```python
+result = get_probabilities_octree(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    phase_grid=phase_grid,
+    dt=data.inp.dt,
+    max_step=30_000,
+    n_threads=32,
+)
+```
+
+大きなケースでは、まず少数の空間点と浅い `max_depth` で `status` と
+`sample_count` を確認してから、空間点数・depth・capacity を増やしてください。
+
 ## 任意の空間点とセル別速度範囲
 
 `PhaseGrid` の代わりに、空間点配列とセル別の速度範囲を渡せます。
@@ -179,6 +231,21 @@ leaf_probabilities = result.probabilities[sample_slice]
 全 box が depth `D` まで split される最悪ケースでは、評価 box 数は
 `(8 ** (D + 1) - 1) / 7` です。root 以外の box は現在 `3x3x3` サンプルで評価
 するため、容量は余裕を持って設定してください。
+
+## status 別の対処
+
+| status | 典型的な状況 | 対処 |
+|---:|---|---|
+| `0` | 評価完了 | `velocities_for_spatial()` などで可視化・集約する |
+| `1` | root box 内に正の確率がない | 速度範囲、空間点、`ispec`、`dt/max_step` を確認する |
+| `2` | sample 容量に到達 | `max_samples_per_cell` を増やす、`max_depth` を下げる、速度 box を分ける |
+| `3` | root box が拡張された | `leaf_bounds` や端の sample を確認し、必要なら初期速度範囲を広げる |
+| `4` | leaf/box 容量に到達 | `max_leaves_per_cell` を増やす、`refine_threshold_rel` を大きくする |
+| `5` | `vmin >= vmax` など不正な bounds | `velocity_bounds` の順序と shape を確認する |
+
+`status != 0` でも partial sample は返ることがあります。解析に使う場合は、
+まず status ごとの cell 数を集計し、問題のある cell を可視化してから本番設定を
+決めるのが安全です。
 
 ## 注意点
 

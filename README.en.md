@@ -77,7 +77,7 @@ namelist `/emissn/` — see the
 | Document | Summary |
 |---|---|
 | [Usage](docs/usage.en.md) | Python recipes: single and multi-particle backtrace, phase-space probability |
-| [Velocity-space octree probability solver](docs/octree_probabilities.en.md) | Adaptive/sparse velocity-space search with sample/leaf output for visualization |
+| [Velocity-space octree probability solver](docs/octree_probabilities.en.md) | Adaptive/sparse velocity-space search, algorithm, execution workflow, and sample/leaf output |
 | [Velocity range autorange](docs/autorange.en.md) | Per-cell velocity range estimation, validation, and diagnostics |
 | [Namelist reference](docs/namelist.en.md) | Supported `plasma.inp` groups and parameters |
 | [Physics](docs/physics.en.md) | Liouville theorem, Maxwellian emission, raycast photoelectron |

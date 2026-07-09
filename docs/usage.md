@@ -162,7 +162,8 @@ p = octree.probabilities_for_spatial(0)
 
 戻り値は dense 6D 配列ではなく、compact な sample/leaf 配列です。複数の狭い
 速度ローブを拾いたい場合は `scout_bins` と `max_samples_per_cell` を増やします。
-詳しくは [Octree 速度空間確率ソルバ](octree_probabilities.md) を参照してください。
+アルゴリズム、KUDPC での `tssrun` 実行例、status 別の対処は
+[Octree 速度空間確率ソルバ](octree_probabilities.md) を参照してください。
 
 ## セルごとの速度範囲を推定してから確率を解く
 

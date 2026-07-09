@@ -54,6 +54,59 @@ The `max_depth=5`, `max_samples_per_cell=80_000`, and
 not enough capacity for a full worst-case depth-5 tree. Increase capacities or
 split the velocity box manually when many points return status `2` or `4`.
 
+## Algorithm
+
+The octree does not subdivide physical space. For each requested spatial point,
+it searches only the 3D root velocity box defined by `vx/vy/vz` or
+`velocity_bounds`. Every velocity sample is evaluated with the same backtrace
+and boundary probability logic used by `get_probabilities`.
+
+1. Build the root velocity box from `velocity_bounds`.
+2. Evaluate a deterministic scout grid over the root box using `scout_bins`.
+3. If the root-box boundary still has significant probability, expand the box
+   by `expand_factor`, up to `max_expansions` times.
+4. Push the root box into a queue and sample each queued box. The root uses
+   `scout_bins`; child boxes currently use `3x3x3` samples.
+5. Split a box into 8 children while `pmax > 0`,
+   `(pmax - pmin) / pmax >= refine_threshold_rel`, and `depth < max_depth`.
+6. If `max_samples_per_cell` or `max_leaves_per_cell` is reached, return the
+   partial result for that spatial point with the corresponding status.
+
+This supports separated Maxwellian-like lobes as long as the initial root scout
+grid touches each lobe closely enough to trigger refinement. A lobe that is
+narrower than the scout spacing can still be missed. In that case, increase
+`scout_bins` or split the velocity range into multiple boxes and run
+`get_probabilities_octree` more than once.
+
+## KUDPC Execution
+
+`get_probabilities_octree` runs expensive Fortran/OpenMP backtraces. On KUDPC,
+do not run production-sized jobs directly on a login node; use `tssrun` or a
+batch job. Match `n_threads` to the CPU count you requested.
+
+```bash
+tssrun -p gr20001g --rsc p=1:t=32:c=32:m=64G -t 6:00 \
+  bash -lc 'export OMP_NUM_THREADS=32; .venv/bin/python run_octree.py'
+```
+
+In Python, pass `n_threads` explicitly or let it follow `OMP_NUM_THREADS`.
+
+```python
+result = get_probabilities_octree(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    phase_grid=phase_grid,
+    dt=data.inp.dt,
+    max_step=30_000,
+    n_threads=32,
+)
+```
+
+For large runs, start with a small number of spatial points and a shallow
+`max_depth`, inspect `status` and `sample_count`, then increase spatial coverage,
+depth, and capacities.
+
 ## Arbitrary Points And Per-Point Bounds
 
 You can pass explicit spatial points and per-point velocity bounds instead of a
@@ -179,6 +232,21 @@ leaf_probabilities = result.probabilities[sample_slice]
 If every box is split to depth `D`, the worst-case number of evaluated boxes is
 `(8 ** (D + 1) - 1) / 7`. Non-root boxes are sampled with `3x3x3` points, so
 set output capacities with margin.
+
+## Status Handling
+
+| status | Typical situation | Action |
+|---:|---|---|
+| `0` | Evaluation completed | Visualize or reduce with helpers such as `velocities_for_spatial()` |
+| `1` | No positive probability in the root box | Check velocity bounds, spatial points, `ispec`, and `dt/max_step` |
+| `2` | Sample capacity reached | Increase `max_samples_per_cell`, reduce `max_depth`, or split the velocity box |
+| `3` | Root box was expanded | Inspect `leaf_bounds` and edge samples; widen initial bounds if needed |
+| `4` | Leaf/box capacity reached | Increase `max_leaves_per_cell` or raise `refine_threshold_rel` |
+| `5` | Invalid bounds such as `vmin >= vmax` | Check `velocity_bounds` order and shape |
+
+Non-OK cells can still return partial samples. For production analysis, first
+count statuses across cells, inspect problematic cells visually, and then choose
+final capacity and refinement settings.
 
 ## Notes
 

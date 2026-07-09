@@ -166,7 +166,7 @@ The result is a compact sample/leaf representation, not a dense 6D array.
 Increase `scout_bins` and `max_samples_per_cell` when you need to capture
 multiple narrow velocity lobes. See
 [Octree velocity-space probability solver](octree_probabilities.en.md) for the
-full API and tuning notes.
+algorithm, KUDPC `tssrun` example, status handling, and full tuning notes.
 
 ## Estimate per-cell velocity ranges before solving probabilities
 

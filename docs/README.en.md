@@ -11,7 +11,7 @@ and install instructions see the [top-level README](../README.en.md).
 |---|---|
 | [Usage](usage.en.md) | Python-side recipes: single backtrace, multi-particle backtrace, phase-space probability solver |
 | [Velocity range autorange](autorange.en.md) | Per-cell range estimation with `estimate_velocity_range_map`, validation, diagnostics, and performance notes |
-| [Octree velocity-space probability solver](octree_probabilities.en.md) | Sparse/adaptive velocity-space search with `get_probabilities_octree`, result arrays, and capacity tuning |
+| [Octree velocity-space probability solver](octree_probabilities.en.md) | Sparse/adaptive velocity-space search with `get_probabilities_octree`, algorithm, execution workflow, and capacity tuning |
 | [Namelist reference](namelist.en.md) | Supported EMSES `plasma.inp` groups (`/ptcond/`, `/emissn/`), with raycast-photoelectron parameters |
 | [Physics](physics.en.md) | Liouville theorem, Maxwellian surface emission, raycast photoelectron model |
 | [Architecture](architecture.en.md) | Repository layout, Fortran/Python boundary, module responsibilities |
