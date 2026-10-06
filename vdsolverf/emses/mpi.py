@@ -39,6 +39,9 @@ def get_backtrace(
     root: int = 0,
     return_on_all: bool = True,
     prepare_fields: bool = True,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ):
     """Run a single-particle backtrace under MPI.
 
@@ -50,7 +53,11 @@ def get_backtrace(
     rank = comm.Get_rank()
 
     if prepare_fields:
-        _prepare_emout_inputs(comm, directory, istep, ispec, root)
+        _prepare_emout_inputs(
+            comm, directory, istep, ispec, root,
+            use_electric_field=use_electric_field,
+            use_magnetic_field=use_magnetic_field,
+        )
 
     result = None
     if rank == root:
@@ -68,6 +75,8 @@ def get_backtrace(
                 system=system,
                 library_path=library_path,
                 tmp_input_suffix=_rank_tmp_input_suffix(comm),
+                use_electric_field=use_electric_field,
+                use_magnetic_field=use_magnetic_field,
             )
             error = None
         except Exception as exc:
@@ -96,6 +105,9 @@ def get_backtraces(
     root: int = 0,
     return_on_all: bool = True,
     prepare_fields: bool = True,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ):
     """Run multi-particle backtraces by splitting particles across MPI ranks."""
     comm = _get_comm(comm)
@@ -106,7 +118,11 @@ def get_backtraces(
     local_particles = particles[local_slice]
 
     if prepare_fields:
-        _prepare_emout_inputs(comm, directory, istep, ispec, root)
+        _prepare_emout_inputs(
+            comm, directory, istep, ispec, root,
+            use_electric_field=use_electric_field,
+            use_magnetic_field=use_magnetic_field,
+        )
 
     try:
         if local_particles:
@@ -124,6 +140,8 @@ def get_backtraces(
                 library_path=library_path,
                 n_threads=n_threads,
                 tmp_input_suffix=_rank_tmp_input_suffix(comm),
+                use_electric_field=use_electric_field,
+                use_magnetic_field=use_magnetic_field,
             )
         else:
             local_result = _empty_backtraces(max_step, output_interval)
@@ -158,6 +176,9 @@ def get_probabilities(
     root: int = 0,
     return_on_all: bool = True,
     prepare_fields: bool = True,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ):
     """Run probability evaluation by splitting particles across MPI ranks."""
     comm = _get_comm(comm)
@@ -168,7 +189,11 @@ def get_probabilities(
     local_particles = particles[local_slice]
 
     if prepare_fields:
-        _prepare_emout_inputs(comm, directory, istep, ispec, root)
+        _prepare_emout_inputs(
+            comm, directory, istep, ispec, root,
+            use_electric_field=use_electric_field,
+            use_magnetic_field=use_magnetic_field,
+        )
 
     try:
         if local_particles:
@@ -185,6 +210,8 @@ def get_probabilities(
                 library_path=library_path,
                 n_threads=n_threads,
                 tmp_input_suffix=_rank_tmp_input_suffix(comm),
+                use_electric_field=use_electric_field,
+                use_magnetic_field=use_magnetic_field,
             )
         else:
             local_result = (np.empty(0, dtype=np.float64), [])
@@ -226,6 +253,8 @@ def srun_get_backtrace(
     tmpdir: Union[PathLike, None] = None,
     root: int = 0,
     prepare_fields: bool = True,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ):
     """Launch an MPI worker with ``srun`` and return a single backtrace."""
     spec = _worker_spec(
@@ -244,6 +273,8 @@ def srun_get_backtrace(
             system=system,
             library_path=_optional_resolved_path(library_path),
             prepare_fields=prepare_fields,
+            use_electric_field=use_electric_field,
+            use_magnetic_field=use_magnetic_field,
         ),
     )
     return _run_srun_worker(
@@ -283,6 +314,8 @@ def srun_get_backtraces(
     tmpdir: Union[PathLike, None] = None,
     root: int = 0,
     prepare_fields: bool = True,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ):
     """Launch an MPI worker with ``srun`` and return multi-backtrace arrays."""
     spec = _worker_spec(
@@ -302,6 +335,8 @@ def srun_get_backtraces(
             library_path=_optional_resolved_path(library_path),
             n_threads=n_threads,
             prepare_fields=prepare_fields,
+            use_electric_field=use_electric_field,
+            use_magnetic_field=use_magnetic_field,
         ),
     )
     return _run_srun_worker(
@@ -340,6 +375,8 @@ def srun_get_probabilities(
     tmpdir: Union[PathLike, None] = None,
     root: int = 0,
     prepare_fields: bool = True,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ):
     """Launch an MPI worker with ``srun`` and return probability results."""
     spec = _worker_spec(
@@ -358,6 +395,8 @@ def srun_get_probabilities(
             library_path=_optional_resolved_path(library_path),
             n_threads=n_threads,
             prepare_fields=prepare_fields,
+            use_electric_field=use_electric_field,
+            use_magnetic_field=use_magnetic_field,
         ),
     )
     return _run_srun_worker(
@@ -446,12 +485,19 @@ def _prepare_emout_inputs(
     istep: int,
     ispec: Union[int, None],
     root: int,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ):
     error = None
     if comm.Get_rank() == root:
         try:
             data = serial_wrapper.emout.Emout(directory)
-            serial_wrapper.create_relocated_ebvalues(data, istep, ispec=ispec)
+            serial_wrapper.create_relocated_ebvalues(
+                data, istep, ispec=ispec,
+                use_electric_field=use_electric_field,
+                use_magnetic_field=use_magnetic_field,
+            )
         except Exception as exc:
             error = _error_info(root, exc)
     _raise_if_any_rank_failed(comm, error, root)

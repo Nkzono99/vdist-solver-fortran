@@ -36,11 +36,49 @@ ts, probability, positions, velocities = get_backtrace(
     max_step=300_000,
     output_interval=1,
     use_adaptive_dt=False,
+    use_electric_field=True,
+    use_magnetic_field=True,
 )
 
 plt.plot(positions[:, 0], positions[:, 2])
 plt.gcf().savefig("backtrace.png")
 ```
+
+Backward tracing first recovers the previous position, then undoes the Boris
+velocity update using the field there. See
+[Physics](physics.en.md#boris-updates-and-backward-tracing) for the corresponding
+forward update used by velocity-range estimation.
+
+## Enabling and disabling electric and magnetic fields
+
+`use_electric_field` and `use_magnetic_field` are keyword arguments that each
+default to `True`. Pass `False` to exclude that field from trajectory updates.
+
+```python
+# Use only the electric field.
+ts, probability, positions, velocities = get_backtrace(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    particle=particle,
+    dt=data.inp.dt,
+    max_step=300_000,
+    use_magnetic_field=False,
+)
+```
+
+`use_electric_field=False` disables both space-charge and accumulated-charge E.
+`use_magnetic_field=False` disables both the output magnetic field and the
+background B derived from `wc`. Set both to `False` to trace without field-driven
+acceleration or rotation. Disabled fields are not loaded, so their output files
+do not need to exist.
+
+These arguments also apply to `get_backtraces`, `get_probabilities`,
+`get_probabilities_octree`, `estimate_velocity_range_map`,
+`validate_and_expand_velocity_range_map`, and the MPI `get_*` / `srun_get_*`
+wrappers. Use the same field settings for range estimation, probability
+evaluation, and validation. Octree and velocity-range results record these
+settings in `metadata`.
 
 ## Multi-particle backtrace
 

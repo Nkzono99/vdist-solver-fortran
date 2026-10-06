@@ -65,8 +65,15 @@ ts, probability, positions, velocities = get_backtrace(
     max_step=300_000,
     output_interval=1,
     use_adaptive_dt=False,
+    use_electric_field=True,             # False にすると電場を無効化
+    use_magnetic_field=True,             # False にすると背景磁場を含む磁場を無効化
 )
 ```
+
+この2つのキーワード引数は逆追跡・確率計算・速度範囲推定、および MPI 版で
+共通です。既定では両方有効です。無効化した場の出力ファイルは不要です。
+逆追跡は MPIEMSES3D の通常の Boris 更新を逆の順序でたどります。
+磁場回転と往復性の条件は [物理モデル](docs/physics.md#boris-更新と逆追跡) を参照。
 
 光電子の評価には EMSES の namelist `/emissn/` に `use_raycast = .true.`
 を設定する必要があります。詳細は

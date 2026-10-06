@@ -9,6 +9,7 @@ import numpy as np
 
 from vdsolverf.core import Particle, PhaseGrid
 from vdsolverf.emses import wrapper
+from vdsolverf.emses import mpi
 
 
 class _FakeInput:
@@ -40,7 +41,9 @@ class _FakeBacktracesFunction:
         self.n_threads = None
 
     def __call__(self, *args):
+        self.ebvalues = args[5].copy()
         self.n_threads = args[-1]._obj.value
+        args[15][:] = 0.0
         args[16][:] = 0.0
         args[17][:] = 0.0
         args[18][:] = 0.0
@@ -60,6 +63,7 @@ class _FakeEstimateVelocityRangeMapFunction:
         self.cov_v_pointer = None
 
     def __call__(self, *args):
+        self.ebvalues = args[5].copy()
         self.coverage_sigma = args[8].value
         self.collect_moments = args[16].value
         self.show_progress = args[17].value
@@ -89,6 +93,7 @@ class _FakeGetProbabilitiesOctreeFunction:
         self.max_leaves_per_cell = None
 
     def __call__(self, *args):
+        self.ebvalues = args[5].copy()
         self.nspatial = args[7].value
         self.max_samples_per_cell = args[18].value
         self.max_leaves_per_cell = args[19].value
@@ -160,11 +165,206 @@ class _FakeGetProbabilitiesOctreeFunction:
         actual_leaf_count.value = 2
 
 
+class _FakeProbabilitiesFunction:
+    def __call__(self, *args):
+        self.ebvalues = args[5].copy()
+        args[14][:] = 0.0
+        args[15][:] = args[8]
+        args[16][:] = args[9]
+
+
 class _FakeDll:
     def __init__(self):
         self.get_backtraces = _FakeBacktracesFunction()
         self.estimate_velocity_range_map = _FakeEstimateVelocityRangeMapFunction()
         self.get_probabilities_octree = _FakeGetProbabilitiesOctreeFunction()
+        self.get_probabilities = _FakeProbabilitiesFunction()
+
+
+class _FieldInput(_FakeInput):
+    wc = 0.4
+    qm = [-1.0, 0.01]
+    phiz = 0.0
+    phixy = 0.0
+    mtd_vbnd = [0, 0, 0]
+
+    def __contains__(self, name):
+        return hasattr(self, name)
+
+
+class _FieldData(_FakeData):
+    def __init__(self, electric=True, magnetic=True, accumulated=True):
+        self.inp = _FieldInput()
+        if magnetic:
+            for name, value in (("rbx", 1.0), ("rby", 2.0), ("rbz", 3.0)):
+                setattr(self, name, np.full((1, 2, 2, 2), value))
+        if electric:
+            for name, value in (("ex", 3.0), ("ey", 4.0), ("ez", 5.0),
+                                ("rex", 3.0), ("rey", 4.0), ("rez", 5.0)):
+                setattr(self, name, np.full((1, 2, 2, 2), value))
+            if accumulated:
+                self.phibk = np.broadcast_to(np.arange(2.0), (1, 2, 2, 2))
+
+
+class _SingleRankComm:
+    def Get_rank(self):
+        return 0
+
+    def Get_size(self):
+        return 1
+
+    def gather(self, value, root=0):
+        return [value]
+
+    def bcast(self, value, root=0):
+        return value
+
+
+class FieldOptionsTest(unittest.TestCase):
+    def test_default_fields_include_background_b_and_accumulated_e(self):
+        fields = wrapper.create_relocated_ebvalues(_FieldData(), 0, ispec=0)
+
+        np.testing.assert_allclose(fields[0, 0, 0], [4, 4, 5, 1, 2, 2.6, -1, 0, 0])
+        self.assertEqual(fields.dtype, np.float64)
+        self.assertTrue(fields.flags.c_contiguous)
+
+    def test_field_switches_independently_remove_all_components(self):
+        baseline = wrapper.create_relocated_ebvalues(_FieldData(), 0)
+        for electric in (False, True):
+            for magnetic in (False, True):
+                with self.subTest(electric=electric, magnetic=magnetic):
+                    fields = wrapper.create_relocated_ebvalues(
+                        _FieldData(), 0,
+                        use_electric_field=electric, use_magnetic_field=magnetic,
+                    )
+                    expected = baseline.copy()
+                    if not electric:
+                        expected[..., :3] = 0
+                        expected[..., 6:] = 0
+                    if not magnetic:
+                        expected[..., 3:6] = 0
+                    np.testing.assert_array_equal(fields, expected)
+
+    def test_disabled_fields_do_not_require_output_files(self):
+        for electric, magnetic in ((False, True), (True, False), (False, False)):
+            with self.subTest(electric=electric, magnetic=magnetic):
+                data = _FieldData(electric=electric, magnetic=magnetic)
+                fields = wrapper.create_relocated_ebvalues(
+                    data, 0, use_electric_field=electric, use_magnetic_field=magnetic,
+                )
+                self.assertEqual(fields.shape, (2, 2, 2, 9))
+        # With both disabled, only grid sizes are needed, including no wc/qm.
+        np.testing.assert_array_equal(
+            wrapper.create_relocated_ebvalues(
+                _FakeData(), 0, use_electric_field=False, use_magnetic_field=False,
+            ),
+            np.zeros((2, 2, 2, 9)),
+        )
+
+    def test_electric_only_without_accumulated_potential_uses_relocated_e(self):
+        fields = wrapper.create_relocated_ebvalues(
+            _FieldData(magnetic=False, accumulated=False), 0, use_magnetic_field=False,
+        )
+        np.testing.assert_allclose(fields[0, 0, 0], [3, 4, 5, 0, 0, 0, 0, 0, 0])
+
+    def test_enabled_fields_still_require_output_files(self):
+        for electric, magnetic in ((False, True), (True, False)):
+            with self.subTest(electric=electric, magnetic=magnetic):
+                with self.assertRaises(AttributeError):
+                    wrapper.create_relocated_ebvalues(
+                        _FieldData(electric=False, magnetic=False), 0,
+                        use_electric_field=electric, use_magnetic_field=magnetic,
+                    )
+
+    def test_public_apis_pass_selected_fields_to_fortran(self):
+        particle = Particle([0.5, 0.5, 0.5], [1.0, 0.0, 0.0])
+        cases = (
+            (wrapper.get_backtrace, "get_backtraces", dict(particle=particle)),
+            (wrapper.get_backtraces, "get_backtraces", dict(particles=[particle])),
+            (wrapper.get_probabilities, "get_probabilities", dict(particles=[particle])),
+            (wrapper.get_probabilities_octree, "get_probabilities_octree", dict(
+                position=[[0.5, 0.5, 0.5], [0.25, 0.25, 0.25]],
+                velocity_bounds=[[-1, 1], [-1, 1], [-1, 1]],
+                max_samples_per_cell=3, max_leaves_per_cell=2,
+            )),
+            (wrapper.estimate_velocity_range_map, "estimate_velocity_range_map", {}),
+        )
+        baseline = wrapper.create_relocated_ebvalues(_FieldData(), 0)
+        for electric in (False, True):
+            for magnetic in (False, True):
+                expected = baseline.copy()
+                if not electric:
+                    expected[..., :3] = 0
+                    expected[..., 6:] = 0
+                if not magnetic:
+                    expected[..., 3:6] = 0
+                for function, symbol, kwargs in cases:
+                    with self.subTest(api=function.__name__, electric=electric, magnetic=magnetic):
+                        dll = _FakeDll()
+                        with patch.object(wrapper, "_load_dll", return_value=dll), \
+                             patch.object(wrapper.emout, "Emout", return_value=_FieldData()), \
+                             patch.object(wrapper, "TempolaryInput", _FakeTemporaryInput):
+                            result = function(
+                                directory="unused", ispec=0, istep=0, dt=0.1, max_step=2,
+                                use_electric_field=electric, use_magnetic_field=magnetic,
+                                **kwargs,
+                            )
+                        np.testing.assert_array_equal(getattr(dll, symbol).ebvalues, expected)
+                        if hasattr(result, "metadata"):
+                            self.assertIs(result.metadata["use_electric_field"], electric)
+                            self.assertIs(result.metadata["use_magnetic_field"], magnetic)
+
+    def test_range_validation_passes_field_options_to_probability_solver(self):
+        dll = _FakeDll()
+        with patch.object(wrapper, "_load_dll", return_value=dll), \
+             patch.object(wrapper.emout, "Emout", return_value=_FieldData()), \
+             patch.object(wrapper, "TempolaryInput", _FakeTemporaryInput):
+            range_map = wrapper.estimate_velocity_range_map(
+                "unused", 0, 0, use_electric_field=False, use_magnetic_field=False,
+            )
+            wrapper.validate_and_expand_velocity_range_map(
+                range_map, "unused", 0, 0, 0.1, 2, coarse_bins=(2, 2, 2),
+                use_electric_field=False, use_magnetic_field=False,
+            )
+        np.testing.assert_array_equal(dll.get_probabilities.ebvalues, np.zeros((2, 2, 2, 9)))
+
+    def test_mpi_preparation_and_solver_honor_disabled_fields(self):
+        particle = Particle([0.5, 0.5, 0.5], [1.0, 0.0, 0.0])
+        cases = (
+            (mpi.get_backtrace, "get_backtraces", dict(particle=particle)),
+            (mpi.get_backtraces, "get_backtraces", dict(particles=[particle])),
+            (mpi.get_probabilities, "get_probabilities", dict(particles=[particle])),
+        )
+        for function, symbol, kwargs in cases:
+            with self.subTest(api=function.__name__):
+                dll = _FakeDll()
+                with patch.object(wrapper, "_load_dll", return_value=dll), \
+                     patch.object(wrapper.emout, "Emout", return_value=_FakeData()), \
+                     patch.object(wrapper, "TempolaryInput", _FakeTemporaryInput):
+                    function(
+                        directory="unused", ispec=0, istep=0, dt=0.1, max_step=2,
+                        comm=_SingleRankComm(), use_electric_field=False, use_magnetic_field=False,
+                        **kwargs,
+                    )
+                np.testing.assert_array_equal(getattr(dll, symbol).ebvalues, np.zeros((2, 2, 2, 9)))
+
+    def test_srun_wrappers_include_field_options_in_worker_requests(self):
+        particle = Particle([0.5, 0.5, 0.5], [1.0, 0.0, 0.0])
+        cases = (
+            (mpi.srun_get_backtrace, dict(particle=particle)),
+            (mpi.srun_get_backtraces, dict(particles=[particle])),
+            (mpi.srun_get_probabilities, dict(particles=[particle])),
+        )
+        for function, kwargs in cases:
+            with self.subTest(api=function.__name__):
+                with patch.object(mpi, "_run_srun_worker") as launch:
+                    function(
+                        directory="unused", ispec=0, istep=0, dt=0.1, max_step=2,
+                        use_electric_field=False, use_magnetic_field=False, **kwargs,
+                    )
+                spec = launch.call_args[0][0]
+                self.assertIs(spec["kwargs"]["use_electric_field"], False)
+                self.assertIs(spec["kwargs"]["use_magnetic_field"], False)
 
 
 class WrapperTypingTest(unittest.TestCase):

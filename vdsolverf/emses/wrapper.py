@@ -67,6 +67,9 @@ def get_backtrace(
     system: Literal["auto", "linux", "darwin", "windows"] = "auto",
     library_path: PathLike = None,
     tmp_input_suffix: Union[str, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
 
     dll = _load_dll(system, library_path)
@@ -84,6 +87,8 @@ def get_backtrace(
         dll=dll,
         n_threads=1,
         tmp_input_suffix=tmp_input_suffix,
+        use_electric_field=use_electric_field,
+        use_magnetic_field=use_magnetic_field,
     )
 
     ts, probabilities, positions_list, velocities_list, last_indexes = result
@@ -120,6 +125,9 @@ def get_backtraces(
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
     tmp_input_suffix: Union[str, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
@@ -138,6 +146,8 @@ def get_backtraces(
         dll=dll,
         n_threads=n_threads,
         tmp_input_suffix=tmp_input_suffix,
+        use_electric_field=use_electric_field,
+        use_magnetic_field=use_magnetic_field,
     )
 
     # For some reason, it crashes when I try to close it.
@@ -166,6 +176,9 @@ def get_backtraces_dll(
     dll: Union[CDLL, "WinDLL"],
     n_threads: Union[int, None] = 1,
     tmp_input_suffix: Union[str, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     dll.get_backtraces.argtypes = [
         c_char_p,  # inppath
@@ -194,7 +207,11 @@ def get_backtraces_dll(
 
     data = emout.Emout(directory)
 
-    ebvalues = create_relocated_ebvalues(data, istep, ispec=ispec)
+    ebvalues = create_relocated_ebvalues(
+        data, istep, ispec=ispec,
+        use_electric_field=use_electric_field,
+        use_magnetic_field=use_magnetic_field,
+    )
 
     npcls = len(particles)
 
@@ -274,6 +291,9 @@ def get_probabilities(
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
     tmp_input_suffix: Union[str, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> Tuple[np.ndarray, List[Particle]]:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
@@ -291,6 +311,8 @@ def get_probabilities(
         dll=dll,
         n_threads=n_threads,
         tmp_input_suffix=tmp_input_suffix,
+        use_electric_field=use_electric_field,
+        use_magnetic_field=use_magnetic_field,
     )
 
     # For some reason, it crashes when I try to close it.
@@ -330,6 +352,8 @@ def get_probabilities_octree(
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
     tmp_input_suffix: Union[str, None] = None,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> VelocityOctreeResult:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
     dll = _load_dll(system, library_path)
@@ -356,6 +380,8 @@ def get_probabilities_octree(
         dll=dll,
         n_threads=n_threads,
         tmp_input_suffix=tmp_input_suffix,
+        use_electric_field=use_electric_field,
+        use_magnetic_field=use_magnetic_field,
     )
 
 
@@ -381,6 +407,9 @@ def get_probabilities_octree_dll(
     dll: Union[CDLL, "WinDLL"],
     n_threads: int = 1,
     tmp_input_suffix: Union[str, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> VelocityOctreeResult:
     dll.get_probabilities_octree.argtypes = [
         c_char_p,  # inppath
@@ -444,7 +473,11 @@ def get_probabilities_octree_dll(
     )
 
     data = emout.Emout(directory)
-    ebvalues = create_relocated_ebvalues(data, istep, ispec=ispec)
+    ebvalues = create_relocated_ebvalues(
+        data, istep, ispec=ispec,
+        use_electric_field=use_electric_field,
+        use_magnetic_field=use_magnetic_field,
+    )
 
     sample_capacity = nspatial * max_samples_per_cell
     leaf_capacity = nspatial * max_leaves_per_cell
@@ -559,6 +592,8 @@ def get_probabilities_octree_dll(
             "dt": dt,
             "max_step": max_step,
             "use_adaptive_dt": use_adaptive_dt,
+            "use_electric_field": use_electric_field,
+            "use_magnetic_field": use_magnetic_field,
             "scout_bins": tuple(scout_bins),
             "max_depth": max_depth,
             "max_samples_per_cell": max_samples_per_cell,
@@ -586,6 +621,9 @@ def get_probabilities_dll(
     dll: Union[CDLL, "WinDLL"],
     n_threads: int = 1,
     tmp_input_suffix: Union[str, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> Tuple[np.ndarray, List[Particle]]:
     dll.get_probabilities.argtypes = [
         c_char_p,  # inppath
@@ -611,7 +649,11 @@ def get_probabilities_dll(
 
     data = emout.Emout(directory)
 
-    ebvalues = create_relocated_ebvalues(data, istep, ispec=ispec)
+    ebvalues = create_relocated_ebvalues(
+        data, istep, ispec=ispec,
+        use_electric_field=use_electric_field,
+        use_magnetic_field=use_magnetic_field,
+    )
 
     npcls = len(particles)
     return_probabilities = np.empty(npcls, dtype=np.float64)
@@ -849,6 +891,9 @@ def estimate_velocity_range_map(
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
     tmp_input_suffix: Union[str, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> VelocityRangeMap:
     """Estimate per-cell velocity ranges from EMSES source envelopes.
 
@@ -884,6 +929,8 @@ def estimate_velocity_range_map(
         dll=dll,
         n_threads=n_threads,
         tmp_input_suffix=tmp_input_suffix,
+        use_electric_field=use_electric_field,
+        use_magnetic_field=use_magnetic_field,
     )
 
 
@@ -906,6 +953,9 @@ def estimate_velocity_range_map_dll(
     accumulator_cache_size: int = 20000,
     n_threads: int = 1,
     tmp_input_suffix: Union[str, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> VelocityRangeMap:
     dll.estimate_velocity_range_map.argtypes = [
         c_char_p,  # inppath
@@ -945,7 +995,11 @@ def estimate_velocity_range_map_dll(
 
     data = emout.Emout(directory)
 
-    ebvalues = create_relocated_ebvalues(data, istep, ispec=ispec)
+    ebvalues = create_relocated_ebvalues(
+        data, istep, ispec=ispec,
+        use_electric_field=use_electric_field,
+        use_magnetic_field=use_magnetic_field,
+    )
     nz, ny, nx = data.inp.nz, data.inp.ny, data.inp.nx
 
     vx_min = np.empty((nz, ny, nx), dtype=np.float64)
@@ -1049,6 +1103,8 @@ def estimate_velocity_range_map_dll(
             "dt": dt,
             "max_step": max_step,
             "use_adaptive_dt": use_adaptive_dt,
+            "use_electric_field": use_electric_field,
+            "use_magnetic_field": use_magnetic_field,
             "coverage_sigma": coverage_sigma,
             "safety_factor": safety_factor,
             "source_samples_per_cell": source_samples_per_cell,
@@ -1080,6 +1136,9 @@ def validate_and_expand_velocity_range_map(
     library_path: PathLike = None,
     n_threads: Union[int, None] = None,
     tmp_input_suffix: Union[str, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> VelocityRangeMap:
     for _ in range(max_iter):
         particles, index = range_map.create_particles(coarse_bins)
@@ -1099,6 +1158,8 @@ def validate_and_expand_velocity_range_map(
             library_path=library_path,
             n_threads=n_threads,
             tmp_input_suffix=tmp_input_suffix,
+            use_electric_field=use_electric_field,
+            use_magnetic_field=use_magnetic_field,
         )
         prob_grid = index.reshape(probabilities)
         expand_mask = _edge_probability_mask(prob_grid, edge_threshold)
@@ -1164,29 +1225,40 @@ def _velocity_sample_mode_code(mode: Literal["ellipsoid"]) -> int:
 
 
 def create_relocated_ebvalues(
-    data: emout.Emout, istep: int, ispec: Union[int, None] = None
+    data: emout.Emout, istep: int, ispec: Union[int, None] = None,
+    *,
+    use_electric_field: bool = True,
+    use_magnetic_field: bool = True,
 ) -> np.ndarray:
+    """Pack enabled fields for Fortran; disabled components remain zero.
+
+    Electric-field opt-out covers both space and accumulated charge. Magnetic-
+    field opt-out covers both the output perturbation and the background field.
+    Disabled fields are not loaded from the EMSES output directory.
+    """
     ebvalues = np.zeros(
         (data.inp.nz + 1, data.inp.ny + 1, data.inp.nx + 1, 9), dtype=np.float64
     )
 
-    ebvalues[:, :, :, 3] = data.rbx[istep, :, :, :]
-    ebvalues[:, :, :, 4] = data.rby[istep, :, :, :]
-    ebvalues[:, :, :, 5] = data.rbz[istep, :, :, :]
+    if use_magnetic_field:
+        ebvalues[:, :, :, 3] = data.rbx[istep, :, :, :]
+        ebvalues[:, :, :, 4] = data.rby[istep, :, :, :]
+        ebvalues[:, :, :, 5] = data.rbz[istep, :, :, :]
 
-    b0x, b0y, b0z = background_magnetic_field(data)
+        b0x, b0y, b0z = background_magnetic_field(data)
 
-    ebvalues[:, :, :, 3] += b0x
-    ebvalues[:, :, :, 4] += b0y
-    ebvalues[:, :, :, 5] += b0z
+        ebvalues[:, :, :, 3] += b0x
+        ebvalues[:, :, :, 4] += b0y
+        ebvalues[:, :, :, 5] += b0z
 
-    phibk = load_accumulated_potential(data, istep, ispec)
-    if phibk is not None:
-        fill_separated_electric_fields(
-            ebvalues, data, istep, phibk, field_substeps_per_particle_step(data)
-        )
-    else:
-        fill_relocated_electric_field(ebvalues, data, istep)
+    if use_electric_field:
+        phibk = load_accumulated_potential(data, istep, ispec)
+        if phibk is not None:
+            fill_separated_electric_fields(
+                ebvalues, data, istep, phibk, field_substeps_per_particle_step(data)
+            )
+        else:
+            fill_relocated_electric_field(ebvalues, data, istep)
 
     return ebvalues
 

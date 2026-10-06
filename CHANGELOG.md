@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.7.0] - 2026-10-06
+
+### Added
+
+- Added independent `use_electric_field` and `use_magnetic_field` options to
+  backtrace, probability, octree, autorange, validation, and MPI/srun APIs.
+  Both default to `True`; disabled fields are not loaded from EMSES outputs.
+  Electric-field opt-out includes space-charge and accumulated-charge fields,
+  and magnetic-field opt-out includes the background field.
+- Added regression coverage for signed gyromotion, magnetic speed and parallel
+  velocity conservation, nonuniform-field inverse steps, periodic crossings,
+  and field-option forwarding through Python and MPI/srun wrappers.
+
+### Fixed
+
+- Fixed the Boris magnetic rotation denominator to use the squared vector norm,
+  preserving speed in oblique magnetic fields.
+- Fixed inverse Boris updates to recover position before evaluating the field
+  and undoing the velocity update, matching MPIEMSES3D's forward update order.
+  Forward tracing uses the updated velocity for the drift, and field sampling
+  wraps periodic crossings into the physical domain.
+
 ## [1.6.0] - 2026-07-09
 
 ### Added
@@ -64,5 +86,6 @@ All notable changes to this project are documented in this file.
 - Fixed temporary-input and dust-charging issues before dust code removal.
 - Fixed photoelectron density initialization and `curfs` handling.
 
+[1.7.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.4.2...v1.5.0

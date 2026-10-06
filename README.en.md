@@ -65,8 +65,17 @@ ts, probability, positions, velocities = get_backtrace(
     max_step=300_000,
     output_interval=1,
     use_adaptive_dt=False,
+    use_electric_field=True,             # False disables the electric field
+    use_magnetic_field=True,             # False disables B, including background B
 )
 ```
+
+These keyword arguments also apply to probability evaluation, velocity-range
+estimation, and the MPI wrappers. Both default to `True`. Output files for a
+disabled field are not required.
+Backward tracing reverses MPIEMSES3D's ordinary Boris update order. See
+[Physics](docs/physics.en.md#boris-updates-and-backward-tracing) for magnetic
+rotation and the conditions for reversing a step.
 
 Photoelectron evaluation requires `use_raycast = .true.` in the EMSES
 namelist `/emissn/` — see the

@@ -33,6 +33,23 @@ $$
 lookup: it integrates the equations of motion backward, and on boundary
 collision it dispatches to the boundary's tagged probability function.
 
+## Boris updates and backward tracing
+
+The magnetic rotation uses `s = 2*t/(1 + sum(t*t))`. The denominator is a
+single scalar containing the squared norm of `t`. In the absence of E, this
+preserves speed and the velocity component parallel to B for any field direction.
+
+MPIEMSES3D's ordinary Boris step updates velocity using the field at the current
+position, then drifts with the updated velocity. Backward tracing reverses this
+order: first recover the previous position using the current velocity, then undo
+the velocity update using the field at that recovered position. Field sampling
+wraps the position into the periodic domain after a periodic boundary crossing.
+
+A step and its inverse recover position and velocity to roundoff when they use
+the same static field and the same time step, without boundary collisions. This
+does not guarantee reversal of an entire trajectory with adaptive steps or
+collision handling.
+
 ## Supported source distributions
 
 ### Zero (absorbing)

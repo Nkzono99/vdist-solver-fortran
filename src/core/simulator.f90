@@ -119,7 +119,7 @@ contains
     end function
 
     function esSimulator_backward(self, particle, dt) result(ret)
-        !! Perform a backward step for a particle.
+        !! Perform an inverse Boris step for dt >= 0, or a forward step for dt < 0.
 
         class(t_ESSimulator), intent(in) :: self
             !! Instance of the ES simulator
@@ -133,7 +133,10 @@ contains
         double precision :: position_new(3)
         double precision :: velocity_new(3)
 
-        position_new = particle%position - dt*particle%velocity
+        ! Invert the forward drift before undoing the velocity update.
+        if (dt >= 0d0) then
+            position_new = particle%position - dt*particle%velocity
+        end if
 
         block
             double precision :: dt2
@@ -145,15 +148,21 @@ contains
             double precision :: upm(3)
             double precision :: upa(3)
             double precision :: upp(3)
+            type(t_Particle) :: field_particle
 
             dt2 = -0.5d0*dt
 
-            eb = self%eb%at(particle%position)
+            field_particle = particle
+            if (dt >= 0d0) field_particle%position = position_new
+            ! Sample the same physical point after a periodic boundary crossing.
+            ! Keep the unwrapped drift endpoint for collision detection.
+            call self%apply_boundary_condition(field_particle)
+            eb = self%eb%at(field_particle%position)
             ef(:) = eb(1:3)
             bf(:) = eb(4:6)
 
             t = bf*particle%q_m*dt2
-            s = 2*t/(1 + t*t)
+            s = 2*t/(1d0 + sum(t*t))
 
             upm = particle%velocity + particle%q_m*ef*dt2
 
@@ -162,6 +171,11 @@ contains
 
             velocity_new = upp + particle%q_m*ef*dt2
         end block
+
+        ! Forward Boris updates velocity before drifting with the new velocity.
+        if (dt < 0d0) then
+            position_new = particle%position - dt*velocity_new
+        end if
 
         ret%t = particle%t + dt
         ret%q_m = particle%q_m

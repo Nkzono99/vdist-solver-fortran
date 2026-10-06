@@ -36,11 +36,46 @@ ts, probability, positions, velocities = get_backtrace(
     max_step=300_000,
     output_interval=1,
     use_adaptive_dt=False,
+    use_electric_field=True,
+    use_magnetic_field=True,
 )
 
 plt.plot(positions[:, 0], positions[:, 2])
 plt.gcf().savefig("backtrace.png")
 ```
+
+逆追跡は、まず位置を戻し、戻した位置の場を使って Boris 速度更新を逆に
+行います。順方向の速度範囲推定と対応する更新順序は
+[物理モデル](physics.md#boris-更新と逆追跡) を参照してください。
+
+## 電場・磁場の有効化と無効化
+
+`use_electric_field` と `use_magnetic_field` は、それぞれ既定値 `True` の
+キーワード引数です。`False` にすると、その場を軌道更新から除外します。
+
+```python
+# 電場のみを使う
+ts, probability, positions, velocities = get_backtrace(
+    directory=data.directory,
+    ispec=0,
+    istep=-1,
+    particle=particle,
+    dt=data.inp.dt,
+    max_step=300_000,
+    use_magnetic_field=False,
+)
+```
+
+`use_electric_field=False` は空間電荷・蓄積電荷の両方の電場を無効化します。
+`use_magnetic_field=False` は出力された磁場と `wc` から作る背景磁場の両方を
+無効化します。両方を `False` にすると、場による加速・回転なしで追跡します。
+無効化した場の出力ファイルは読み込まないため、保存していなくても使えます。
+
+同じ引数を `get_backtraces`、`get_probabilities`、`get_probabilities_octree`、
+`estimate_velocity_range_map`、`validate_and_expand_velocity_range_map` と
+MPI 版の `get_*` / `srun_get_*` に指定できます。速度範囲推定から確率計算・
+validation へ進む場合は、各呼び出しで同じ場の設定を指定してください。
+Octree と速度範囲推定の結果では、この設定を `metadata` に記録します。
 
 ## 多粒子バックトレース
 
