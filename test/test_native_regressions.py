@@ -17,13 +17,14 @@ LIBRARY_PATH = wrapper.VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX
 if not LIBRARY_PATH.is_file():
     # Source-distribution CI installs the library in site-packages.
     try:
-        from importlib.metadata import distribution
+        from importlib.metadata import distributions
 
-        LIBRARY_PATH = Path(
-            distribution("vdist-solver-fortran").locate_file(
-                "vdsolverf/libvdist-solver-fortran.so"
-            )
-        )
+        # Building the sdist also leaves source-tree egg-info without a DLL.
+        for installed in distributions(name="vdist-solver-fortran"):
+            candidate = Path(installed.locate_file("vdsolverf/libvdist-solver-fortran.so"))
+            if candidate.is_file():
+                LIBRARY_PATH = candidate
+                break
     except (ImportError, LookupError):
         pass
 

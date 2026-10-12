@@ -56,5 +56,5 @@ jobs:
 
       - name: Run Python tests against installed shared library
         run: |
-          python -c "from importlib.metadata import distribution; from pathlib import Path; assert Path(distribution('vdist-solver-fortran').locate_file('vdsolverf/libvdist-solver-fortran.so')).is_file()"
+          python -c "import sys; sys.path.insert(0, 'test'); from test_native_regressions import LIBRARY_PATH; assert LIBRARY_PATH.is_file()"
           python -m unittest discover -s test -p 'test_*.py'
