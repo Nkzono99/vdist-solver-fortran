@@ -130,9 +130,11 @@ contains
             end do
         end if
 
-        if (is_possible_to_be_covered .and. present(cover_all) .and. cover_all) then
-            itype = -1
-            call add_cover_all
+        if (present(cover_all)) then
+            if (is_possible_to_be_covered .and. cover_all) then
+                itype = -1
+                call add_cover_all
+            end if
         end if
 
     contains
