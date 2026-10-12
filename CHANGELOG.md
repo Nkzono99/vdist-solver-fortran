@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.7.1] - 2026-10-12
+
+### Fixed
+
+- Fixed Maxwellian and raycast photoelectron source distributions in oblique
+  magnetic fields by evaluating velocity deviations in the principal thermal
+  frame. Isotropic distributions remain rotation invariant, and anisotropic
+  distributions retain their full covariance. Autorange support uses Cartesian
+  marginal standard deviations (#34).
+- Fixed boundary collision times to interpolate the actual signed step
+  duration, including adaptive time steps (#35).
+- Fixed autorange deposits across periodic boundaries by interpolating the
+  unwrapped trajectory before mapping each sample into the periodic domain.
+  Multiple periodic axes and multiple crossings per step are supported (#36).
+- Initialized unused probability pointers to prevent simulator cleanup crashes.
+- Guarded optional surface-coverage arguments before reading their values,
+  avoiding compiler-dependent crashes during boundary construction.
+
+### Added
+
+- Added native Fortran regressions and Python shared-library integration tests
+  for source rotations, collision times, and periodic deposits. CI runs all
+  Python tests against the library built from the source distribution.
+
 ## [1.7.0] - 2026-10-06
 
 ### Added
@@ -86,6 +110,7 @@ All notable changes to this project are documented in this file.
 - Fixed temporary-input and dust-charging issues before dust code removal.
 - Fixed photoelectron density initialization and `curfs` handling.
 
+[1.7.1]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.4.2...v1.5.0
