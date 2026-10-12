@@ -42,7 +42,9 @@ module m_probabilities
         double precision :: locs(3)
             !! Locations (means) of the distribution
         double precision :: scales(3)
-            !! Scales (standard deviations) of the distribution
+            !! Standard deviations along the orthonormal basis columns.
+        double precision :: basis(3, 3) = reshape([1d0, 0d0, 0d0, 0d0, 1d0, 0d0, 0d0, 0d0, 1d0], [3, 3])
+            !! Principal velocity axes expressed in Cartesian coordinates.
     contains
         procedure :: at => maxwellianProbability_at
             !! Get the probability at a given position and velocity
@@ -50,7 +52,7 @@ module m_probabilities
 
     type, extends(t_Probability) :: tp_Probability
         !! A probability distribution that references another distribution
-        class(t_Probability), pointer :: ref
+        class(t_Probability), pointer :: ref => null()
             !! Reference to another probability distribution
     contains
         procedure :: at => p_Probability_at
@@ -89,7 +91,7 @@ contains
         ret = 0d0
     end function
 
-    function new_MaxwellianProbability(locs, scales, coefficient) result(obj)
+    function new_MaxwellianProbability(locs, scales, coefficient, basis) result(obj)
         !! Create a new Maxwellian probability distribution object with specified properties.
 
         double precision, intent(in) :: locs(3)
@@ -98,11 +100,14 @@ contains
             !! Scales (standard deviations) of the distribution
         double precision, optional, intent(in) :: coefficient
             !! Coefficient for the probability distribution
+        double precision, optional, intent(in) :: basis(3, 3)
+            !! Orthonormal principal axes; defaults to Cartesian axes.
         type(t_MaxwellianProbability) :: obj
             !! A new Maxwellian probability distribution object
 
         obj%locs = locs
         obj%scales = scales
+        if (present(basis)) obj%basis = basis
 
         if (present(coefficient)) then
             obj%coefficient = coefficient
@@ -141,8 +146,10 @@ contains
         ret = self%coefficient
         block
             integer :: i
+            double precision :: centered_velocity(3)
+            centered_velocity = matmul(transpose(self%basis), velocity - self%locs)
             do i = 1, 3
-                ret = ret*maxwell_pdf(velocity(i), self%locs(i), self%scales(i))
+                ret = ret*maxwell_pdf(centered_velocity(i), 0d0, self%scales(i))
             end do
         end block
     end function

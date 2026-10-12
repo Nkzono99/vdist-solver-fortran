@@ -48,6 +48,10 @@ plt.gcf().savefig("backtrace.png")
 行います。順方向の速度範囲推定と対応する更新順序は
 [物理モデル](physics.md#boris-更新と逆追跡) を参照してください。
 
+`ts` は逆追跡の積算時間です。ステップ内の割合 `r` で境界に衝突した場合、
+最後の時刻は `t_before + r * dt_step` になります。可変刻みでは、そのステップの
+`dt_step = dt / |velocity|` を使います。
+
 ## 電場・磁場の有効化と無効化
 
 `use_electric_field` と `use_magnetic_field` は、それぞれ既定値 `True` の

@@ -8,6 +8,10 @@ support 粒子を生成し、Fortran 側で forward trace して、空間セル�
 決める代わりに、セルごとの `VelocityRangeMap` を作り、その範囲から
 `get_probabilities` 用の粒子列を生成できます。
 
+外部源の support 幅は、回転した熱速度共分散の Cartesian 各成分の標準偏差を
+使います。軌道の線分は周期境界で折り返す前の終点まで補間し、記録する各点を
+周期領域へ写像します。複数軸や 1 step 内の複数回 crossing にも適用します。
+
 ## 基本フロー
 
 ```python

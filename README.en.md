@@ -14,6 +14,11 @@ boundary-tagged source distributions (Maxwellian, raycast photoelectron,
 absorbing). The shared library is driven from Python through a `ctypes`
 wrapper.
 
+Maxwellian sources in oblique fields use the rotated thermal distribution.
+Collision times interpolate the actual step duration, and velocity-range
+estimation retains the trajectory displacement across periodic boundaries.
+See [Physics](docs/physics.en.md) and [Velocity range autorange](docs/autorange.en.md).
+
 ## Requirements
 
 - `gfortran`

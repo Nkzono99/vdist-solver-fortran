@@ -14,7 +14,7 @@ program test_solver_probability
     use m_simulator, only: t_ESSimulator, new_ESSimulator
     use m_solver, only: t_Solver, new_Solver, t_BacktraceRecord, t_ProbabilityRecord
     use finbound, only: t_BoundaryList, new_BoundaryList, &
-                        t_Boundary, t_PlaneXYZ, new_PlaneX
+                        t_Boundary, t_PlaneXYZ, new_PlaneX, t_CollisionRecord
 
     use m_test_helpers, only: assert_close, assert_close_vec, assert_true
 
@@ -25,10 +25,50 @@ program test_solver_probability
     call test_maxwell_plane_returns_pdf_at_hit_velocity()
     call test_backtrace_without_collision_returns_invalid_probability()
     call test_probability_without_collision_returns_final_particle()
+    call test_collision_time_uses_signed_step_duration()
 
     print *, "test_solver_probability: all tests passed."
 
 contains
+
+    subroutine test_collision_time_uses_signed_step_duration()
+        type(t_ESSimulator) :: simulator
+        type(t_Solver) :: solver
+        type(t_Particle) :: pcl, updated
+        type(t_CollisionRecord) :: collision
+        type(t_ProbabilityRecord) :: probability
+        type(t_BacktraceRecord) :: trace
+        double precision :: dt, speed, expected, endpoint(3), actual_dt
+        integer :: direction, adaptive, step_case
+
+        simulator = build_simulator_with_maxwell_plane_at_x2(sigma=1d0)
+        solver = new_Solver(simulator)
+        do direction = -1, 1, 2
+            do adaptive = 0, 1
+                do step_case = 1, 2
+                    speed = 2d0
+                    dt = dble(direction*step_case)*0.1d0
+                    pcl = new_Particle(1d0, [1.95d0, 0.5d0, 0.5d0], &
+                                       [-dble(direction)*speed, 0d0, 0d0])
+                    pcl%t = 3d0
+                    expected = pcl%t + dble(direction)*0.05d0/speed
+                    actual_dt = dt
+                    if (adaptive == 1) actual_dt = dt/speed
+                    updated = simulator%update(pcl, actual_dt, collision, endpoint)
+                    call assert_true("simulator reports collision", collision%is_collided)
+                    call assert_close("unwrapped endpoint is collision clipped", endpoint(1), 2d0)
+                    call assert_close("direct simulator collision time", updated%t, expected)
+                    probability = solver%calculate_probability(pcl, dt, 3, adaptive == 1)
+                    call assert_true("straight trace hits plane", probability%is_valid)
+                    call assert_close("collision time equals signed distance/speed", probability%t, expected)
+                    call assert_close("collision particle time agrees", probability%particle%t, expected)
+                    trace = solver%backtrace(pcl, dt, 3, 1, adaptive == 1)
+                    call assert_close("backtrace collision time agrees", trace%ts(trace%last_step), expected)
+                    call assert_close("backtrace collision position", trace%traces(trace%last_step)%position(1), 2d0)
+                end do
+            end do
+        end do
+    end subroutine
 
     subroutine test_maxwell_plane_returns_pdf_at_hit_velocity()
         type(t_ESSimulator) :: simulator

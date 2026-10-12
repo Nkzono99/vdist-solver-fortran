@@ -160,12 +160,12 @@ contains
             blocking_boundaries = create_simple_collision_boundaries(isdoms)
 
             vmean = vdri_vector(ispec)
-            vthermal = vth_vector(ispec)
+            vthermal = [peth(ispec), peth(ispec), path(ispec)]
             sun_direction = resolve_sun_direction(ispec)
 
             allocate (probability_functions(n_probability_functions)%ref, &
                       source=new_PhotoelectronRaycastProbability( &
-                      vmean, vthermal, sun_direction, blocking_boundaries))
+                      vmean, vthermal, sun_direction, blocking_boundaries, basis=thermal_basis()))
         else
             allocate (probability_functions(n_probability_functions)%ref, &
                       source=new_ZeroProbability())
@@ -244,7 +244,7 @@ contains
                 !! Tag for maxwellian velocity distribution boundary
 
             vmean(:) = vdri_vector(ispec)
-            vthermal(:) = vth_vector(ispec)
+            vthermal(:) = [peth(ispec), peth(ispec), path(ispec)]
 
             allocate (probability_functions(n_probability_functions + 1)%ref, &
                       source=new_ZeroProbability())
@@ -253,7 +253,7 @@ contains
 
             if (nflag_emit(ispec) == 0) then
                 allocate (probability_functions(n_probability_functions + 1)%ref, &
-                          source=new_MaxwellianProbability(vmean, vthermal))
+                          source=new_MaxwellianProbability(vmean, vthermal, basis=thermal_basis()))
                 n_probability_functions = n_probability_functions + 1
                 tag_vdist = n_probability_functions
             else

@@ -95,5 +95,7 @@ flag, the solver falls back to the default ZeroProbability (absorbing).
 The ray is cast from the collision point in the direction opposite to the
 drift vector computed from these angles. If any internal boundary blocks
 the ray the probability is 0; otherwise the shifted Maxwellian PDF with
-`locs = vdri_vector(ispec)` and `scales = vth_vector(ispec)` is returned
-(multiplied by 2 for the half-space normalization).
+`locs = vdri_vector(ispec)` and principal-axis
+`scales = [peth(ispec), peth(ispec), path(ispec)]` is returned
+(multiplied by 2 for the half-space normalization). Velocity deviations are
+rotated back into the coordinates before the `phiz`, `phixy` rotation.

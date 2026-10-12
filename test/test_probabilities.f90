@@ -13,10 +13,27 @@ program test_probabilities
     call test_maxwellian_offset_symmetry()
     call test_maxwellian_coefficient_scales_output()
     call test_tp_probability_forwards_to_ref()
+    call test_rotated_shifted_maxwellian()
 
     print *, "test_probabilities: all tests passed."
 
 contains
+
+    subroutine test_rotated_shifted_maxwellian()
+        type(t_MaxwellianProbability) :: prob
+        double precision :: basis(3, 3), loc(3), velocity(3), expected, s
+
+        s = sqrt(0.5d0)
+        basis(:, 1) = [s, 0d0, s]
+        basis(:, 2) = [0d0, 1d0, 0d0]
+        basis(:, 3) = [-s, 0d0, s]
+        loc = [1d0, -2d0, 0.5d0]
+        prob = new_MaxwellianProbability(loc, [0.5d0, 0.5d0, 2d0], coefficient=7d0, basis=basis)
+        velocity = loc + 0.5d0*basis(:, 1) + 2d0*basis(:, 3)
+        expected = 7d0*exp(-1d0)/((2d0*pi)**1.5d0*0.5d0*0.5d0*2d0)
+        call assert_close("rotated distribution centers on Cartesian drift", &
+                          prob%at([0d0, 0d0, 0d0], velocity), expected)
+    end subroutine
 
     subroutine test_zero_probability_is_zero()
         type(t_ZeroProbability) :: prob

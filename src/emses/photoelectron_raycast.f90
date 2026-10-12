@@ -33,6 +33,8 @@ module m_photoelectron_raycast
             !! Mean velocity of the photoelectron Maxwellian.
         double precision :: scales(3)
             !! Thermal velocity (sigma) of the photoelectron Maxwellian.
+        double precision :: basis(3, 3) = reshape([1d0, 0d0, 0d0, 0d0, 1d0, 0d0, 0d0, 0d0, 1d0], [3, 3])
+            !! Orthonormal principal velocity axes in Cartesian coordinates.
         double precision :: sun_direction(3)
             !! Unit vector pointing from the emission point toward the sun.
             !! This is the direction the occlusion ray is cast along.
@@ -51,19 +53,21 @@ contains
     function new_PhotoelectronRaycastProbability(locs, scales, sun_direction, &
                                                  blocking_boundaries, &
                                                  coefficient, &
-                                                 ray_origin_offset) result(obj)
+                                                 ray_origin_offset, basis) result(obj)
         double precision, intent(in) :: locs(3)
         double precision, intent(in) :: scales(3)
         double precision, intent(in) :: sun_direction(3)
         type(t_BoundaryList), intent(in) :: blocking_boundaries
         double precision, intent(in), optional :: coefficient
         double precision, intent(in), optional :: ray_origin_offset
+        double precision, intent(in), optional :: basis(3, 3)
         type(t_PhotoelectronRaycastProbability) :: obj
 
         double precision :: mag
 
         obj%locs = locs
         obj%scales = scales
+        if (present(basis)) obj%basis = basis
 
         mag = norm2(sun_direction)
         if (mag > 0d0) then
@@ -110,6 +114,7 @@ contains
         type(t_HitRecord) :: hit
         double precision :: origin(3)
         double precision :: v_parallel
+        double precision :: centered_velocity(3)
         integer :: i
 
         ! Half-space check: only keep particles moving outward (along +sun_dir).
@@ -120,8 +125,9 @@ contains
         end if
 
         ret = 2d0*self%coefficient
+        centered_velocity = matmul(transpose(self%basis), velocity - self%locs)
         do i = 1, 3
-            ret = ret*maxwell_pdf(velocity(i), self%locs(i), self%scales(i))
+            ret = ret*maxwell_pdf(centered_velocity(i), 0d0, self%scales(i))
         end do
 
         if (ret == 0d0) return

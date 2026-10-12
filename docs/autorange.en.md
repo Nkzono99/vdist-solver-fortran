@@ -8,6 +8,12 @@ separate `vx/vy/vz` ranges for each spatial cell. Instead of choosing one
 global velocity box by hand, you can build a `VelocityRangeMap` and then
 create the particle list passed to `get_probabilities`.
 
+External-source support widths use Cartesian marginal standard deviations of
+the rotated thermal covariance. Each trajectory segment is interpolated to
+its unwrapped endpoint, then each deposited point is mapped into the periodic
+domain. This applies to several periodic axes and multiple crossings within
+one step.
+
 ## Basic Workflow
 
 ```python

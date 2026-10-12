@@ -50,6 +50,10 @@ the same static field and the same time step, without boundary collisions. This
 does not guarantee reversal of an entire trajectory with adaptive steps or
 collision handling.
 
+Collision position, velocity, and time use the same segment fraction `r`.
+The time is `t_before + r * dt_step`, including the sign and any adaptive
+change of the step duration.
+
 ## Supported source distributions
 
 ### Zero (absorbing)
@@ -63,14 +67,22 @@ trap backtraced particles without contributing any source.
 
 $$
 f_M(\mathbf{v}) = C \prod_{i=1}^{3} \frac{1}{\sqrt{2\pi}\sigma_i}
-  \exp\!\left(-\frac{(v_i - \mu_i)^2}{2 \sigma_i^2}\right),
+  \exp\!\left(-\frac{u_i^2}{2 \sigma_i^2}\right),
 $$
 
 where $\boldsymbol\mu$ = `locs` is the drift velocity, $\boldsymbol\sigma$
-= `scales` is the thermal spread, and $C$ = `coefficient` is a multiplicative
-weight. The builder populates these from EMSES parameters via
-`vdri_vector(ispec)` and `vth_vector(ispec)` in
-[`src/emses/allcom.f90`](../src/emses/allcom.f90).
+= `scales` gives principal-axis thermal spreads, and $C$ = `coefficient` is
+a multiplicative weight. Evaluation uses $\mathbf u = R^T(\mathbf v-\boldsymbol\mu)$.
+The optional `basis` ($R$) defaults to the identity matrix.
+
+EMSES external sources and raycast photoelectrons use `locs = vdri_vector(ispec)`
+and `scales = [peth(ispec), peth(ispec), path(ispec)]`. `thermal_basis()` applies
+the same `phiz`, `phixy` rotation as the drift to the principal axes. The
+covariance $R\,\mathrm{diag}(\sigma_i^2)R^T$ retains correlations in oblique
+anisotropic distributions and leaves isotropic distributions invariant.
+`vth_vector(ispec)` returns the square roots of its diagonal entries, the
+Cartesian marginal standard deviations used for autorange support. Axis-aligned
+emission patches retain their existing emission-coordinate convention.
 
 ### Raycast photoelectron
 
@@ -96,11 +108,12 @@ When both conditions pass, the probability is
 $$
 f_{\rm PE}(\mathbf{v}) = 2 \cdot C \prod_{i=1}^{3}
   \frac{1}{\sqrt{2\pi}\sigma_i}
-  \exp\!\left(-\frac{(v_i - \mu_i)^2}{2 \sigma_i^2}\right),
+  \exp\!\left(-\frac{u_i^2}{2 \sigma_i^2}\right),
 $$
 
 with $\boldsymbol\mu$ = `vdri_vector(ispec)` and $\boldsymbol\sigma$ =
-`vth_vector(ispec)`. The factor of 2 is the exact half-space normalization
+`[peth(ispec), peth(ispec), path(ispec)]`; $\mathbf u$ uses the same inverse
+rotation into principal axes as above. The factor of 2 is the exact half-space normalization
 when $\mu_\parallel = 0$; for shifted distributions it is a first-order
 approximation that remains accurate as long as $|\boldsymbol\mu \cdot
 \hat{\mathbf n}|$ is not dominated by the thermal spread.
