@@ -213,16 +213,32 @@ contains
     end function
 
     function vth_vector(ispec) result(ret)
-        !! Calculate the thermal velocity vector.
+        !! Cartesian marginal standard deviations for envelope support.
 
         integer, intent(in) :: ispec
             !! Species index
         double precision :: ret(3)
-            !! Resulting thermal velocity vector
+        double precision :: basis(3, 3), scales(3)
+        integer :: i
 
-        ret(:) = [peth(ispec), peth(ispec), path(ispec)]
-        ret(:) = rot3d_y(ret, phiz*DEG2RAD)
-        ret(:) = rot3d_z(ret, phixy*DEG2RAD)
+        scales = [peth(ispec), peth(ispec), path(ispec)]
+        basis = thermal_basis()
+        do i = 1, 3
+            ret(i) = sqrt(sum((basis(i, :)*scales)**2))
+        end do
+    end function
+
+    function thermal_basis() result(ret)
+        !! Principal thermal axes, using the same rotation as the drift.
+        double precision :: ret(3, 3), axis(3)
+        integer :: i
+
+        do i = 1, 3
+            axis = 0d0
+            axis(i) = 1d0
+            axis = rot3d_y(axis, phiz*DEG2RAD)
+            ret(:, i) = rot3d_z(axis, phixy*DEG2RAD)
+        end do
     end function
 
     function emission_vdri_vector(ispec, iepl) result(ret)

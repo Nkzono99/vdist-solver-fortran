@@ -625,7 +625,8 @@ contains
             type(t_CollisionRecord) :: collision
             real(c_double) :: step_dt
             real(c_double) :: speed
-            integer :: istep
+            real(c_double) :: unwrapped_position(3), segment_end(3)
+            integer :: istep, axis
 
             pcl = new_Particle(qm(ispec), position, velocity)
             call deposit_point(pcl%position, pcl%velocity, weight)
@@ -640,8 +641,14 @@ contains
                     end if
                 end if
 
-                pcl = simulator%update(pcl, step_dt, collision)
-                call deposit_segment(pcl_prev%position, pcl%position, pcl_prev%velocity, pcl%velocity, weight)
+                pcl = simulator%update(pcl, step_dt, collision, unwrapped_position)
+                segment_end = pcl%position
+                do axis = 1, 3
+                    if (simulator%boundary_conditions(axis) == 0) then
+                        segment_end(axis) = unwrapped_position(axis)
+                    end if
+                end do
+                call deposit_segment(pcl_prev%position, segment_end, pcl_prev%velocity, pcl%velocity, weight)
 
                 if (collision%is_collided) then
                     exit
@@ -678,14 +685,24 @@ contains
             integer :: ix, iy, iz
             integer :: ithread
             integer(c_int64_t) :: cell_index
+            integer :: axis
+            real(c_double) :: mapped_position(3)
 
-            if (position(1) < 0d0 .or. position(1) > dble(lx)) return
-            if (position(2) < 0d0 .or. position(2) > dble(ly)) return
-            if (position(3) < 0d0 .or. position(3) > dble(lz)) return
+            ! Interpolate the physical segment, then map each deposited point.
+            ! This retains the true displacement even across several periods.
+            mapped_position = position
+            do axis = 1, 3
+                if (simulator%boundary_conditions(axis) == 0) then
+                    mapped_position(axis) = modulo(mapped_position(axis), dble(dim_size(axis)))
+                end if
+            end do
+            if (mapped_position(1) < 0d0 .or. mapped_position(1) > dble(lx)) return
+            if (mapped_position(2) < 0d0 .or. mapped_position(2) > dble(ly)) return
+            if (mapped_position(3) < 0d0 .or. mapped_position(3) > dble(lz)) return
 
-            ix = min(max(int(position(1)) + 1, 1), lx)
-            iy = min(max(int(position(2)) + 1, 1), ly)
-            iz = min(max(int(position(3)) + 1, 1), lz)
+            ix = min(max(int(mapped_position(1)) + 1, 1), lx)
+            iy = min(max(int(mapped_position(2)) + 1, 1), ly)
+            iz = min(max(int(mapped_position(3)) + 1, 1), lz)
 
             ithread = worker_index()
             cell_index = encode_cell_index(ix, iy, iz)

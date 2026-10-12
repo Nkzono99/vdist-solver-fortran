@@ -83,7 +83,7 @@ contains
         end block
     end function
 
-    function esSimulator_update(self, pcl, dt, record) result(pcl_new)
+    function esSimulator_update(self, pcl, dt, record, unwrapped_position) result(pcl_new)
         !! Update the state of a particle.
 
         class(t_ESSimulator), intent(in) :: self
@@ -94,6 +94,8 @@ contains
             !! Time step for the update
         type(t_CollisionRecord), intent(out) :: record
             !! Collision record
+        double precision, intent(out), optional :: unwrapped_position(3)
+            !! Collision-clipped endpoint before periodic/reflection mapping.
         type(t_Particle) :: pcl_new
             !! Updated particle
 
@@ -109,12 +111,14 @@ contains
                 pcl_new%q_m = pcl%q_m
                 pcl_new%position = pcl%position*(1d0 - r) + pcl_new%position*r
                 pcl_new%velocity = pcl%velocity*(1d0 - r) + pcl_new%velocity*r
-                pcl_new%t = pcl%t + r
+                pcl_new%t = pcl%t + r*dt
             end block
 
+            if (present(unwrapped_position)) unwrapped_position = pcl_new%position
             return
         end if
 
+        if (present(unwrapped_position)) unwrapped_position = pcl_new%position
         call self%apply_boundary_condition(pcl_new)
     end function
 

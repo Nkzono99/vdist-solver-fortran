@@ -45,6 +45,9 @@ MPIEMSES3D の通常の Boris 更新は、現在位置の場で速度を更新�
 位置と速度は丸め誤差の範囲で元に戻ります。可変刻みや衝突処理を含む
 軌道全体について、この往復性を保証するものではありません。
 
+境界衝突の位置・速度・時刻は同じ線分上の割合 `r` で補間します。
+時刻は `t_before + r * dt_step` で、`dt_step` の符号と可変刻みを反映します。
+
 ## 対応するソース分布
 
 ### Zero (吸収)
@@ -57,14 +60,21 @@ MPIEMSES3D の通常の Boris 更新は、現在位置の場で速度を更新�
 
 $$
 f_M(\mathbf{v}) = C \prod_{i=1}^{3} \frac{1}{\sqrt{2\pi}\sigma_i}
-  \exp\!\left(-\frac{(v_i - \mu_i)^2}{2 \sigma_i^2}\right),
+  \exp\!\left(-\frac{u_i^2}{2 \sigma_i^2}\right),
 $$
 
 $\boldsymbol\mu$ = `locs` はドリフト速度、$\boldsymbol\sigma$ = `scales`
-は熱速度、$C$ = `coefficient` は乗算係数です。ビルダは EMSES パラメータ
-から
-[`src/emses/allcom.f90`](../src/emses/allcom.f90) の `vdri_vector(ispec)`
-と `vth_vector(ispec)` を用いて値を供給します。
+は主軸方向の熱速度、$C$ = `coefficient` は乗算係数です。
+$\mathbf u = R^T(\mathbf v-\boldsymbol\mu)$ として、速度を分布の基準座標へ
+戻して評価します。省略時の `basis` ($R$) は単位行列です。
+
+EMSES の外部源と raycast 光電子では、`locs = vdri_vector(ispec)`、
+`scales = [peth(ispec), peth(ispec), path(ispec)]` を使います。
+`thermal_basis()` はドリフトと同じ `phiz`、`phixy` 回転を主軸へ適用します。
+共分散は $R\,\mathrm{diag}(\sigma_i^2)R^T$ で、斜めの異方分布の相関を保持し、
+等方分布は回転で変化しません。`vth_vector(ispec)` はこの共分散の対角成分の
+平方根（Cartesian 各成分の標準偏差）を返し、autorange の support に使います。
+放出パッチの軸に沿う分布は既存の emission 座標規約を使います。
 
 ### Raycast 光電子
 
@@ -88,11 +98,12 @@ $t > 0$ で何かに当たれば日陰となり密度 0。
 $$
 f_{\rm PE}(\mathbf{v}) = 2 \cdot C \prod_{i=1}^{3}
   \frac{1}{\sqrt{2\pi}\sigma_i}
-  \exp\!\left(-\frac{(v_i - \mu_i)^2}{2 \sigma_i^2}\right),
+  \exp\!\left(-\frac{u_i^2}{2 \sigma_i^2}\right),
 $$
 
 $\boldsymbol\mu$ = `vdri_vector(ispec)`, $\boldsymbol\sigma$ =
-`vth_vector(ispec)`。係数 2 は $\mu_\parallel = 0$ のときの半空間正規化
+`[peth(ispec), peth(ispec), path(ispec)]`、$\mathbf u$ は上と同じ主軸への
+逆回転です。係数 2 は $\mu_\parallel = 0$ のときの半空間正規化
 として厳密です。シフト分布では 1 次近似となり、$|\boldsymbol\mu \cdot
 \hat{\mathbf n}|$ が熱速度に対して支配的でない範囲で十分精確です。
 

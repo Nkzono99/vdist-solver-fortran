@@ -95,5 +95,6 @@ ZeroProbability (吸収) にフォールバックします。
 
 これらの角度から計算したドリフトベクトルの「反対方向」に衝突点から
 レイを飛ばし、内部境界に遮蔽されれば確率 0、そうでなければ
-`locs = vdri_vector(ispec)` と `scales = vth_vector(ispec)` で定義される
-シフト Maxwell PDF (半空間正規化のため 2 倍) を返します。
+`locs = vdri_vector(ispec)` と主軸の `scales = [peth(ispec), peth(ispec), path(ispec)]`
+で定義されるシフト Maxwell PDF (半空間正規化のため 2 倍) を返します。
+速度偏差を `phiz`、`phixy` の回転前の座標へ戻して評価します。

@@ -17,10 +17,30 @@ program test_simulator
     call test_nonuniform_mixed_fields_roundtrip()
     call test_periodic_crossing_roundtrip()
     call test_zero_step()
+    call test_unwrapped_endpoint_across_multiple_periods()
 
     print *, "test_simulator: all tests passed."
 
 contains
+
+    subroutine test_unwrapped_endpoint_across_multiple_periods()
+        type(t_ESSimulator) :: simulator
+        type(t_Particle) :: p, ret
+        type(t_CollisionRecord) :: record
+        double precision :: values(6, 0:4, 0:4, 0:4), endpoint(3), expected(3), dt
+        integer :: direction
+
+        values = 0d0
+        simulator = build_simulator(values, periodic=.true.)
+        p = new_Particle(1d0, [1.5d0, 2d0, 3d0], [4d0, -5d0, 0.25d0])
+        do direction = -1, 1, 2
+            dt = 2.4d0*direction
+            expected = p%position - dt*p%velocity
+            ret = simulator%update(p, dt, record, unwrapped_position=endpoint)
+            call assert_close_vec("multiple-period endpoint retains physical displacement", endpoint, expected)
+            call assert_close_vec("returned particle remains periodic", ret%position, modulo(expected, 4d0))
+        end do
+    end subroutine
 
     function build_simulator(values, periodic) result(simulator)
         double precision, intent(in) :: values(6, 0:4, 0:4, 0:4)

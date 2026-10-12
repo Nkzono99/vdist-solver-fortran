@@ -49,6 +49,10 @@ velocity update using the field there. See
 [Physics](physics.en.md#boris-updates-and-backward-tracing) for the corresponding
 forward update used by velocity-range estimation.
 
+`ts` records accumulated backtrace time. A boundary hit at fraction `r` of a
+step ends at `t_before + r * dt_step`. Adaptive stepping uses that step's
+`dt_step = dt / |velocity|`.
+
 ## Enabling and disabling electric and magnetic fields
 
 `use_electric_field` and `use_magnetic_field` are keyword arguments that each
