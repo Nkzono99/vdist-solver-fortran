@@ -153,15 +153,14 @@ contains
 
     contains
 
-        subroutine evaluate_spatial_octree(ispatial)
+        recursive subroutine evaluate_spatial_octree(ispatial)
             integer, intent(in) :: ispatial
 
-            type(t_Solver) :: solver
+            type(t_Solver), pointer :: solver
             real(c_double) :: root_bounds(6)
             integer :: status
             logical :: has_signal
 
-            solver = new_Solver(simulator)
             root_bounds = velocity_bounds(:, ispatial)
             status = STATUS_OK
 
@@ -169,6 +168,16 @@ contains
                 return_status(ispatial) = STATUS_INVALID_BOUNDS
                 return
             end if
+
+            ! ifx 2023.2 uses shared, mutable descriptors for the intrinsic
+            ! copies of the simulator's polymorphic allocatable field, including
+            ! the function result assignment. Protect construction/destruction,
+            ! including default initialization and finalization.
+            ! Sampling and particle tracing below remain parallel.
+            !$omp critical(vdsolverf_solver_copy)
+            allocate(solver)
+            solver = new_Solver(simulator)
+            !$omp end critical(vdsolverf_solver_copy)
 
             call expand_root_if_needed(solver, ispatial, root_bounds, status)
             call traverse_octree(solver, ispatial, root_bounds, status)
@@ -185,6 +194,9 @@ contains
             else
                 return_status(ispatial) = STATUS_OK
             end if
+            !$omp critical(vdsolverf_solver_copy)
+            deallocate(solver)
+            !$omp end critical(vdsolverf_solver_copy)
         end subroutine
 
         logical function valid_bounds(bounds) result(ret)

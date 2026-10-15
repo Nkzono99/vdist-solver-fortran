@@ -13,6 +13,11 @@ Fortran で実装した速度分布ソルバを Python から利用するため�
 確率密度を評価します。共有ライブラリを `ctypes` ラッパ経由で Python
 から駆動する構成です。
 
+確率・octree・dust current の並列評価には、非ゼロ場でのビット再現性回帰テストが
+あります。Intel 版は `-qopenmp -fp-model precise` を使います。
+[並列実行とコンパイラの説明](docs/dust_currents.md) および
+[autorange モーメントの許容誤差](docs/autorange.md#再現性) を参照してください。
+
 斜め磁場での Maxwellian 源は磁場基準の熱速度分布を回転して評価します。
 衝突時刻は実際のステップ時間で補間し、速度範囲推定は周期境界をまたぐ
 軌道の折り返し前の変位を使います。詳細は [物理モデル](docs/physics.md) と

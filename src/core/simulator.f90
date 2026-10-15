@@ -156,7 +156,14 @@ contains
 
             dt2 = -0.5d0*dt
 
-            field_particle = particle
+            ! Copy the base components explicitly. ifx 2023.2 lowers intrinsic
+            ! assignment from this polymorphic dummy to a shared temporary
+            ! descriptor with -qopenmp. Avoid that concurrent runtime assignment
+            ! on the Boris hot path as well as in the probability solver.
+            field_particle%t = particle%t
+            field_particle%q_m = particle%q_m
+            field_particle%position = particle%position
+            field_particle%velocity = particle%velocity
             if (dt >= 0d0) field_particle%position = position_new
             ! Sample the same physical point after a periodic boundary crossing.
             ! Keep the unwrapped drift endpoint for collision detection.

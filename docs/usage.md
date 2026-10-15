@@ -6,6 +6,11 @@
 (例: `./my-run/`) が手元にあり、アクティブな Python 環境に
 `vdist-solver-fortran` がインストール済みであることを前提にしています。
 
+Intel OpenMP 版は `-qopenmp -fp-model precise` でビルドしてください。
+確率・octree・dust current は8 threads での反復ビット比較を回帰テストします。
+autorange の任意の速度モーメントには加算の丸め差があるため、
+[再現性と許容誤差](autorange.md#再現性) を参照してください。
+
 > [!Note]
 > `ispec` は Python API での 0-オリジン粒子種インデックスです。
 > 慣習: `0` = 電子、`1` = イオン、`2` = 光電子。

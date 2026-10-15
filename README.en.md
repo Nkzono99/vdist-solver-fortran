@@ -14,6 +14,11 @@ boundary-tagged source distributions (Maxwellian, raycast photoelectron,
 absorbing). The shared library is driven from Python through a `ctypes`
 wrapper.
 
+Threaded probability, octree and dust-current evaluations have a nonzero-field
+bit-reproducibility regression. Intel builds use `-qopenmp -fp-model precise`;
+see [threading and compiler notes](docs/dust_currents.en.md) and
+[autorange moment tolerances](docs/autorange.en.md#reproducibility).
+
 Maxwellian sources in oblique fields use the rotated thermal distribution.
 Collision times interpolate the actual step duration, and velocity-range
 estimation retains the trajectory displacement across periodic boundaries.

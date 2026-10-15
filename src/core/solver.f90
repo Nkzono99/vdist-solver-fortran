@@ -57,7 +57,7 @@ contains
         obj%simulator = simulator
     end function
 
-    function solver_backtrace(self, particle, dt, max_step, output_interval, use_adaptive_dt) result(ret)
+    recursive function solver_backtrace(self, particle, dt, max_step, output_interval, use_adaptive_dt) result(ret)
         !! Perform a backtrace of a particle.
 
         class(t_Solver), intent(in) :: self
@@ -81,7 +81,12 @@ contains
 
         max_output_steps = (max_step - 1)/output_interval + 2
 
-        pcl = particle
+        ! Avoid ifx's shared descriptor for polymorphic intrinsic assignment
+        ! when several workers trace particles concurrently (see simulator).
+        pcl%t = particle%t
+        pcl%q_m = particle%q_m
+        pcl%position = particle%position
+        pcl%velocity = particle%velocity
         call self%simulator%apply_boundary_condition(pcl)
 
         allocate (ret%traces(max_output_steps))
@@ -92,7 +97,6 @@ contains
         do istep = 2, max_step
             block
                 type(t_CollisionRecord) :: record
-                type(tp_Probability), allocatable :: probability_function
 
                 double precision :: tmp_dt
 
@@ -112,8 +116,11 @@ contains
                 if (record%is_collided) then
                     ret%last_step = (istep - 1)/output_interval + 1
 
-                    probability_function = self%simulator%probability_functions(record%material%tag)
-                    ret%probability = probability_function%at(pcl%position, pcl%velocity)
+                    ! Evaluate the immutable probability in place. Allocatable
+                    ! wrapper assignment here gives ifx shared descriptor scratch
+                    ! and races when multiple particles reach a boundary.
+                    ret%probability = self%simulator%probability_functions(record%material%tag)%ref%at( &
+                        pcl%position, pcl%velocity)
 
                     ret%traces(max_output_steps) = pcl
                     ret%ts(max_output_steps) = pcl%t
@@ -127,7 +134,7 @@ contains
         ret%ts(max_output_steps) = pcl%t
     end function
 
-    function solver_calculate_probability(self, particle, dt, max_step, use_adaptive_dt) result(ret)
+    recursive function solver_calculate_probability(self, particle, dt, max_step, use_adaptive_dt) result(ret)
         !! Calculate the probability for a particle.
 
         class(t_Solver), intent(in) :: self
@@ -146,7 +153,10 @@ contains
         integer :: i
         type(t_Particle) :: pcl
 
-        pcl = particle
+        pcl%t = particle%t
+        pcl%q_m = particle%q_m
+        pcl%position = particle%position
+        pcl%velocity = particle%velocity
         call self%simulator%apply_boundary_condition(pcl)
         ret%probability = -1d0
         ret%particle = pcl
@@ -155,7 +165,6 @@ contains
         do i = 1, max_step
             block
                 type(t_CollisionRecord) :: record
-                type(tp_Probability), allocatable :: probability_function
 
                 double precision :: tmp_dt
 
@@ -172,8 +181,8 @@ contains
                     ret%particle = pcl
                     ret%t = pcl%t
 
-                    probability_function = self%simulator%probability_functions(record%material%tag)
-                    ret%probability = probability_function%at(pcl%position, pcl%velocity)
+                    ret%probability = self%simulator%probability_functions(record%material%tag)%ref%at( &
+                        pcl%position, pcl%velocity)
                     return
                 end if
             end block

@@ -12,8 +12,8 @@ INSTALL_PROFILE ?= auto
 PREFIX ?= $(PWD)
 BATCH_FC ?= gfortran
 MPI_FC ?= $(shell command -v mpif90 >/dev/null 2>&1 && echo mpif90 || echo mpiifx)
-BATCH_FLAGS ?= $(if $(findstring ifx,$(BATCH_FC)),-O3 -qopenmp,-O3 -fopenmp)
-MPI_FLAGS ?= $(if $(or $(findstring mpiifx,$(MPI_FC)),$(findstring mpiifort,$(MPI_FC))),-O3 -qopenmp,-O3 -fopenmp)
+BATCH_FLAGS ?= $(if $(findstring ifx,$(BATCH_FC)),-O3 -qopenmp -fp-model precise,-O3 -fopenmp)
+MPI_FLAGS ?= $(if $(or $(findstring mpiifx,$(MPI_FC)),$(findstring mpiifort,$(MPI_FC))),-O3 -qopenmp -fp-model precise,-O3 -fopenmp)
 BATCH_PREFIX ?= $(CURDIR)/build/batch-serial
 MPI_PREFIX ?= $(CURDIR)/build/batch-mpi
 

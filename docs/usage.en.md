@@ -6,6 +6,11 @@ All examples assume you have an EMSES run on disk (e.g. `./my-run/`) that
 `emout` can load, and that `vdist-solver-fortran` is installed in the active
 Python environment.
 
+For Intel OpenMP builds use `-qopenmp -fp-model precise`. Probability, octree
+and dust-current evaluations are covered by a repeated eight-thread bit
+comparison. Optional autorange velocity moments have summation roundoff;
+see [reproducibility and tolerances](autorange.en.md#reproducibility).
+
 > [!Note]
 > `ispec` is a zero-based species index in the Python API.
 > Conventional mapping: `0` = electron, `1` = ion, `2` = photoelectron.

@@ -176,10 +176,23 @@ MPI 版は `build/batch-mpi/bin/vdsolverf-batch`。別 prefix で両実行ファ
 KUDPC ではビルドも実行も計算ノードで行います。
 
 この環境では `mpif90` は GCC 8 + Intel MPI を使います。この組合せを検証構成と
-します。Intel Fortran (`BATCH_FC=ifx` / `MPI_FC=mpiifx`) でもビルドできますが、
-非ゼロの場で複数 thread 実行すると繰り返し間の数値不一致を観測しました。
-原因調査は未完了です。大規模テーブルには検証済みの GNU 構成を使ってください。
-今回、既存の数値コアは変更していません。
+します。Intel Fortran (`BATCH_FC=ifx` / `MPI_FC=mpiifx`) の既定フラグは
+`-O3 -qopenmp -fp-model precise` です。以前の非ゼロ場での数値不一致は
+ifx 2023.2 が生成する共有作業記述子の競合で、境界衝突時の allocatable な
+確率ラッパのコピーも原因でした。確率関数を読み取り専用のまま直接呼び、
+多相粒子は成分ごとにコピーし、solver の構築・解放を排他処理にしました。
+回帰テストは19地点を8 threads で2回評価し、octree 全サンプルと最終軌道を
+含む全出力のビットを単一 thread の結果と比較します。
+
+```bash
+fpm test --flag "-fopenmp" --target test_thread_determinism
+fpm test --compiler ifx --flag "-O3 -qopenmp -fp-model precise" --target test_thread_determinism
+```
+
+ビット一致が必要ならコンパイラと浮動小数点フラグを揃えてください。
+異なるコンパイラや fast-math の比較には数値許容誤差が必要です。
+autorange の任意の平均・共分散は、ロックで保護された順序不定の加算を使います。
+詳細は [autorange の再現性](autorange.md#再現性) を参照してください。
 
 ```python
 import numpy as np

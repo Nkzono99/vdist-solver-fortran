@@ -196,10 +196,25 @@ retain both binaries. Override `BATCH_FLAGS` / `MPI_FLAGS` and `BATCH_PREFIX` /
 `MPI_PREFIX` as needed. Build and run on compute nodes at KUDPC.
 
 Here `mpif90` uses GCC 8 with Intel MPI; this is the validated configuration.
-Intel Fortran (`BATCH_FC=ifx` / `MPI_FC=mpiifx`) builds also compile, but repeated
-multithreaded evaluations with nonzero fields exposed numerical differences.
-The cause remains unresolved; use the validated GNU configuration for current
-tables. This implementation leaves the existing numerical core unchanged.
+Intel Fortran (`BATCH_FC=ifx` / `MPI_FC=mpiifx`) uses
+`-O3 -qopenmp -fp-model precise`. The former nonzero-field nondeterminism was
+traced to shared compiler-generated descriptors in ifx 2023.2, including an
+allocatable probability-wrapper copy on every boundary collision. The solver
+now evaluates the immutable probability object directly, copies polymorphic
+particle components explicitly, and serializes solver construction/destruction.
+The nonuniform-field regression evaluates 19 positions twice with eight
+threads and compares every output bit, including octree samples and final
+particle states, against a serial evaluation:
+
+```bash
+fpm test --flag "-fopenmp" --target test_thread_determinism
+fpm test --compiler ifx --flag "-O3 -qopenmp -fp-model precise" --target test_thread_determinism
+```
+
+Use the same compiler and floating-point flags when requiring bit identity.
+Cross-compiler or fast-math builds need numerical tolerances. Autorange's
+optional mean/covariance diagnostics additionally use locked, unordered sums;
+see [autorange reproducibility](autorange.en.md#reproducibility).
 
 ```python
 import numpy as np

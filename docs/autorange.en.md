@@ -14,6 +14,20 @@ its unwrapped endpoint, then each deposited point is mapped into the periodic
 domain. This applies to several periodic axes and multiple crossings within
 one step.
 
+## Reproducibility
+
+Support particles and trajectories are deterministic. Each worker owns its
+cache; global min/max, counts, weights and velocity moments are merged under
+cell locks. Cache flush order can change between runs, including runs with
+the same thread count. The optional `mean_v` and `cov_v` therefore have
+floating-point summation differences; they are not bit-identical outputs.
+On the 3 x 2 x 4 nonuniform-field fixture, repeated 1/2/8-thread ifx runs
+differed by less than `1e-15` in these normalized diagnostics, while bounds,
+counts, weights, status and confidence matched bit for bit. For this fixture,
+compare moments with `rtol=1e-12, atol=1e-12`; longer or differently scaled
+traces require an appropriate absolute tolerance. Use one thread when exact
+diagnostic reproducibility is required.
+
 ## Basic Workflow
 
 ```python
