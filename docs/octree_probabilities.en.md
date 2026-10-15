@@ -259,3 +259,11 @@ final capacity and refinement settings.
 - The result is a sparse sample/box representation. To save it, use `np.savez`
   with arrays such as `result.velocities`, `result.probabilities`, and
   `result.leaf_bounds`.
+
+## Terminal boxes and field bundles
+
+`result.leaf_is_terminal` marks boxes that were not split. For completed trees,
+their volumes sum to the final root volume; capacity-truncated trees can be
+incomplete. `field_bundle=` accepts reusable pre-relocated fields. See
+[Dust current moments](dust_currents.en.md) for terminal flag compatibility,
+bundle format, and Fortran OML integration.

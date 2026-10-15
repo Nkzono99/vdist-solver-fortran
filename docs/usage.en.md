@@ -311,3 +311,10 @@ get_backtrace(..., system="linux", library_path="/custom/path/libvdist-solver-fo
 
 Accepted values for `system`: `"auto"` (default), `"linux"`, `"darwin"`,
 `"windows"`.
+
+## Dust charging current moments
+
+For density-one OML flux moments computed inside Fortran, use
+`vdsolverf.emses.get_dust_currents`. Multiply `result.flux` by species charge
+and density for current density. See [Dust current moments](dust_currents.en.md)
+for usage and reusable field bundles.

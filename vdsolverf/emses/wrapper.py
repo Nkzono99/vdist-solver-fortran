@@ -1,5 +1,7 @@
 import os
 import platform
+from contextlib import contextmanager
+from types import SimpleNamespace
 from ctypes import *
 from os import PathLike
 from pathlib import Path
@@ -9,7 +11,7 @@ import emout
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from ..core import Particle, PhaseGrid, VelocityOctreeResult, VelocityRangeMap
+from ..core import Particle, PhaseGrid, VelocityOctreeResult, VelocityRangeMap, DustCurrentResult
 from .tmpolary_input import TempolaryInput
 
 VDIST_SOLVER_FORTRAN_LIBRARY_PATH_LINUX = (
@@ -354,6 +356,7 @@ def get_probabilities_octree(
     tmp_input_suffix: Union[str, None] = None,
     use_electric_field: bool = True,
     use_magnetic_field: bool = True,
+    field_bundle=None,
 ) -> VelocityOctreeResult:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
     dll = _load_dll(system, library_path)
@@ -382,6 +385,7 @@ def get_probabilities_octree(
         tmp_input_suffix=tmp_input_suffix,
         use_electric_field=use_electric_field,
         use_magnetic_field=use_magnetic_field,
+        field_bundle=field_bundle,
     )
 
 
@@ -410,8 +414,13 @@ def get_probabilities_octree_dll(
     *,
     use_electric_field: bool = True,
     use_magnetic_field: bool = True,
+    field_bundle=None,
 ) -> VelocityOctreeResult:
-    dll.get_probabilities_octree.argtypes = [
+    # The extended symbol adds terminal flags without touching the original ABI.
+    has_terminal_flags = hasattr(dll, "get_probabilities_octree_with_terminals")
+    evaluate = (dll.get_probabilities_octree_with_terminals if has_terminal_flags
+                else dll.get_probabilities_octree)
+    evaluate.argtypes = [
         c_char_p,  # inppath
         c_int,  # length
         c_int,  # lx
@@ -453,7 +462,9 @@ def get_probabilities_octree_dll(
         POINTER(c_int),  # return_actual_leaf_count
         POINTER(c_int),  # n_threads
     ]
-    dll.get_probabilities_octree.restype = None
+    if has_terminal_flags:
+        evaluate.argtypes = evaluate.argtypes + [np.ctypeslib.ndpointer(dtype=np.int32, ndim=1)]
+    evaluate.restype = None
 
     spatial_points, velocity_bounds_array = _prepare_octree_inputs(
         phase_grid=phase_grid,
@@ -470,13 +481,6 @@ def get_probabilities_octree_dll(
         edge_threshold_rel=edge_threshold_rel,
         expand_factor=expand_factor,
         max_expansions=max_expansions,
-    )
-
-    data = emout.Emout(directory)
-    ebvalues = create_relocated_ebvalues(
-        data, istep, ispec=ispec,
-        use_electric_field=use_electric_field,
-        use_magnetic_field=use_magnetic_field,
     )
 
     sample_capacity = nspatial * max_samples_per_cell
@@ -496,12 +500,13 @@ def get_probabilities_octree_dll(
     return_sample_count = np.empty(nspatial, dtype=np.int32)
     return_leaf_count = np.empty(nspatial, dtype=np.int32)
 
-    with TempolaryInput(data, suffix=tmp_input_suffix) as tmpinp:
-        inppath = tmpinp.tmppath
+    return_leaf_is_terminal = np.zeros(leaf_capacity, dtype=np.int32)
+    with _prepared_octree_fields(directory, istep, ispec, use_electric_field, use_magnetic_field,
+                                field_bundle, tmp_input_suffix) as (data, ebvalues, inppath):
         inppath_str = str(inppath.resolve())
 
         _inppath = create_string_buffer(inppath_str.encode())
-        _length = c_int(len(inppath_str))
+        _length = c_int(len(inppath_str.encode()))
         _nx = c_int(data.inp.nx)
         _ny = c_int(data.inp.ny)
         _nz = c_int(data.inp.nz)
@@ -525,7 +530,7 @@ def get_probabilities_octree_dll(
         _actual_leaf_count = c_int(0)
         _n_threads = c_int(n_threads)
 
-        dll.get_probabilities_octree(
+        evaluate(
             _inppath,
             _length,
             _nx,
@@ -566,6 +571,7 @@ def get_probabilities_octree_dll(
             byref(_actual_sample_count),
             byref(_actual_leaf_count),
             byref(_n_threads),
+            *([return_leaf_is_terminal] if has_terminal_flags else []),
         )
 
     return _compact_octree_result(
@@ -585,8 +591,11 @@ def get_probabilities_octree_dll(
         leaf_count=return_leaf_count,
         max_samples_per_cell=max_samples_per_cell,
         max_leaves_per_cell=max_leaves_per_cell,
+        leaf_is_terminal=return_leaf_is_terminal if has_terminal_flags else None,
         metadata={
             "directory": str(data.directory),
+            "field_bundle": str(field_bundle.namelist_path.parent) if hasattr(field_bundle, "namelist_path") else (str(field_bundle) if field_bundle is not None else None),
+            "terminal_flags": "fortran" if has_terminal_flags else "returned_tree",
             "ispec": ispec,
             "istep": istep,
             "dt": dt,
@@ -822,6 +831,7 @@ def _compact_octree_result(
     max_samples_per_cell: int,
     max_leaves_per_cell: int,
     metadata: dict,
+    leaf_is_terminal=None,
 ) -> VelocityOctreeResult:
     sample_indexes = []
     leaf_indexes = []
@@ -866,6 +876,7 @@ def _compact_octree_result(
         sample_count=sample_count.copy(),
         leaf_count=leaf_count.copy(),
         metadata=metadata,
+        leaf_is_terminal=None if leaf_is_terminal is None else leaf_is_terminal[leaf_indexes].astype(bool),
     )
 
 
@@ -1532,3 +1543,112 @@ def rotate(vec: np.ndarray, phiz_deg: float, phixy_deg: float) -> np.ndarray:
     rot = Rotation.from_euler("yz", [phiz_deg, phixy_deg], degrees=True)
 
     return rot.apply(vec)
+
+
+@contextmanager
+def _prepared_octree_fields(directory, istep, ispec, use_electric_field, use_magnetic_field,
+                            field_bundle, tmp_input_suffix):
+    """Share field loading between octree samples and moment reductions."""
+    if field_bundle is not None:
+        from ..io import FieldBundle, read_field_bundle
+
+        bundle = field_bundle if isinstance(field_bundle, FieldBundle) else read_field_bundle(field_bundle)
+        meta = bundle.metadata
+        if Path(directory).resolve() != Path(meta["directory"]).resolve():
+            raise ValueError("directory does not match field bundle")
+        if istep != meta["istep"]:
+            raise ValueError("istep does not match field bundle")
+        if (use_electric_field != meta["use_electric_field"] or
+                use_magnetic_field != meta["use_magnetic_field"]):
+            raise ValueError("field flags do not match field bundle")
+        data = SimpleNamespace(directory=Path(meta["directory"]),
+                               inp=SimpleNamespace(**{k: meta[k] for k in ("nx", "ny", "nz")}))
+        values = bundle.get_ebvalues(ispec)
+        yield data, values, bundle.namelist_path
+    else:
+        data = emout.Emout(directory)
+        values = create_relocated_ebvalues(
+            data, istep, ispec=ispec, use_electric_field=use_electric_field,
+            use_magnetic_field=use_magnetic_field,
+        )
+        with TempolaryInput(data, suffix=tmp_input_suffix) as tmpinp:
+            yield data, values, tmpinp.tmppath
+
+
+def get_dust_currents(
+    directory: PathLike, ispec: int, istep: int, positions, velocity_bounds, psi_grid,
+    dt: float, max_step: int, *, use_adaptive_dt: bool = False,
+    max_probability_types: int = 100, scout_bins: Tuple[int, int, int] = (9, 9, 9),
+    max_depth: int = 6, max_samples_per_cell: int = 50_000, max_leaves_per_cell: int = 4096,
+    refine_threshold_rel: float = 1e-4, edge_threshold_rel: float = 1e-4,
+    expand_factor: float = 1.5, max_expansions: int = 3, n_threads: Union[int, None] = None,
+    use_electric_field: bool = True, use_magnetic_field: bool = True, field_bundle=None,
+    system: Literal["auto", "linux", "darwin", "windows"] = "auto", library_path: PathLike = None,
+    tmp_input_suffix: Union[str, None] = None,
+) -> DustCurrentResult:
+    """Evaluate unit-density OML flux for all psi values in one velocity sweep.
+
+    Units are EMSES normalised. Python outputs have shape (nspatial, npsi);
+    multiply flux by the species charge and density to obtain current density.
+    ispec is zero-based, as in get_probabilities_octree. Field bundles must match
+    directory, istep, species and both field flags exactly.
+    """
+    spatial, bounds = _prepare_octree_inputs(phase_grid=None, position=positions,
+                                            velocity_bounds=velocity_bounds)
+    psi = np.ascontiguousarray(psi_grid, dtype=np.float64)
+    if psi.ndim != 1 or not len(psi) or not np.all(np.isfinite(psi)):
+        raise ValueError("psi_grid must be a nonempty finite one-dimensional array")
+    if not len(spatial) or not np.all(np.isfinite(spatial)):
+        raise ValueError("positions must be nonempty and finite")
+    if not np.isfinite(dt) or dt <= 0 or max_step < 1:
+        raise ValueError("dt and max_step must be positive")
+    if not isinstance(ispec, (int, np.integer)) or ispec < 0:
+        raise ValueError("ispec must be a non-negative integer (zero-based)")
+    parameters = dict(scout_bins=scout_bins, max_depth=max_depth,
+                      max_samples_per_cell=max_samples_per_cell, max_leaves_per_cell=max_leaves_per_cell,
+                      refine_threshold_rel=refine_threshold_rel, edge_threshold_rel=edge_threshold_rel,
+                      expand_factor=expand_factor, max_expansions=max_expansions)
+    _validate_octree_parameters(**parameters)
+    n_threads = int(os.environ.get("OMP_NUM_THREADS", "1")) if n_threads is None else n_threads
+    if n_threads < 1 or max_probability_types < 1:
+        raise ValueError("n_threads and max_probability_types must be positive")
+    dll = _load_dll(system, library_path)
+    # Arrays reverse Fortran's dimensions so all buffers are C-contiguous.
+    f1 = np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS")
+    f2 = np.ctypeslib.ndpointer(dtype=np.float64, ndim=2, flags="C_CONTIGUOUS")
+    f4 = np.ctypeslib.ndpointer(dtype=np.float64, ndim=4, flags="C_CONTIGUOUS")
+    i1 = np.ctypeslib.ndpointer(dtype=np.int32, ndim=1, flags="C_CONTIGUOUS")
+    evaluate = dll.evaluate_dust_currents
+    evaluate.argtypes = [
+        c_char_p, c_int, c_int, c_int, c_int, f4, c_int, c_int, f2, f2, c_int, f1,
+        c_double, c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int,
+        c_double, c_double, c_double, c_int, f2, f2, i1, i1, i1, POINTER(c_int),
+    ]
+    evaluate.restype = None
+    nspatial, npsi = len(spatial), len(psi)
+    flux = np.empty((nspatial, npsi), dtype=np.float64)
+    error = np.empty_like(flux)
+    status = np.empty(nspatial, dtype=np.int32)
+    samples = np.empty_like(status)
+    terminals = np.empty_like(status)
+    threads = c_int(n_threads)
+    with _prepared_octree_fields(directory, istep, ispec, use_electric_field, use_magnetic_field,
+                                field_bundle, tmp_input_suffix) as (data, fields, path):
+        nspec = getattr(data.inp, "nspec", None)
+        if nspec is not None and ispec >= nspec:
+            raise ValueError("ispec is outside the namelist species range")
+        encoded = str(path.resolve()).encode()
+        evaluate(encoded, len(encoded), data.inp.nx, data.inp.ny, data.inp.nz,
+                 fields, ispec + 1, nspatial, spatial, bounds, npsi, psi, dt, max_step,
+                 int(use_adaptive_dt), max_probability_types, *scout_bins, max_depth,
+                 max_samples_per_cell, max_leaves_per_cell, refine_threshold_rel,
+                 edge_threshold_rel, expand_factor, max_expansions,
+                 flux, error, status, samples, terminals, byref(threads))
+    metadata = dict(parameters, directory=str(Path(directory).resolve()), ispec=int(ispec), istep=istep,
+                    dt=dt, max_step=max_step, use_adaptive_dt=use_adaptive_dt,
+                    max_probability_types=max_probability_types, n_threads=n_threads,
+                    use_electric_field=use_electric_field, use_magnetic_field=use_magnetic_field,
+                    field_bundle=(str(field_bundle.namelist_path.parent) if hasattr(field_bundle, "namelist_path")
+                                  else str(field_bundle) if field_bundle is not None else None),
+                    integration_rule="terminal_box_tensor_trapezoid", units="EMSES normalised; unit density")
+    return DustCurrentResult(spatial, psi, flux, error, status, samples, terminals, metadata)

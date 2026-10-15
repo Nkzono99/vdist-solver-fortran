@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Added Fortran unit-density dust OML flux moments with terminal-box trapezoid
+  integration, sampled variation estimates, bounded per-thread scratch, and the
+  `get_dust_currents` Python API / `DustCurrentResult` model.
+- Added `leaf_is_terminal` octree diagnostics without changing existing C APIs.
+- Added portable field bundle writers/readers (npy v1.0, little-endian float64,
+  C order) for reusing relocated fields in octree and dust-current evaluations.
+- Added analytic Maxwellian, native ctypes, OpenMP, quadrature, and bundle
+  regression coverage and bilingual dust-current documentation.
+
 ## [1.7.1] - 2026-10-12
 
 ### Fixed

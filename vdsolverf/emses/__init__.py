@@ -6,3 +6,4 @@ from .wrapper import (
     get_backtraces,
     validate_and_expand_velocity_range_map,
 )
+from .wrapper import get_dust_currents

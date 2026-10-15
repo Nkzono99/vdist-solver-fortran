@@ -258,3 +258,11 @@ leaf_probabilities = result.probabilities[sample_slice]
 - 返るのは sparse なサンプル/box 表現です。保存したい場合は
   `np.savez` などで `result.velocities`, `result.probabilities`,
   `result.leaf_bounds` を保存してください。
+
+## Terminal box と field bundle
+
+`result.leaf_is_terminal` は子に分割しなかった box を示します。完了した木では
+体積和が最終 root 体積に一致しますが、容量で途中終了した木は不完全な場合が
+あります。`field_bundle=` で relocation 済みの場を再利用できます。flag の互換性、
+bundle 形式、Fortran OML 積分は[ダスト帯電電流モーメント](dust_currents.md) を
+参照してください。

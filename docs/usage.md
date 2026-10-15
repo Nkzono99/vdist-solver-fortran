@@ -302,3 +302,10 @@ get_backtrace(..., system="linux", library_path="/custom/path/libvdist-solver-fo
 
 `system` に指定できる値: `"auto"` (デフォルト)、`"linux"`、`"darwin"`、
 `"windows"`。
+
+## ダスト帯電電流モーメント
+
+密度 1 の OML 積分を Fortran 内で計算するには
+`vdsolverf.emses.get_dust_currents` を使います。`result.flux` に species の電荷と
+密度を掛けると電流密度になります。使用例と場を再利用する field bundle は
+[ダスト帯電電流モーメント](dust_currents.md) を参照してください。

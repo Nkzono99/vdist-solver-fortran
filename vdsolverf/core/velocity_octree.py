@@ -21,6 +21,7 @@ class VelocityOctreeResult:
     sample_count: np.ndarray
     leaf_count: np.ndarray
     metadata: Dict = field(default_factory=dict)
+    leaf_is_terminal: np.ndarray = None
 
     def __post_init__(self):
         self.spatial_points = np.asarray(self.spatial_points, dtype=np.float64)
@@ -40,6 +41,31 @@ class VelocityOctreeResult:
         self.metadata = dict(self.metadata)
 
         self._validate_shapes()
+        if self.leaf_is_terminal is None:
+            # Compatibility with saved/constructed results and older libraries:
+            # dyadic box addresses identify parents without a quadratic search.
+            self.leaf_is_terminal = np.ones(self.nleaves, dtype=bool)
+            for spatial in np.unique(self.leaf_spatial_index):
+                indexes = np.flatnonzero(self.leaf_spatial_index == spatial)
+                roots = indexes[self.leaf_depth[indexes] == 0]
+                if not roots.size:
+                    continue
+                root = self.leaf_bounds[roots[0]]
+                widths = root[1::2] - root[::2]
+                nodes = {}
+                for i in indexes:
+                    depth = int(self.leaf_depth[i])
+                    center = (self.leaf_bounds[i, ::2] + self.leaf_bounds[i, 1::2]) * 0.5
+                    address = tuple(np.floor((center - root[::2]) / widths * 2**depth).astype(int))
+                    nodes[depth, address] = i
+                for (depth, address) in nodes:
+                    parent = nodes.get((depth - 1, tuple(a // 2 for a in address)))
+                    if parent is not None:
+                        self.leaf_is_terminal[parent] = False
+        else:
+            self.leaf_is_terminal = np.asarray(self.leaf_is_terminal, dtype=bool)
+            if self.leaf_is_terminal.shape != (self.nleaves,):
+                raise ValueError("leaf_is_terminal must have shape (nleaf,)")
 
     @property
     def nspatial(self) -> int:

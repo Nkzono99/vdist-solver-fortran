@@ -2,6 +2,7 @@ module m_emses_octree_probabilities
     !! Adaptive velocity-octree probability evaluation for EMSES solvers.
 
     use, intrinsic :: iso_c_binding, only: c_double, c_int
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
 
 !$  use omp_lib, only: omp_set_num_threads
 
@@ -29,6 +30,16 @@ module m_emses_octree_probabilities
     integer(c_int), parameter :: STATUS_EXPANSION_LIMIT_REACHED = STATUS_ROOT_EXPANDED
     integer(c_int), parameter :: STATUS_OUTPUT_CAPACITY_EXCEEDED = 4
     integer(c_int), parameter :: STATUS_INVALID_BOUNDS = 5
+
+    abstract interface
+        function t_box_priority(bounds, bins, velocities, probabilities, parameters) result(priority)
+            import c_double
+            real(c_double), intent(in) :: bounds(6), velocities(:, :), probabilities(:)
+            integer, intent(in) :: bins(3)
+            real(c_double), intent(in) :: parameters(:)
+            real(c_double) :: priority
+        end function
+    end interface
 
 contains
 
@@ -64,7 +75,8 @@ contains
         return_leaf_count, &
         return_actual_sample_count, &
         return_actual_leaf_count, &
-        n_threads)
+        n_threads, return_leaf_is_terminal, complete_partition, parallel_spatial, &
+        refinement_priority, refinement_parameters)
         type(t_ESSimulator), intent(in) :: simulator
         integer(c_int), value, intent(in) :: ispec
         integer(c_int), value, intent(in) :: nspatial
@@ -98,7 +110,19 @@ contains
         integer(c_int), intent(out) :: return_actual_leaf_count
         integer(c_int), value, optional, intent(in) :: n_threads
 
+        ! Optional extensions leave the original octree traversal unchanged.
+        logical, optional, intent(out) :: return_leaf_is_terminal(nspatial*max_leaves_per_cell)
+        logical, optional, intent(in) :: complete_partition, parallel_spatial
+        procedure(t_box_priority), optional :: refinement_priority
+        real(c_double), intent(in), optional :: refinement_parameters(:)
+        logical :: partition, do_parallel
         integer :: ispatial
+
+        partition = .false.
+        if (present(complete_partition)) partition = complete_partition
+        do_parallel = .true.
+        if (present(parallel_spatial)) do_parallel = parallel_spatial
+        if (present(return_leaf_is_terminal)) return_leaf_is_terminal = .false.
 
         return_sample_spatial_index = -1
         return_velocities = 0d0
@@ -118,7 +142,7 @@ contains
 !$          call omp_set_num_threads(max(1, int(n_threads)))
 !$      end if
 
-        !$omp parallel do schedule(dynamic, 1)
+        !$omp parallel do schedule(dynamic, 1) if(do_parallel)
         do ispatial = 1, nspatial
             call evaluate_spatial_octree(ispatial)
         end do
@@ -150,7 +174,9 @@ contains
             call traverse_octree(solver, ispatial, root_bounds, status)
             has_signal = has_positive_signal(ispatial)
 
-            if (return_sample_count(ispatial) <= 0) then
+            if (partition .and. return_sample_count(ispatial) <= 0 .and. status /= STATUS_OK) then
+                return_status(ispatial) = status
+            else if (return_sample_count(ispatial) <= 0) then
                 return_status(ispatial) = STATUS_NO_SIGNAL
             else if (status /= STATUS_OK) then
                 return_status(ispatial) = status
@@ -164,7 +190,8 @@ contains
         logical function valid_bounds(bounds) result(ret)
             real(c_double), intent(in) :: bounds(6)
 
-            ret = bounds(1) < bounds(2) .and. bounds(3) < bounds(4) .and. bounds(5) < bounds(6)
+            ret = all(ieee_is_finite(bounds)) .and. &
+                  bounds(1) < bounds(2) .and. bounds(3) < bounds(4) .and. bounds(5) < bounds(6)
         end function
 
         logical function has_positive_signal(ispatial) result(ret)
@@ -213,7 +240,7 @@ contains
 
             real(c_double), allocatable :: queue_bounds(:, :)
             integer(c_int), allocatable :: queue_depth(:)
-            integer :: head, tail
+            integer :: head, tail, leaf_index, old_tail
             real(c_double) :: bounds(6)
             integer :: depth
             real(c_double) :: pmin, pmax
@@ -221,6 +248,10 @@ contains
             integer :: sample_added
             logical :: should_split
 
+            if (partition) then
+                call traverse_terminal_partition(solver, ispatial, root_bounds, status)
+                return
+            end if
             allocate (queue_bounds(6, max_leaves_per_cell))
             allocate (queue_depth(max_leaves_per_cell))
 
@@ -243,14 +274,95 @@ contains
                 call sample_leaf(solver, ispatial, bounds, depth, pmin, pmax, sample_added, status)
                 call append_leaf(ispatial, bounds, depth, pmin, pmax, sample_start, sample_added)
 
+                leaf_index = (ispatial - 1)*max_leaves_per_cell + return_leaf_count(ispatial)
+                if (present(return_leaf_is_terminal)) return_leaf_is_terminal(leaf_index) = .true.
                 if (status == STATUS_SAMPLE_LIMIT_REACHED) exit
                 should_split = depth < max_depth .and. pmax > 0d0 &
                                .and. (pmax - pmin) >= refine_threshold_rel*max(pmax, tiny(1d0))
                 if (should_split) then
+                    old_tail = tail
                     call append_children(bounds, depth + 1, queue_bounds, queue_depth, tail, status)
+                    if (present(return_leaf_is_terminal)) then
+                        return_leaf_is_terminal(leaf_index) = tail == old_tail
+                    end if
                     if (status == STATUS_OUTPUT_CAPACITY_EXCEEDED) exit
                 end if
             end do
+        end subroutine
+
+        subroutine traverse_terminal_partition(solver, ispatial, root_bounds, status)
+            !! Refine fully sampled terminal boxes, reserving complete sibling
+            !! batches. The optional priority lets moment callers schedule work
+            !! by quadrature error while sharing all probability sampling logic.
+            type(t_Solver), intent(in) :: solver
+            integer, intent(in) :: ispatial
+            real(c_double), intent(in) :: root_bounds(6)
+            integer, intent(inout) :: status
+            real(c_double), allocatable :: priority(:)
+            real(c_double) :: children(6, 8), bounds(6)
+            integer(c_int) :: child_depths(8)
+            integer :: parent, base, local_index, depth, child, tail, g
+
+            if (max_samples_per_cell < product(max(2, scout_bins))) then
+                status = STATUS_SAMPLE_LIMIT_REACHED
+                return
+            end if
+            allocate(priority(max_leaves_per_cell))
+            priority = -1d0
+            base = (ispatial - 1)*max_leaves_per_cell
+            call store_terminal_box(solver, ispatial, root_bounds, 0, status, priority(1))
+            do
+                parent = maxloc(priority(:return_leaf_count(ispatial)), dim=1)
+                if (priority(parent) < 0d0) exit
+                if (return_leaf_count(ispatial) + 8 > max_leaves_per_cell) then
+                    status = STATUS_OUTPUT_CAPACITY_EXCEEDED
+                    exit
+                end if
+                if (return_sample_count(ispatial) + 8*27 > max_samples_per_cell) then
+                    status = STATUS_SAMPLE_LIMIT_REACHED
+                    exit
+                end if
+                priority(parent) = -1d0
+                g = base + parent
+                if (present(return_leaf_is_terminal)) return_leaf_is_terminal(g) = .false.
+                bounds = return_leaf_bounds(:, g)
+                depth = return_leaf_depth(g) + 1
+                tail = 0
+                call append_children(bounds, depth, children, child_depths, tail, status)
+                do child = 1, 8
+                    local_index = return_leaf_count(ispatial) + 1
+                    call store_terminal_box(solver, ispatial, children(:, child), depth, status, priority(local_index))
+                end do
+            end do
+        end subroutine
+
+        subroutine store_terminal_box(solver, ispatial, bounds, depth, status, priority)
+            type(t_Solver), intent(in) :: solver
+            integer, intent(in) :: ispatial, depth
+            real(c_double), intent(in) :: bounds(6)
+            integer, intent(inout) :: status
+            real(c_double), intent(out) :: priority
+            real(c_double) :: pmin, pmax
+            integer :: sample_start, sample_added, global_start, g, bins(3)
+
+            sample_start = return_sample_count(ispatial)
+            call sample_leaf(solver, ispatial, bounds, depth, pmin, pmax, sample_added, status)
+            call append_leaf(ispatial, bounds, depth, pmin, pmax, sample_start, sample_added)
+            g = (ispatial - 1)*max_leaves_per_cell + return_leaf_count(ispatial)
+            if (present(return_leaf_is_terminal)) return_leaf_is_terminal(g) = .true.
+            priority = -1d0
+            if (depth < max_depth .and. pmax > 0d0 .and. &
+                (pmax - pmin) >= refine_threshold_rel*max(pmax, tiny(1d0))) then
+                priority = (pmax - pmin)*product(bounds(2:6:2) - bounds(1:5:2))
+                if (present(refinement_priority) .and. present(refinement_parameters)) then
+                    bins = [3, 3, 3]
+                    if (depth == 0) bins = max(2, scout_bins)
+                    global_start = (ispatial - 1)*max_samples_per_cell + sample_start + 1
+                    priority = refinement_priority(bounds, bins, &
+                        return_velocities(:, global_start:global_start + sample_added - 1), &
+                        return_probabilities(global_start:global_start + sample_added - 1), refinement_parameters)
+                end if
+            end if
         end subroutine
 
         subroutine sample_leaf(solver, ispatial, bounds, depth, pmin, pmax, sample_added, status)
