@@ -10,9 +10,23 @@ auto-executables = true
 auto-tests = true
 auto-examples = true
 module-naming = false
+external-modules = ["mpi"] # used only by the VDSOLVERF_MPI executable build
 
 [install]
 library = true
+
+[library]
+# `make install` installs compiler-specific .mod files under ./include.
+# They must never shadow the modules generated for the current build flags.
+include-dir = []
+
+[preprocess.cpp]
+suffixes = ["f90", "F90"]
+
+[[executable]]
+name = "vdsolverf-batch"
+source-dir = "app"
+main = "vdsolverf_batch.f90"
 
 [dependencies]
 futils = { git = "https://github.com/Nkzono99/futils" }

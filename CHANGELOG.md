@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added the optional serial/MPI `vdsolverf-batch` executable, dynamic chunk
+  dispatch, OpenMP target processing, atomic completion markers and resumable
+  npy outputs, plus Python `write_batch` / `read_batch_results` helpers.
+- Added Fortran npy v1/v2 C-order little-endian float64/int32/int64 I/O,
+  standalone field-bundle loading, and serial/library/resume regressions.
 - Added Fortran unit-density dust OML flux moments with terminal-box trapezoid
   integration, sampled variation estimates, bounded per-thread scratch, and the
   `get_dust_currents` Python API / `DustCurrentResult` model.
@@ -14,6 +19,11 @@ All notable changes to this project are documented in this file.
   C order) for reusing relocated fields in octree and dust-current evaluations.
 - Added analytic Maxwellian, native ctypes, OpenMP, quadrature, and bundle
   regression coverage and bilingual dust-current documentation.
+
+### Fixed
+
+- Prevented installed compiler-specific modules under `include/` from shadowing
+  the current fpm build's modules when changing compiler flags or toolchains.
 
 ## [1.7.1] - 2026-10-12
 

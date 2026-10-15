@@ -173,8 +173,152 @@ Python dictionary terminated by newline. Its keys are `descr`, `fortran_order`,
 `shape`. Binary values follow in C order, field component fastest, then x, y, z.
 There are no pickle objects or compression. The Fortran view of this data is
 `ebvalues(9, nx+1, ny+1, nz+1)`. Read and validate the header length; do not assume
-a fixed byte offset. A standalone Fortran npy reader and MPI batch executable
-are deferred to the later integration phase.
+a fixed byte offset. The standalone Fortran reader accepts both v1.0 and v2.0.
+
+## Standalone batch
+
+`vdsolverf-batch [--resume|--no-resume] batch.nml` loads a field bundle and
+constructs a simulator once per rank. Execution needs neither Python nor
+mpi4py. MPI is enabled only in the dedicated build; the default `make`,
+`make install` and pip shared-library build require no MPI. The dependency-free
+Fortran npy reader/writer accepts v1.0/v2.0, C order and little-endian
+`<f8` / `<i4` / `<i8`; other dtypes, big endian and Fortran order are rejected.
+
+```bash
+make batch                       # gfortran, OpenMP serial executable
+make batch-mpi                   # prefer mpif90, fall back to mpiifx
+# Other wrappers: make batch-mpi MPI_FC=mpif90 MPI_FLAGS='-O3 -fopenmp'
+build/batch-serial/bin/vdsolverf-batch batch/batch.nml
+```
+
+The MPI executable is `build/batch-mpi/bin/vdsolverf-batch`. Separate prefixes
+retain both binaries. Override `BATCH_FLAGS` / `MPI_FLAGS` and `BATCH_PREFIX` /
+`MPI_PREFIX` as needed. Build and run on compute nodes at KUDPC.
+
+Here `mpif90` uses GCC 8 with Intel MPI; this is the validated configuration.
+Intel Fortran (`BATCH_FC=ifx` / `MPI_FC=mpiifx`) builds also compile, but repeated
+multithreaded evaluations with nonzero fields exposed numerical differences.
+The cause remains unresolved; use the validated GNU configuration for current
+tables. This implementation leaves the existing numerical core unchanged.
+
+```python
+import numpy as np
+from vdsolverf.io import write_field_bundle, write_batch, read_batch_results
+
+bundle = write_field_bundle("my-run", -1, [0], "field_bundle")
+targets = np.array([
+    [12.5, 8.5, 4.5, -5., 5., -5., 5., -5., 5.],
+    [13.5, 8.5, 4.5, -5., 5., -5., 5., -5., 5.],
+])
+batch_nml = write_batch("batch", bundle, 0, targets, [-1., 0., 1.],
+                        dt=0.1, max_step=30_000, chunk_size=16)
+# After running vdsolverf-batch batch/batch.nml in an external job:
+result = read_batch_results("batch")  # DustCurrentResult in original target order
+```
+
+`write_batch` accepts a bundle path or `FieldBundle` and returns the batch.nml
+Path. Bundle paths passed to the helper resolve from the caller's cwd and are
+stored relative to batch.nml. `output_dir` is relative to batch.nml, or absolute.
+Omitting `dt` uses the bundle's `/tmgrid/ dt`. Omit `n_threads` (or pass `None`)
+to use the OpenMP setting at execution time.
+
+```text
+batch/
+  batch.nml
+  targets.npy    # float64 C order (n,9): x,y,z,vxmin,vxmax,vymin,vymax,vzmin,vzmax
+  psi.npy        # float64 C order (npsi,), EMSES potentials, order preserved
+  out/
+```
+
+Both arrays must be nonempty. Positions and psi must be finite; invalid
+velocity boxes return native status `5`. `ispec` is zero-based, as in Python.
+All inputs and outputs use the EMSES units and unit-density flux defined above.
+
+The namelist contains one `&vdsolverf_batch` group:
+
+| Key | Default / meaning |
+|---|---|
+| `bundle_dir`, `ispec`, `dt` | Required in handwritten input; bundle path may be relative to batch.nml |
+| `max_step`, `use_adaptive_dt`, `max_probability_types` | `30000`, `.false.`, `100` |
+| `scout_bins`, `max_depth` | `9,9,9`, `6` |
+| `max_samples_per_cell`, `max_leaves_per_cell` | `50000`, `4096` |
+| `refine_threshold_rel`, `edge_threshold_rel` | Both `1e-4` |
+| `expand_factor`, `max_expansions` | `1.5`, `3` |
+| `chunk_size`, `output_dir` | `16`, `'out'` |
+| `n_threads` | OpenMP runtime default, normally `OMP_NUM_THREADS` (1 without OpenMP) |
+| `use_electric_field`, `use_magnetic_field` | Both `.true.`; must match bundle flags exactly |
+
+Field-flag mismatches stop execution. Generate a separate bundle with the
+desired flags to change which fields are used.
+
+### Chunks and resume
+
+Chunk start indices are **zero-based**. Only the final chunk may be shorter.
+
+| File (example start=0) | dtype / C-order shape |
+|---|---|
+| `chunk_000000000_flux.npy` | `<f8` `(count,npsi)` |
+| `chunk_000000000_flux_error.npy` | `<f8` `(count,npsi)` |
+| `chunk_000000000_status.npy` | `<i4` `(count,)` |
+| `chunk_000000000_sample_count.npy` | `<i8` `(count,)` |
+| `chunk_000000000_terminal_box_count.npy` | `<i8` `(count,)` |
+| `chunk_000000000.done` | Empty marker, atomically renamed last after closing all five arrays |
+
+Resume is enabled by default (`--resume` is also accepted). A chunk is skipped
+only when its marker and all five arrays exist. Without a marker, remaining
+`.npy` / `.tmp` files are replaced by recomputation. `--no-resume` removes each
+marker before recomputing all chunks. Keep the bundle, targets, psi, solver
+settings and chunk_size immutable while resuming. After changing inputs, use
+a fresh output directory or `--no-resume`; input freshness is not hashed.
+Concurrent jobs writing the same output directory are unsupported.
+
+After all ranks finish, rank 0 atomically writes `summary.json` with
+`status_counts` over all output targets, `n_targets`, `npsi`,
+`wall_time_seconds` (loading, computation and waiting), `ranks`, `threads`,
+and `chunks_computed` / `chunks_skipped` for this invocation.
+`read_batch_results` validates every marker, dtype and shape and rejects
+partial results. The summary appears in `result.metadata['summary']`; collection
+also works if all chunks finished just before a job died without a summary.
+Batch diagnostic counts retain int64; existing ctypes counts remain int32.
+
+### MPI and KUDPC
+
+With two or more ranks, rank 0 only dispatches work. Each worker requests its
+next chunk after finishing the previous one; rank 0 replies with a chunk index
+or a termination instruction. Keeping the dispatcher out of the octree prevents
+costly targets from delaying work distribution. The one-rank MPI and serial
+builds compute all chunks on rank 0. Inside a worker, the existing evaluator
+uses OpenMP to schedule targets dynamically.
+
+```bash
+# Compile on a compute node, launching the build controller once.
+tssrun -p <partition> -t 0:40:00 --rsc p=1:t=4:c=4 make batch-mpi
+
+# Add build/batch-mpi/bin to PATH before submission.
+tssrun -p <partition> -t 2:00:00 --rsc p=16:t=8:c=8 srun vdsolverf-batch batch/batch.nml
+```
+
+The KUDPC smoke test on 2026-10-15 succeeded with this form, from the repository
+root. GCC 8.5 + Intel MPI, four ranks and four threads per rank, produced
+bit-identical arrays to serial for 19 targets / 10 chunks. `--resume` skipped
+all ten chunks. No PMI environment changes or hydra fallback were needed.
+
+```bash
+tssrun -p gr20001b -t 0:40:00 --rsc p=4:t=4:c=4 \
+  srun build/batch-mpi/bin/vdsolverf-batch --no-resume build/batch-smoke/mpi/batch.nml
+```
+
+Generate the fixture with `.venv/bin/python test/batch_mpi_smoke.py prepare
+build/batch-smoke`; after running serial, use the script's `compare
+build/batch-smoke` command to verify MPI output.
+
+Set `n_threads` no higher than the allocated threads/cores. Every rank keeps
+its own fields, including the dispatcher. Smaller chunks improve balancing
+but increase message and file counts; 16 is a starting point. Threads beyond
+the number of targets in a chunk cannot be used effectively. Scratch scales
+with worker threads and octree budgets, rather than the total target count.
+The existing octree also copies its solver/simulator for each active target;
+include those field copies when estimating peak memory per worker.
 
 ## Performance and verification
 

@@ -27,6 +27,7 @@
 *.lib
 
 # Executables
+/bin/vdsolverf-batch
 *.exe
 *.out
 *.app

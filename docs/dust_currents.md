@@ -154,7 +154,146 @@ use_electric_field=True, use_magnetic_field=True)` は `FieldBundle` を返し�
 Python dict（`descr`、`fortran_order`、`shape`）です。binary data は成分、x、y、z の
 順に速く変化します。pickle・圧縮なし。Fortran 側では `(9,nx+1,ny+1,nz+1)` と
 解釈します。header length を読み、固定 data offset を仮定しないでください。
-Fortran の npy reader と standalone MPI batch executable は後続フェーズの対象です。
+standalone batch の Fortran reader は v1.0 と v2.0 に対応します。
+
+## Standalone batch
+
+`vdsolverf-batch [--resume|--no-resume] batch.nml` は各 rank で bundle と simulator を
+一度だけ読み込みます。実行には Python / mpi4py は不要です。MPI は専用ビルドでのみ
+有効になり、既定の `make` / `make install` / pip 用共有ライブラリは MPI 不要です。
+依存追加なしの Fortran npy reader/writer は v1.0/v2.0、C order、little-endian の
+`<f8` / `<i4` / `<i8` を扱い、別 dtype、big endian、Fortran order は拒否します。
+
+```bash
+make batch                       # gfortran、OpenMP 付き serial 版
+make batch-mpi                   # mpif90 を優先、なければ mpiifx
+# 別の wrapper: make batch-mpi MPI_FC=mpif90 MPI_FLAGS='-O3 -fopenmp'
+build/batch-serial/bin/vdsolverf-batch batch/batch.nml
+```
+
+MPI 版は `build/batch-mpi/bin/vdsolverf-batch`。別 prefix で両実行ファイルを保持します。
+`BATCH_FLAGS` / `MPI_FLAGS`、`BATCH_PREFIX` / `MPI_PREFIX` で上書きできます。
+KUDPC ではビルドも実行も計算ノードで行います。
+
+この環境では `mpif90` は GCC 8 + Intel MPI を使います。この組合せを検証構成と
+します。Intel Fortran (`BATCH_FC=ifx` / `MPI_FC=mpiifx`) でもビルドできますが、
+非ゼロの場で複数 thread 実行すると繰り返し間の数値不一致を観測しました。
+原因調査は未完了です。大規模テーブルには検証済みの GNU 構成を使ってください。
+今回、既存の数値コアは変更していません。
+
+```python
+import numpy as np
+from vdsolverf.io import write_field_bundle, write_batch, read_batch_results
+
+bundle = write_field_bundle("my-run", -1, [0], "field_bundle")
+targets = np.array([
+    [12.5, 8.5, 4.5, -5., 5., -5., 5., -5., 5.],
+    [13.5, 8.5, 4.5, -5., 5., -5., 5., -5., 5.],
+])
+batch_nml = write_batch("batch", bundle, 0, targets, [-1., 0., 1.],
+                        dt=0.1, max_step=30_000, chunk_size=16)
+# 外部ジョブで vdsolverf-batch batch/batch.nml を実行後:
+result = read_batch_results("batch")  # DustCurrentResult、元の target 順
+```
+
+`write_batch` は directory または `FieldBundle` を受け、`batch.nml` の Path を
+返します。helper に渡す bundle path は呼び出し時の cwd から解決し、namelist
+からの相対 path で保存します。`output_dir` は namelist からの相対 path または
+絶対 path。`dt` の省略は bundle の `/tmgrid/ dt`、`n_threads` の省略または `None`
+は実行時の OpenMP 設定を使います。
+
+```text
+batch/
+  batch.nml
+  targets.npy    # float64 C order (n,9): x,y,z,vxmin,vxmax,vymin,vymax,vzmin,vzmax
+  psi.npy        # float64 C order (npsi,): EMSES 電位、入力順を保持
+  out/
+```
+
+両配列は空にできません。位置と psi は有限値を要求し、不正な速度 box は既存 evaluator
+と同じ status `5` を返します。`ispec` は Python と同じ 0 始まりです。全入出力は前述の
+EMSES 単位・密度 1 の flux を使います。
+
+`batch.nml` の group は `&vdsolverf_batch` です。
+
+| キー | 既定値 / 内容 |
+|---|---|
+| `bundle_dir`, `ispec`, `dt` | 手書き入力では必須。bundle は namelist からの相対 path 可 |
+| `max_step`, `use_adaptive_dt`, `max_probability_types` | `30000`, `.false.`, `100` |
+| `scout_bins`, `max_depth` | `9,9,9`, `6` |
+| `max_samples_per_cell`, `max_leaves_per_cell` | `50000`, `4096` |
+| `refine_threshold_rel`, `edge_threshold_rel` | 両方 `1e-4` |
+| `expand_factor`, `max_expansions` | `1.5`, `3` |
+| `chunk_size`, `output_dir` | `16`, `'out'` |
+| `n_threads` | OpenMP runtime の既定（通常 `OMP_NUM_THREADS`、OpenMP 無効なら 1） |
+| `use_electric_field`, `use_magnetic_field` | 両方 `.true.`。bundle の flag と完全一致が必要 |
+
+field flag の不一致は停止します。必要な flag で別 bundle を生成してください。
+
+### Chunk と再開
+
+chunk の開始 target index は **0 始まり**。最後の chunk だけ短くできます。
+
+| ファイル (`start=0` の例) | dtype / C-order shape |
+|---|---|
+| `chunk_000000000_flux.npy` | `<f8` `(count,npsi)` |
+| `chunk_000000000_flux_error.npy` | `<f8` `(count,npsi)` |
+| `chunk_000000000_status.npy` | `<i4` `(count,)` |
+| `chunk_000000000_sample_count.npy` | `<i8` `(count,)` |
+| `chunk_000000000_terminal_box_count.npy` | `<i8` `(count,)` |
+| `chunk_000000000.done` | 空の完了 marker。5 配列を閉じた後、最後に atomic rename |
+
+既定の resume（`--resume` も可）は marker と 5 配列が揃う chunk を skip します。
+marker がなければ途中の `.npy` / `.tmp` が残っていても再計算します。
+`--no-resume` は各 marker を外して全 chunk を再計算します。bundle、targets、psi、
+solver 設定、chunk_size は再開中に変更しないでください。変更時は新しい output
+directory または `--no-resume` を使います。入力 hash による鮮度判定は行いません。
+同じ output directory への同時実行はサポートしません。
+
+全 rank 完了後、rank 0 が `summary.json` を atomic rename で保存します。
+`status_counts`（全出力の status 別件数）、`n_targets`、`npsi`、`wall_time_seconds`
+（読み込み・計算・待ちを含む経過時間）、`ranks`、`threads`、`chunks_computed` /
+`chunks_skipped`（今回の実行分）を記録します。`read_batch_results` は全 marker、shape、
+dtype を検査し、部分結果は返しません。summary は `result.metadata['summary']` に入り、
+全 chunk 完了直後の停止で summary だけ未生成でも集約できます。batch の count は
+int64 を保持し、ctypes の既存 int32 count は変えません。
+
+### MPI と KUDPC
+
+MPI rank が 2 以上なら rank 0 は配布専用、他 rank は worker です。worker は完了後に
+次の chunk を要求し、rank 0 が未処理 index または終了指示を返します。rank 0 は
+octree を実行しないため重い target で配布が停止しません。1 rank の MPI 版と serial
+版は rank 0 が全 chunk を計算します。各 worker 内では既存 evaluator の OpenMP が
+target を動的に処理します。
+
+```bash
+# 計算ノードでビルド。controller は一度だけ起動
+tssrun -p <partition> -t 0:40:00 --rsc p=1:t=4:c=4 make batch-mpi
+
+# PATH に build/batch-mpi/bin を追加してから投入
+tssrun -p <partition> -t 2:00:00 --rsc p=16:t=8:c=8 srun vdsolverf-batch batch/batch.nml
+```
+
+2026-10-15 の KUDPC smoke test は次の形で成功しました（リポジトリ直下から）。
+GCC 8.5 + Intel MPI の 4 ranks / 各 4 threads、19 targets / 10 chunks で serial と
+全配列が bit 一致し、同じ入力の `--resume` は全 10 chunks を skip しました。
+PMI 環境の変更や hydra への切り替えは不要でした。
+
+```bash
+tssrun -p gr20001b -t 0:40:00 --rsc p=4:t=4:c=4 \
+  srun build/batch-mpi/bin/vdsolverf-batch --no-resume build/batch-smoke/mpi/batch.nml
+```
+
+再現用入力は `.venv/bin/python test/batch_mpi_smoke.py prepare build/batch-smoke`、
+serial 計算後の比較は同 script の `compare build/batch-smoke` で行えます。
+
+`n_threads` は確保した thread/core 数以下にします。場は rank ごとに保持し、dispatcher
+も 1 rank 分のメモリを使います。chunk を小さくすると負荷を均しやすい一方、通信と
+ファイル数は増えます。既定の 16 は出発点です。chunk 内の target 数より多い thread
+は有効に使えません。scratch は worker の thread 数と octree 予算に比例し、全 target
+数には比例しません。
+既存 octree は評価中の target ごとに solver/simulator を複製するため、場のコピーも
+同時評価 target 数に応じた peak memory に含めて見積もってください。
 
 ## 性能と検証
 

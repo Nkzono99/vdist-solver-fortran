@@ -1,4 +1,4 @@
-"""Portable, reusable relocated EMSES fields (no Fortran npy reader yet)."""
+"""Portable, reusable relocated EMSES fields for ctypes and standalone batches."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -69,7 +69,7 @@ def write_field_bundle(directory, istep, ispecs, output_dir, *,
     """Write exactly TempolaryInput's namelist and create_relocated_ebvalues arrays.
 
     Species are zero-based, matching the Python EMSES APIs. Npy files explicitly
-    use version 1.0, dtype <f8 and C order for the future standalone reader.
+    use version 1.0, dtype <f8 and C order for the standalone reader.
     """
     # Import lazily to keep io usable without importing ctypes or loading fields.
     from ..emses import wrapper

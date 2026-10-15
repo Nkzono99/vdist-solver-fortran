@@ -11,6 +11,7 @@ include install.sh
 include fpm.toml
 
 recursive-include src *.f90 *.F90
+recursive-include app *.f90
 recursive-include test *.f90
 recursive-include vdsolverf *.py
 recursive-include docs *.md

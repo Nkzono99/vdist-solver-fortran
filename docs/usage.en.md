@@ -318,3 +318,9 @@ For density-one OML flux moments computed inside Fortran, use
 `vdsolverf.emses.get_dust_currents`. Multiply `result.flux` by species charge
 and density for current density. See [Dust current moments](dust_currents.en.md)
 for usage and reusable field bundles.
+
+For many targets, prepare `batch.nml`, `targets.npy` and `psi.npy` with
+`vdsolverf.io.write_batch`, then run `vdsolverf-batch batch.nml` from
+`make batch` or `make batch-mpi`. Completed chunks are reused by default;
+`vdsolverf.io.read_batch_results(batch_dir)` collects a `DustCurrentResult`.
+See the standalone batch section in the same guide for formats and MPI jobs.

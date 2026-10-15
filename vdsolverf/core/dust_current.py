@@ -18,8 +18,14 @@ class DustCurrentResult:
     def __post_init__(self):
         for name in ("positions", "psi_grid", "flux", "flux_error"):
             setattr(self, name, np.asarray(getattr(self, name), dtype=np.float64))
-        for name in ("status", "sample_count", "terminal_box_count"):
-            setattr(self, name, np.asarray(getattr(self, name), dtype=np.int32))
+        self.status = np.asarray(self.status, dtype=np.int32)
+        for name in ("sample_count", "terminal_box_count"):
+            value = getattr(self, name)
+            # The C API returns int32; standalone files use int64. Preserve both
+            # without narrowing batch diagnostics or changing ctypes results.
+            wide = isinstance(value, np.ndarray) and value.dtype.kind == "i" and value.dtype.itemsize == 8
+            dtype = np.int64 if wide else np.int32
+            setattr(self, name, np.asarray(value, dtype=dtype))
         self.metadata = dict(self.metadata)
         if self.positions.ndim != 2 or self.positions.shape[1] != 3:
             raise ValueError("positions must have shape (nspatial, 3)")

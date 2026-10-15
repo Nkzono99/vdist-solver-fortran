@@ -309,3 +309,9 @@ get_backtrace(..., system="linux", library_path="/custom/path/libvdist-solver-fo
 `vdsolverf.emses.get_dust_currents` を使います。`result.flux` に species の電荷と
 密度を掛けると電流密度になります。使用例と場を再利用する field bundle は
 [ダスト帯電電流モーメント](dust_currents.md) を参照してください。
+
+大量の点では `vdsolverf.io.write_batch` で `batch.nml` / `targets.npy` /
+`psi.npy` を準備し、`make batch` または `make batch-mpi` で作った
+`vdsolverf-batch batch.nml` を実行します。完了した chunk は既定で再利用し、
+`vdsolverf.io.read_batch_results(batch_dir)` が `DustCurrentResult` に集約します。
+MPI のビルド・投入例と入力形式は同文書の standalone batch 節を参照してください。
