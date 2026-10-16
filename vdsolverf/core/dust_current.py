@@ -1,4 +1,4 @@
-"""Dust OML flux moments; multiply flux by species charge and density."""
+"""Dust OML moments carrying source density; see docs/dust_currents.md for scaling."""
 from dataclasses import dataclass, field
 
 import numpy as np

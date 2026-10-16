@@ -24,6 +24,12 @@ Collision times interpolate the actual step duration, and velocity-range
 estimation retains the trajectory displacement across periodic boundaries.
 See [Physics](docs/physics.en.md) and [Velocity range autorange](docs/autorange.en.md).
 
+Tier-2 velocity ranges can reuse a field bundle or run without Python through
+`write_range_batch` → `vdsolverf-batch` → `read_range_batch_results`; see the
+[bundle and batch example](docs/autorange.en.md#field-bundles-and-standalone-tier-2-batches).
+Emission patches carry `curf/curfs` density, while boundary Maxwellians and
+raycast sources use unit-density coefficients; see [source scaling](docs/dust_currents.en.md#definition-and-units).
+
 ## Requirements
 
 - `gfortran`

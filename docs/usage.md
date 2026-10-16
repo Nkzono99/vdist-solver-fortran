@@ -310,9 +310,10 @@ get_backtrace(..., system="linux", library_path="/custom/path/libvdist-solver-fo
 
 ## ダスト帯電電流モーメント
 
-密度 1 の OML 積分を Fortran 内で計算するには
+源の規格化を含む OML 積分を Fortran 内で計算するには
 `vdsolverf.emses.get_dust_currents` を使います。`result.flux` に species の電荷と
-密度を掛けると電流密度になります。使用例と場を再利用する field bundle は
+密度を掛けると外部境界・raycast 源の電流密度になります。放出パッチには既に
+`curf/curfs` の規格化が含まれます。使用例と場を再利用する field bundle は
 [ダスト帯電電流モーメント](dust_currents.md) を参照してください。
 
 大量の点では `vdsolverf.io.write_batch` で `batch.nml` / `targets.npy` /
@@ -320,3 +321,8 @@ get_backtrace(..., system="linux", library_path="/custom/path/libvdist-solver-fo
 `vdsolverf-batch batch.nml` を実行します。完了した chunk は既定で再利用し、
 `vdsolverf.io.read_batch_results(batch_dir)` が `DustCurrentResult` に集約します。
 MPI のビルド・投入例と入力形式は同文書の standalone batch 節を参照してください。
+
+tier-2 の速度範囲推定と validation は `field_bundle` を受け付けます。
+`vdsolverf.io.write_range_batch` が target 配列なしの `mode='velocity_range'` を
+準備し、`read_range_batch_results` が保存可能な `VelocityRangeMap` に戻します。
+[bundle と batch の使用例](autorange.md#field-bundle-と-tier-2-batch)を参照してください。

@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Added field-bundle support for velocity-range estimation and validation, plus
+  Python-free `mode='velocity_range'` batches calling the same autorange core.
+  Added `write_range_batch` / `read_range_batch_results`, C-order range arrays,
+  status/settings/timing summaries and resume checks over all input contents.
+  MPI range jobs compute only on rank 0 with OpenMP.
+- Added public `write_batch_results` for prepared dust-current batches, including
+  atomic completion markers and int64 diagnostic counts.
 - Added the optional serial/MPI `vdsolverf-batch` executable, dynamic chunk
   dispatch, OpenMP target processing, atomic completion markers and resumable
   npy outputs, plus Python `write_batch` / `read_batch_results` helpers.
@@ -22,6 +29,13 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Fixed emission-patch density normalisation: use the erf helper's argument
+  order, width `sqrt(2)*sigma`, and drift projected along signed `nemd`.
+  Emission-surface probabilities change scale; at zero drift with the same
+  previously positive normal spread (e.g. +/-Z patches), they increase by
+  `sqrt(2*pi)` (about 2.5066) relative to the old swapped-argument call.
+  Normal/tangential Gaussian spreads now use `path`/`peth` on every patch axis.
+  This also restores X/Y sources whose former signed thermal width gave zero density.
 - Prevented installed compiler-specific modules under `include/` from shadowing
   the current fpm build's modules when changing compiler flags or toolchains.
 

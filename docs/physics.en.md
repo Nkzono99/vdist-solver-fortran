@@ -82,7 +82,40 @@ covariance $R\,\mathrm{diag}(\sigma_i^2)R^T$ retains correlations in oblique
 anisotropic distributions and leaves isotropic distributions invariant.
 `vth_vector(ispec)` returns the square roots of its diagonal entries, the
 Cartesian marginal standard deviations used for autorange support. Axis-aligned
-emission patches retain their existing emission-coordinate convention.
+emission patches use `path` along the signed `nemd` normal and `peth` along
+both tangents (standard deviations remain positive).
+
+### Emission-patch normalisation
+
+For an explicit emission patch, let $u=\mathrm{sign}(nemd)\,\mu_{|nemd|}$
+be the drift toward the plasma along the emission direction and let
+$\sigma=path$. The one-sided moment of the unit-density Gaussian is
+
+$$
+I(u,\sigma)=\frac{u}{2}\left[1+\mathrm{erf}\left(\frac{u}{\sqrt{2}\sigma}\right)\right]
++\frac{\sigma}{\sqrt{2\pi}}\exp\left(-\frac{u^2}{2\sigma^2}\right).
+$$
+
+The coefficient is `C = curf/I`, with nonnegative `curfs` overriding `curf`.
+Thus the emitted one-sided moment recovers that input. MPIEMSES3D samples
+the normal emitted velocities from the flux-weighted half-Gaussian $v_n f(v_n)$,
+with Gaussian standard deviation `path`; tangents use `peth`. The transported
+phase-space distribution here is $C f_M$, without another velocity factor.
+`curf/curfs` are current-density magnitudes in EMSES units: MPIEMSES3D divides
+them by the macro-particle charge magnitude to obtain particle injection counts.
+Here $C$ is a charge-equivalent density (number density for unit physical charge
+magnitude); macro-particle charge/weight must not be applied to this continuous
+distribution. For another physical charge magnitude, divide by it to obtain
+number density. This source is not a density-one PDF.
+
+The erf utility uses width $\sqrt{2}\sigma$, rather than $\sigma$.
+Correcting the former swapped arguments and width convention gives
+$C=curf\sqrt{2\pi}/\sigma$ at zero drift. For the same previously positive
+normal spread (e.g. +/-Z patches), probabilities rise by
+$\sqrt{2\pi}\simeq2.5066$. X/Y patches additionally correct the former
+signed/permuted thermal spreads; formerly zero sources can become nonzero,
+so a finite common scale factor does not describe those cases.
+See [dust-current units](dust_currents.en.md#definition-and-units).
 
 ### Raycast photoelectron
 

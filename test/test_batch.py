@@ -13,7 +13,7 @@ import numpy as np
 from test_dust_currents import maxwellian_input
 from vdsolverf.core import DustCurrentResult
 from vdsolverf.emses import wrapper
-from vdsolverf.io import read_batch_results, write_batch, write_field_bundle
+from vdsolverf.io import read_batch_results, write_batch, write_field_bundle, write_batch_results
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,18 +42,12 @@ def batch_case(**options):
 
 
 def write_mock_results(path, targets, psi):
-    output = path.parent / "out"
-    output.mkdir()
     arrays = dict(flux=np.arange(len(targets)*len(psi), dtype="<f8").reshape(len(targets), len(psi)),
                   flux_error=np.ones((len(targets), len(psi)), dtype="<f8"),
                   status=np.arange(len(targets), dtype="<i4") % 6,
                   sample_count=np.arange(len(targets), dtype="<i8") + 2**40,
                   terminal_box_count=np.arange(len(targets), dtype="<i8") + 2**35)
-    for start in range(0, len(targets), 2):
-        prefix = output / f"chunk_{start:09d}"
-        for name, values in arrays.items():
-            np.save(f"{prefix}_{name}.npy", values[start:start+2], allow_pickle=False)
-        prefix.with_suffix(".done").touch()
+    write_batch_results(path, DustCurrentResult(targets[:, :3], psi, **arrays))
     return arrays
 
 

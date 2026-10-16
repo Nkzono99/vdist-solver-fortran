@@ -23,6 +23,12 @@ Fortran で実装した速度分布ソルバを Python から利用するため�
 軌道の折り返し前の変位を使います。詳細は [物理モデル](docs/physics.md) と
 [速度範囲自動推定](docs/autorange.md) を参照してください。
 
+tier-2 の速度範囲は field bundle を再利用でき、`write_range_batch` →
+`vdsolverf-batch` → `read_range_batch_results` で計算時の Python を省けます。
+[bundle と batch の使用例](docs/autorange.md#field-bundle-と-tier-2-batch)を参照してください。
+放出パッチは `curf/curfs` の密度を含み、境界 Maxwellian と raycast 源は係数が
+密度 1 です。[源の規格化](docs/dust_currents.md#定義と単位)に従って電流へ換算してください。
+
 ## 必要環境
 
 - `gfortran`

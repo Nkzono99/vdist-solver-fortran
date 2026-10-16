@@ -18,7 +18,13 @@ j_s(psi) = q_s n_s F(psi)
 I_s(psi) = pi a^2 j_s(psi)
 ```
 
-`p(v)` は、境界源から backtrace で伝搬した密度 1 の PDF です。密度、電荷、
+`p(v)` は源から backtrace で伝搬した分布です。外部境界 Maxwellian と raycast
+源の係数は密度 1 です（raycast は半空間係数と照射ゲートを持ちます）。これらには
+上式の密度と電荷を掛けます。明示的な放出パッチは既に `curf/curfs` に対応する
+電荷換算密度を持つため、境界密度を再び掛けてはいけません。実粒子の電荷絶対値が
+1 の場合、放出パッチの寄与には電荷の符号、断面積、単位変換だけを掛けます。
+源が混在する場合は、和を解釈する前に源の規格化を揃える必要があります。
+[放出パッチの規格化](physics.md#放出パッチの規格化)を参照してください。
 断面積、SI 単位への変換は呼び出し側で掛けます。`psi` は局所プラズマ電位からの
 ダスト電位差で、`qm` と速度に整合する正規化を使います。速度は静止ダストの系で
 与え、ダスト速度によるシフトは行いません。境界源につながらない捕捉粒子と、
@@ -64,7 +70,7 @@ broadcast します。`psi_grid` は有限値からなる空でない 1 次元�
 |---|---|---|
 | `positions` | `(nspatial, 3)` | 評価位置 |
 | `psi_grid` | `(npsi,)` | 電位配列 |
-| `flux`, `flux_error` | `(nspatial, npsi)` | 密度 1 のモーメントとサンプル変動推定値 |
+| `flux`, `flux_error` | `(nspatial, npsi)` | 源の規格化を含むモーメントとサンプル変動推定値 |
 | `status` | `(nspatial,)` | Octree status |
 | `sample_count` | `(nspatial,)` | 中間 box を含む保存サンプル数 |
 | `terminal_box_count` | `(nspatial,)` | 子を持たず積分した box 数 |
@@ -158,6 +164,14 @@ standalone batch の Fortran reader は v1.0 と v2.0 に対応します。
 
 ## Standalone batch
 
+tier-2 の速度 box が必要なら、同じ bundle で先に
+[速度範囲 batch](autorange.md#field-bundle-と-tier-2-batch) を実行し、各セルの
+範囲を以下の targets に使います。既定モードは `dust_currents` です。
+`velocity_range` モードは target/psi 配列を必要としません。
+fixture や別経路で計算済みの結果には `write_batch_results(batch_dir, result)` が
+使えます。`write_batch` で準備した batch と同じ chunk・完了マーカーを書き、
+位置と psi の一致を確認し、int64 の診断個数を保持します。
+
 `vdsolverf-batch [--resume|--no-resume] batch.nml` は各 rank で bundle と simulator を
 一度だけ読み込みます。実行には Python / mpi4py は不要です。MPI は専用ビルドでのみ
 有効になり、既定の `make` / `make install` / pip 用共有ライブラリは MPI 不要です。
@@ -225,7 +239,7 @@ batch/
 
 両配列は空にできません。位置と psi は有限値を要求し、不正な速度 box は既存 evaluator
 と同じ status `5` を返します。`ispec` は Python と同じ 0 始まりです。全入出力は前述の
-EMSES 単位・密度 1 の flux を使います。
+EMSES 単位・上記の源の規格化を含む flux を使います。
 
 `batch.nml` の group は `&vdsolverf_batch` です。
 

@@ -74,7 +74,37 @@ EMSES の外部源と raycast 光電子では、`locs = vdri_vector(ispec)`、
 共分散は $R\,\mathrm{diag}(\sigma_i^2)R^T$ で、斜めの異方分布の相関を保持し、
 等方分布は回転で変化しません。`vth_vector(ispec)` はこの共分散の対角成分の
 平方根（Cartesian 各成分の標準偏差）を返し、autorange の support に使います。
-放出パッチの軸に沿う分布は既存の emission 座標規約を使います。
+放出パッチは `nemd` の符号を含む法線方向に `path`、両接線方向に `peth`
+を標準偏差として使います（標準偏差自体に方向の符号は付きません）。
+
+### 放出パッチの規格化
+
+放出方向（物質からプラズマへ）のドリフトを
+$u=\mathrm{sign}(nemd)\,\mu_{|nemd|}$、$\sigma=path$ とすると、
+密度 1 の Gaussian の一方向フラックスモーメントは
+
+$$
+I(u,\sigma)=\frac{u}{2}\left[1+\mathrm{erf}\left(\frac{u}{\sqrt{2}\sigma}\right)\right]
++\frac{\sigma}{\sqrt{2\pi}}\exp\left(-\frac{u^2}{2\sigma^2}\right)
+$$
+
+です。係数は `C = curf/I`（非負の `curfs` があれば優先）とし、分布の
+一方向モーメントが入力値を再現します。MPIEMSES3D は法線速度を
+$v_n f(v_n)$ に比例する flux-weighted half-Gaussian（標準偏差 `path`）、
+接線速度を標準偏差 `peth` の Gaussian から生成します。本ソルバで伝搬する
+位相空間分布は $C f_M$ であり、速度をもう一度掛けることはありません。
+`curf/curfs` は EMSES 単位の電流密度の絶対値です。MPIEMSES3D はこれを
+マクロ粒子電荷の絶対値で割って生成粒子数を求めます。本ソルバの $C$ は
+電荷換算密度（実粒子の電荷絶対値が 1 なら数密度）であり、連続分布に
+マクロ粒子電荷・重みを掛けてはいけません。電荷絶対値が異なる場合の数密度は
+その値で割って求めます。この源は密度 1 の PDF ではありません。
+
+erf ユーティリティの幅は $\sqrt{2}\sigma$ です。引数逆転と幅を修正すると、
+ゼロドリフトでは $C=curf\sqrt{2\pi}/\sigma$ となります。従来も正だった法線幅が
+同じ場合（例: ±Z パッチ）、放出確率は $\sqrt{2\pi}\simeq2.5066$ 倍です。
+X/Y パッチでは従来の符号付き・入れ替わった熱幅も修正するため、以前ゼロだった
+源が非ゼロになるケースがあり、共通の有限倍率だけでは表せません。
+[ダスト電流の単位](dust_currents.md#定義と単位)も参照してください。
 
 ### Raycast 光電子
 

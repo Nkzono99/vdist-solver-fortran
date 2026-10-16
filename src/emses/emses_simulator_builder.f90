@@ -398,11 +398,15 @@ contains
                         flux = curfs(iepl)
                     end if
 
+                    ! curf/curfs are current-density magnitudes in EMSES units.
+                    ! The continuous source carries that charge-equivalent density
+                    ! (unit physical charge magnitude), not macro-particle counts.
+                    ! The erf helper takes exp(-((v-u)/width)**2), whereas the
+                    ! probability takes Gaussian sigma. Project drift toward emission.
                     density = solve_density_from_flux_erf( &
-                              flux, &
-                              vmean(abs(nemd(iepl))), &
-                              vthermal(abs(nemd(iepl))) &
-                              )
+                              j=flux, &
+                              vth=sqrt(2d0)*vthermal(abs(nemd(iepl))), &
+                              v0=sign(1d0, dble(nemd(iepl)))*vmean(abs(nemd(iepl))))
 
                     allocate (probability_functions(n_probability_functions + 1)%ref, &
                               source=new_MaxwellianProbability(vmean, vthermal, density))

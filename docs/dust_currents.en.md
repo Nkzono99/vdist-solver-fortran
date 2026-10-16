@@ -19,9 +19,17 @@ j_s(psi) = q_s n_s F(psi)
 I_s(psi) = pi a^2 j_s(psi)
 ```
 
-`p(v)` is the solver's density-one boundary-source PDF, transported to the
-requested point by backtracing. Density, species charge, geometric area and SI
-conversion are the caller's responsibility. `psi` is the dust potential relative
+`p(v)` is the source distribution transported by backtracing. External boundary
+Maxwellians and raycast sources have unit-density coefficients (raycast retains
+its half-space factor and illumination gate). For these sources, multiply by
+species density and charge as above. Explicit emission patches already carry
+the `curf/curfs` charge-equivalent density; do not multiply their contribution
+by a boundary density again. For unit physical charge magnitude, multiply that
+contribution only by the charge sign, area and unit conversion. Mixed-source
+calculations require consistent source scaling before interpreting the sum.
+See [emission normalisation](physics.en.md#emission-patch-normalisation).
+Geometric area and SI conversion remain the caller's responsibility.
+`psi` is the dust potential relative
 to the local plasma potential, in the normalisation compatible with `qm` and
 velocity. Velocities are in the stationary dust frame; no dust-velocity shift is
 applied. The calculation includes neither trapped populations disconnected from
@@ -177,6 +185,14 @@ a fixed byte offset. The standalone Fortran reader accepts both v1.0 and v2.0.
 
 ## Standalone batch
 
+For tier-2 velocity boxes, first run a
+[velocity-range batch](autorange.en.md#field-bundles-and-standalone-tier-2-batches)
+from the same bundle, then use its per-cell bounds in the targets below.
+`mode='dust_currents'` is the default; `mode='velocity_range'` needs no target/psi arrays.
+For fixtures or externally computed results, `write_batch_results(batch_dir, result)`
+writes the same chunks and completion markers for a batch already prepared by
+`write_batch`. It requires matching positions and psi and preserves int64 counts.
+
 `vdsolverf-batch [--resume|--no-resume] batch.nml` loads a field bundle and
 constructs a simulator once per rank. Execution needs neither Python nor
 mpi4py. MPI is enabled only in the dedicated build; the default `make`,
@@ -247,7 +263,7 @@ batch/
 
 Both arrays must be nonempty. Positions and psi must be finite; invalid
 velocity boxes return native status `5`. `ispec` is zero-based, as in Python.
-All inputs and outputs use the EMSES units and unit-density flux defined above.
+All inputs and outputs use the EMSES units and source normalisation defined above.
 
 The namelist contains one `&vdsolverf_batch` group:
 

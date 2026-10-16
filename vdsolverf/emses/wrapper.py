@@ -296,6 +296,7 @@ def get_probabilities(
     *,
     use_electric_field: bool = True,
     use_magnetic_field: bool = True,
+    field_bundle=None,
 ) -> Tuple[np.ndarray, List[Particle]]:
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
@@ -315,6 +316,7 @@ def get_probabilities(
         tmp_input_suffix=tmp_input_suffix,
         use_electric_field=use_electric_field,
         use_magnetic_field=use_magnetic_field,
+        field_bundle=field_bundle,
     )
 
     # For some reason, it crashes when I try to close it.
@@ -633,6 +635,7 @@ def get_probabilities_dll(
     *,
     use_electric_field: bool = True,
     use_magnetic_field: bool = True,
+    field_bundle=None,
 ) -> Tuple[np.ndarray, List[Particle]]:
     dll.get_probabilities.argtypes = [
         c_char_p,  # inppath
@@ -656,23 +659,15 @@ def get_probabilities_dll(
     ]
     dll.get_probabilities.restype = None
 
-    data = emout.Emout(directory)
+    with _prepared_octree_fields(directory, istep, ispec, use_electric_field, use_magnetic_field,
+                                field_bundle, tmp_input_suffix) as (data, ebvalues, inppath):
+        npcls = len(particles)
+        return_probabilities = np.empty(npcls, dtype=np.float64)
+        return_positions = np.empty((npcls, 3), dtype=np.float64)
+        return_velocities = np.empty((npcls, 3), dtype=np.float64)
 
-    ebvalues = create_relocated_ebvalues(
-        data, istep, ispec=ispec,
-        use_electric_field=use_electric_field,
-        use_magnetic_field=use_magnetic_field,
-    )
-
-    npcls = len(particles)
-    return_probabilities = np.empty(npcls, dtype=np.float64)
-    return_positions = np.empty((npcls, 3), dtype=np.float64)
-    return_velocities = np.empty((npcls, 3), dtype=np.float64)
-
-    positions = np.array([particle.pos for particle in particles], dtype=np.float64)
-    velocities = np.array([particle.vel for particle in particles], dtype=np.float64)
-    with TempolaryInput(data, suffix=tmp_input_suffix) as tmpinp:
-        inppath = tmpinp.tmppath
+        positions = np.array([particle.pos for particle in particles], dtype=np.float64)
+        velocities = np.array([particle.vel for particle in particles], dtype=np.float64)
         inppath_str = str(inppath.resolve())
 
         _inppath = create_string_buffer(inppath_str.encode())
@@ -905,13 +900,15 @@ def estimate_velocity_range_map(
     *,
     use_electric_field: bool = True,
     use_magnetic_field: bool = True,
+    field_bundle=None,
 ) -> VelocityRangeMap:
     """Estimate per-cell velocity ranges from EMSES source envelopes.
 
     By default this follows the legacy backtrace/probability APIs and uses the
     ordinary time-step interpretation. With ``use_adaptive_dt=True``, ``dt`` is
     treated as an approximate grid-distance limit per trace step, not as the
-    EMSES simulation time step.
+    EMSES simulation time step. ``field_bundle`` reuses relocated fields and
+    its namelist, with the same consistency checks as ``get_dust_currents``.
     """
     n_threads = n_threads or int(os.environ.get("OMP_NUM_THREADS", default="1"))
 
@@ -942,6 +939,7 @@ def estimate_velocity_range_map(
         tmp_input_suffix=tmp_input_suffix,
         use_electric_field=use_electric_field,
         use_magnetic_field=use_magnetic_field,
+        field_bundle=field_bundle,
     )
 
 
@@ -967,6 +965,7 @@ def estimate_velocity_range_map_dll(
     *,
     use_electric_field: bool = True,
     use_magnetic_field: bool = True,
+    field_bundle=None,
 ) -> VelocityRangeMap:
     dll.estimate_velocity_range_map.argtypes = [
         c_char_p,  # inppath
@@ -1004,30 +1003,23 @@ def estimate_velocity_range_map_dll(
     ]
     dll.estimate_velocity_range_map.restype = None
 
-    data = emout.Emout(directory)
+    with _prepared_octree_fields(directory, istep, ispec, use_electric_field, use_magnetic_field,
+                                field_bundle, tmp_input_suffix) as (data, ebvalues, inppath):
+        nz, ny, nx = data.inp.nz, data.inp.ny, data.inp.nx
 
-    ebvalues = create_relocated_ebvalues(
-        data, istep, ispec=ispec,
-        use_electric_field=use_electric_field,
-        use_magnetic_field=use_magnetic_field,
-    )
-    nz, ny, nx = data.inp.nz, data.inp.ny, data.inp.nx
+        vx_min = np.empty((nz, ny, nx), dtype=np.float64)
+        vx_max = np.empty((nz, ny, nx), dtype=np.float64)
+        vy_min = np.empty((nz, ny, nx), dtype=np.float64)
+        vy_max = np.empty((nz, ny, nx), dtype=np.float64)
+        vz_min = np.empty((nz, ny, nx), dtype=np.float64)
+        vz_max = np.empty((nz, ny, nx), dtype=np.float64)
+        count = np.empty((nz, ny, nx), dtype=np.int32)
+        weight_sum = np.empty((nz, ny, nx), dtype=np.float64)
+        mean_v = np.empty((nz, ny, nx, 3), dtype=np.float64) if collect_moments else None
+        cov_v = np.empty((nz, ny, nx, 3, 3), dtype=np.float64) if collect_moments else None
+        status = np.empty((nz, ny, nx), dtype=np.int32)
+        confidence = np.empty((nz, ny, nx), dtype=np.float64)
 
-    vx_min = np.empty((nz, ny, nx), dtype=np.float64)
-    vx_max = np.empty((nz, ny, nx), dtype=np.float64)
-    vy_min = np.empty((nz, ny, nx), dtype=np.float64)
-    vy_max = np.empty((nz, ny, nx), dtype=np.float64)
-    vz_min = np.empty((nz, ny, nx), dtype=np.float64)
-    vz_max = np.empty((nz, ny, nx), dtype=np.float64)
-    count = np.empty((nz, ny, nx), dtype=np.int32)
-    weight_sum = np.empty((nz, ny, nx), dtype=np.float64)
-    mean_v = np.empty((nz, ny, nx, 3), dtype=np.float64) if collect_moments else None
-    cov_v = np.empty((nz, ny, nx, 3, 3), dtype=np.float64) if collect_moments else None
-    status = np.empty((nz, ny, nx), dtype=np.int32)
-    confidence = np.empty((nz, ny, nx), dtype=np.float64)
-
-    with TempolaryInput(data, suffix=tmp_input_suffix) as tmpinp:
-        inppath = tmpinp.tmppath
         inppath_str = str(inppath.resolve())
 
         _inppath = create_string_buffer(inppath_str.encode())
@@ -1108,6 +1100,7 @@ def estimate_velocity_range_map_dll(
         status=status,
         confidence=confidence,
         metadata={
+            "field_bundle": str(field_bundle.namelist_path.parent) if hasattr(field_bundle, "namelist_path") else (str(field_bundle) if field_bundle is not None else None),
             "directory": str(data.directory),
             "ispec": ispec,
             "istep": istep,
@@ -1150,7 +1143,15 @@ def validate_and_expand_velocity_range_map(
     *,
     use_electric_field: bool = True,
     use_magnetic_field: bool = True,
+    field_bundle=None,
 ) -> VelocityRangeMap:
+    """Expand cells with edge signal; optional field_bundle also serves coarse PDFs."""
+    if field_bundle is not None:
+        # Validate even an empty map / max_iter=0 before an early return.
+        with _prepared_octree_fields(directory, istep, ispec, use_electric_field, use_magnetic_field,
+                                     field_bundle, tmp_input_suffix) as (data, _, _):
+            if range_map.cell_shape != (data.inp.nz, data.inp.ny, data.inp.nx):
+                raise ValueError("range map shape does not match field bundle")
     for _ in range(max_iter):
         particles, index = range_map.create_particles(coarse_bins)
         if not particles:
@@ -1171,6 +1172,7 @@ def validate_and_expand_velocity_range_map(
             tmp_input_suffix=tmp_input_suffix,
             use_electric_field=use_electric_field,
             use_magnetic_field=use_magnetic_field,
+            field_bundle=field_bundle,
         )
         prob_grid = index.reshape(probabilities)
         expand_mask = _edge_probability_mask(prob_grid, edge_threshold)
@@ -1548,7 +1550,7 @@ def rotate(vec: np.ndarray, phiz_deg: float, phixy_deg: float) -> np.ndarray:
 @contextmanager
 def _prepared_octree_fields(directory, istep, ispec, use_electric_field, use_magnetic_field,
                             field_bundle, tmp_input_suffix):
-    """Share field loading between octree samples and moment reductions."""
+    """Share bundle checks and field loading across probability and range APIs."""
     if field_bundle is not None:
         from ..io import FieldBundle, read_field_bundle
 
@@ -1586,10 +1588,11 @@ def get_dust_currents(
     system: Literal["auto", "linux", "darwin", "windows"] = "auto", library_path: PathLike = None,
     tmp_input_suffix: Union[str, None] = None,
 ) -> DustCurrentResult:
-    """Evaluate unit-density OML flux for all psi values in one velocity sweep.
+    """Evaluate source-normalised OML flux for all psi values in one velocity sweep.
 
     Units are EMSES normalised. Python outputs have shape (nspatial, npsi);
-    multiply flux by the species charge and density to obtain current density.
+    Boundary/raycast PDFs need species charge and density for current density;
+    emission patches already carry curf/curfs charge-equivalent density.
     ispec is zero-based, as in get_probabilities_octree. Field bundles must match
     directory, istep, species and both field flags exactly.
     """
@@ -1650,5 +1653,5 @@ def get_dust_currents(
                     use_electric_field=use_electric_field, use_magnetic_field=use_magnetic_field,
                     field_bundle=(str(field_bundle.namelist_path.parent) if hasattr(field_bundle, "namelist_path")
                                   else str(field_bundle) if field_bundle is not None else None),
-                    integration_rule="terminal_box_tensor_trapezoid", units="EMSES normalised; unit density")
+                    integration_rule="terminal_box_tensor_trapezoid", units="EMSES normalised; source density")
     return DustCurrentResult(spatial, psi, flux, error, status, samples, terminals, metadata)

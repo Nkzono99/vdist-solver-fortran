@@ -277,7 +277,7 @@ contains
     end function
 
     function emission_vth_vector(ispec, iepl) result(ret)
-        !! Calculate the thermal velocity vector.
+        !! Emission-frame Gaussian standard deviations (not signed vectors).
 
         integer, intent(in) :: ispec
             !! Species index
@@ -286,32 +286,11 @@ contains
         double precision :: ret(3)
             !! Resulting thermal velocity vector
 
-        ret(:) = [peth(ispec), peth(ispec), path(ispec)]
-        block
-            double precision :: thz, thxy
-            double precision :: vth_vec(3)
-
-            integer :: axis0, axis1, axis2
-
-            call nemd2angle(iepl, thz, thxy)
-
-            vth_vec(:) = [peth(ispec), peth(ispec), path(ispec)]
-            vth_vec(:) = rot3d_y(vth_vec, thz*DEG2RAD)
-            vth_vec(:) = rot3d_z(vth_vec, thxy*DEG2RAD)
-
-            axis0 = abs(nemd(iepl))
-            axis1 = mod(axis0, 3) + 1
-            axis2 = mod(axis0 + 1, 3) + 1
-
-            if (nemd(iepl) > 0) then
-                ret(axis0) = vth_vec(3)
-            else
-                ret(axis0) = -vth_vec(3)
-            end if
-
-            ret(axis1) = vth_vec(1)
-            ret(axis2) = vth_vec(2)
-        end block
+        ! MPIEMSES3D samples the normal flux distribution with path and both
+        ! tangential Gaussians with peth, then permutes axes and signs the normal.
+        ! Standard deviations are positive and do not acquire that sign.
+        ret(:) = peth(ispec)
+        ret(abs(nemd(iepl))) = path(ispec)
     end function
 
     subroutine nemd2angle(iepl, thz, thxy)

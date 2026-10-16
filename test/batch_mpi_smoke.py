@@ -14,7 +14,8 @@ import numpy as np
 
 # Running a file under test/ otherwise finds an older installed distribution.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from vdsolverf.io import write_batch, read_batch_results
+from vdsolverf.io import (write_batch, read_batch_results, write_range_batch,
+                         read_range_batch_results)
 
 
 def prepare(root):
@@ -42,6 +43,9 @@ def prepare(root):
                     dt=0.7, max_step=32, scout_bins=[3, 4, 3], max_depth=2,
                     max_samples_per_cell=4096, max_leaves_per_cell=128,
                     max_expansions=0, chunk_size=2, n_threads=4)
+    for name in ("range-serial", "range-mpi"):
+        write_range_batch(root / name, bundle, 0, dt=0.7, max_step=12, n_threads=4,
+                          coverage_sigma=2.3, safety_factor=1.2, accumulator_cache_size=7)
     print(f"Prepared 19 targets / 10 chunks in {root}")
 
 
@@ -54,6 +58,14 @@ def compare(root):
     assert serial.metadata["summary"]["status_counts"] == mpi.metadata["summary"]["status_counts"]
     print("PASS: 4-rank MPI and serial outputs are bit-identical (all arrays and status counts)")
     print(json.dumps(mpi.metadata["summary"], indent=2))
+    serial_range = read_range_batch_results(root / "range-serial")
+    mpi_range = read_range_batch_results(root / "range-mpi")
+    assert mpi_range.metadata["summary"]["ranks"] == 4
+    for name in ("vx_min", "vx_max", "vy_min", "vy_max", "vz_min", "vz_max",
+                 "weight_sum", "confidence", "count", "status"):
+        a, b = getattr(serial_range, name), getattr(mpi_range, name)
+        np.testing.assert_array_equal(a.view(np.uint8), b.view(np.uint8), err_msg=name)
+    print("PASS: MPI range mode (rank 0 computes) and serial range arrays are bit-identical")
 
 
 if __name__ == "__main__":

@@ -319,9 +319,10 @@ Accepted values for `system`: `"auto"` (default), `"linux"`, `"darwin"`,
 
 ## Dust charging current moments
 
-For density-one OML flux moments computed inside Fortran, use
+For OML flux moments computed inside Fortran, use
 `vdsolverf.emses.get_dust_currents`. Multiply `result.flux` by species charge
-and density for current density. See [Dust current moments](dust_currents.en.md)
+and density for unit-density boundary/raycast sources. Emission patches already
+carry `curf/curfs` normalisation. See [Dust current moments](dust_currents.en.md)
 for usage and reusable field bundles.
 
 For many targets, prepare `batch.nml`, `targets.npy` and `psi.npy` with
@@ -329,3 +330,8 @@ For many targets, prepare `batch.nml`, `targets.npy` and `psi.npy` with
 `make batch` or `make batch-mpi`. Completed chunks are reused by default;
 `vdsolverf.io.read_batch_results(batch_dir)` collects a `DustCurrentResult`.
 See the standalone batch section in the same guide for formats and MPI jobs.
+
+For tier-2 boxes, both range estimation and validation accept `field_bundle`.
+`vdsolverf.io.write_range_batch` prepares `mode='velocity_range'` with no target
+arrays; `read_range_batch_results` restores a saveable `VelocityRangeMap`.
+See the [bundle and batch example](autorange.en.md#field-bundles-and-standalone-tier-2-batches).

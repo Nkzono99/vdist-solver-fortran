@@ -16,12 +16,15 @@ module m_vdsolverf_batch
     public :: compute_chunk, chunk_complete, write_summary, chunk_prefix
     public :: prepare_work
     type t_batch_config
+        character(32) :: mode = 'dust_currents'
         character(:), allocatable :: bundle_dir, output_dir, directory
         integer :: ispec = -1, max_step = 30000, max_probability_types = 100
         integer :: scout_bins(3) = [9, 9, 9], max_depth = 6, max_samples_per_cell = 50000
         integer :: max_leaves_per_cell = 4096, max_expansions = 3, chunk_size = 16, n_threads = 1
         real(real64) :: dt = -1d0, refine_threshold_rel = 1d-4, edge_threshold_rel = 1d-4, expand_factor = 1.5d0
         logical :: use_adaptive_dt = .false., use_electric_field = .true., use_magnetic_field = .true.
+        real(real64) :: coverage_sigma = 4d0, safety_factor = 1.25d0
+        integer :: source_samples_per_cell = 1, minimum_count = 4, accumulator_cache_size = 20000
     end type
     type t_batch
         type(t_batch_config) :: config
@@ -34,15 +37,25 @@ contains
         character(*), intent(in) :: path
         type(t_batch_config), intent(out) :: config
         character(4096) :: bundle_dir, output_dir
+        character(32) :: mode
         character(1024) :: message
         integer :: ispec, max_step, max_probability_types, scout_bins(3), max_depth, max_samples_per_cell
         integer :: max_leaves_per_cell, max_expansions, chunk_size, n_threads, unit, ios
         real(real64) :: dt, refine_threshold_rel, edge_threshold_rel, expand_factor
+        real(real64) :: coverage_sigma, safety_factor
+        integer :: source_samples_per_cell, minimum_count, accumulator_cache_size
         logical :: use_adaptive_dt, use_electric_field, use_magnetic_field
         namelist /vdsolverf_batch/ bundle_dir, ispec, dt, max_step, use_adaptive_dt, max_probability_types, &
             scout_bins, max_depth, max_samples_per_cell, max_leaves_per_cell, refine_threshold_rel, &
             edge_threshold_rel, expand_factor, max_expansions, chunk_size, output_dir, n_threads, &
-            use_electric_field, use_magnetic_field
+            use_electric_field, use_magnetic_field, mode, coverage_sigma, safety_factor, &
+            source_samples_per_cell, minimum_count, accumulator_cache_size
+        mode = config%mode
+        coverage_sigma = config%coverage_sigma
+        safety_factor = config%safety_factor
+        source_samples_per_cell = config%source_samples_per_cell
+        minimum_count = config%minimum_count
+        accumulator_cache_size = config%accumulator_cache_size
         bundle_dir = ''
         output_dir = 'out'
         ispec = config%ispec
@@ -68,6 +81,14 @@ contains
         read(unit, nml=vdsolverf_batch, iostat=ios, iomsg=message)
         close(unit)
         if (ios /= 0) call batch_fail('invalid &vdsolverf_batch: '//trim(message))
+        if (mode /= 'dust_currents' .and. mode /= 'velocity_range') &
+            call batch_fail('mode must be dust_currents or velocity_range')
+        if (.not. all(ieee_is_finite([coverage_sigma, safety_factor]))) &
+            call batch_fail('coverage_sigma/safety_factor must be finite')
+        if (coverage_sigma <= 0d0 .or. safety_factor < 1d0) &
+            call batch_fail('coverage_sigma must be positive and safety_factor >= 1')
+        if (min(source_samples_per_cell, minimum_count, accumulator_cache_size) < 1) &
+            call batch_fail('source_samples_per_cell/minimum_count/accumulator_cache_size must be positive')
         if (len_trim(bundle_dir) == 0 .or. len_trim(output_dir) == 0) call batch_fail('bundle_dir/output_dir required')
         if (ispec < 0 .or. ispec == huge(ispec)) call batch_fail('ispec must be a nonnegative 0-based species index')
         if (.not. ieee_is_finite(dt) .or. dt <= 0d0 .or. max_step < 1) call batch_fail('dt/max_step must be positive')
@@ -82,6 +103,12 @@ contains
         if (min(refine_threshold_rel, edge_threshold_rel) < 0d0 .or. expand_factor < 1d0) &
             call batch_fail('thresholds must be >= 0 and expand_factor >= 1')
         config%directory = parent_path(path)
+        config%mode = mode
+        config%coverage_sigma = coverage_sigma
+        config%safety_factor = safety_factor
+        config%source_samples_per_cell = source_samples_per_cell
+        config%minimum_count = minimum_count
+        config%accumulator_cache_size = accumulator_cache_size
         config%bundle_dir = path_join(config%directory, trim(bundle_dir))
         config%output_dir = path_join(config%directory, trim(output_dir))
         config%ispec = ispec

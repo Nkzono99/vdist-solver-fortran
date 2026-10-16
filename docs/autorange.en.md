@@ -14,6 +14,82 @@ its unwrapped endpoint, then each deposited point is mapped into the periodic
 domain. This applies to several periodic axes and multiple crossings within
 one step.
 
+## Field bundles and standalone tier-2 batches
+
+Both `estimate_velocity_range_map(..., field_bundle=...)` and
+`validate_and_expand_velocity_range_map(..., field_bundle=...)` accept a bundle
+directory or `FieldBundle`, just like
+[`get_dust_currents`](dust_currents.en.md). They reuse the relocated fields and
+trimmed namelist without opening EMSES output files. The requested `directory`,
+`istep`, species and `use_electric_field` / `use_magnetic_field` must match the
+bundle. With the same settings and thread count, bundled and ordinary inputs
+produce the same ranges. Validation also uses the bundle for its coarse
+probability evaluations.
+
+```python
+from vdsolverf.io import write_field_bundle, write_range_batch, read_range_batch_results
+from vdsolverf.emses import estimate_velocity_range_map, validate_and_expand_velocity_range_map
+
+bundle = write_field_bundle("my-run", -1, [0, 1], "my-run/field_bundle")
+range_map = estimate_velocity_range_map(
+    "my-run", 0, -1, dt=0.25, max_step=30_000,
+    n_threads=8, field_bundle=bundle,
+)
+range_map = validate_and_expand_velocity_range_map(
+    range_map, "my-run", 0, -1, dt=0.1, max_step=30_000,
+    n_threads=8, field_bundle=bundle,
+)
+
+# Prepare once in Python; the compute job below needs only Fortran.
+batch_nml = write_range_batch(
+    "range-batch", bundle, 0, dt=0.25, max_step=30_000,
+    use_adaptive_dt=True, coverage_mode="relative_density", eps_rel=1e-6,
+    safety_factor=1.25, source_samples_per_cell=1, minimum_count=4,
+    accumulator_cache_size=20_000, n_threads=8,
+)
+```
+
+```bash
+# Build/run on compute nodes at KUDPC; -t always uses H:MM:SS.
+tssrun -p gr20001b -t 0:40:00 --rsc p=1:t=8:c=8 make batch
+tssrun -p gr20001b -t 0:40:00 --rsc p=1:t=8:c=8 \
+  build/batch-serial/bin/vdsolverf-batch range-batch/batch.nml
+```
+
+```python
+range_map = read_range_batch_results("range-batch")
+range_map.save()  # Original directory, species and istep are restored.
+# Feed each selected cell's six bounds into write_batch for current integration.
+```
+
+`&vdsolverf_batch mode='velocity_range'` requires only `batch.nml`; it never
+reads `targets.npy` or `psi.npy`. `mode='dust_currents'` remains the default.
+Range keys are `bundle_dir`, zero-based `ispec`, `dt`, `max_step`,
+`use_adaptive_dt`, `coverage_sigma`, `safety_factor`, `source_samples_per_cell`,
+`minimum_count`, `accumulator_cache_size`, `n_threads`, `output_dir`, and optional
+`max_probability_types`. The writer resolves `coverage_mode` / `eps_rel` to
+`coverage_sigma`. Defaults match the Python range API (`dt=0.25`,
+`max_step=1000`); set the trace duration explicitly for production.
+Omit `n_threads` to use the execution environment's `OMP_NUM_THREADS`.
+Field flags are inherited from the bundle. The mode runs one OpenMP job;
+an MPI executable computes on rank 0 only and the other ranks exit cleanly.
+
+Under `output_dir/velocity_range/` (default `out/velocity_range/`), the eight
+`vx_min/vx_max/vy_min/vy_max/vz_min/vz_max/weight_sum/confidence.npy` files are
+float64, and `count.npy` / `status.npy` are int32. All have C-order shape
+`(nz, ny, nx)`. `summary.json` in the same directory contains status counts,
+settings, wall time and an input fingerprint, and is atomically written last as
+the completion marker. Moments are omitted; the reader supplies NaN views.
+
+Resume is enabled by default (also `--resume`): an unchanged completed job
+leaves all output files untouched. The executable streams a CRC64 fingerprint
+over `batch.nml`, `bundle.json`, the trimmed namelist and the selected species'
+field npy, and includes the effective thread count. This reads the entire field
+file even when skipping. Any input-byte change or missing output recomputes the
+map; `--no-resume` always recomputes it. Keep input files immutable during a run.
+See [dust-current batches](dust_currents.en.md#standalone-batch) for builds,
+MPI submission and the subsequent current-integration stage.
+
 ## Reproducibility
 
 Support particles and trajectories are deterministic. Each worker owns its
@@ -292,10 +368,10 @@ components, combine this feature with manual velocity ranges or validation.
 ## Performance Notes
 
 The estimator runs in Fortran and parallelizes over source patches with OpenMP.
-Deposits write to thread-local accumulators and merge at the end; it does not
-use `atomic` deposits. This avoids atomic contention, but memory usage scales
-roughly with `number of cells * number of threads`. `collect_moments=True`
-adds more thread-local moment arrays, so start with `False`.
+Deposits use bounded per-thread sparse caches and flush under cell locks, rather
+than per-deposit atomics. Memory scales with the dense map plus
+`n_threads * accumulator_cache_size` cache entries. `collect_moments=True`
+adds global moment arrays and cache moment storage, so start with `False`.
 
 The included microbenchmark can be built manually:
 

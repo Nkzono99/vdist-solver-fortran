@@ -2,6 +2,7 @@ program vdsolverf_batch
     use, intrinsic :: iso_fortran_env, only: int64, real64
     use m_vdsolverf_batch
     use m_batch_support
+    use m_range_batch, only: run_range_batch
 #ifdef VDSOLVERF_MPI
     use mpi, only: MPI_STATUS_SIZE, MPI_THREAD_FUNNELED, MPI_SUCCESS, MPI_COMM_WORLD, &
         MPI_ANY_SOURCE, MPI_SOURCE, MPI_INTEGER, MPI_Init_thread, MPI_Comm_rank, MPI_Comm_size, &
@@ -9,6 +10,7 @@ program vdsolverf_batch
 #endif
     implicit none
     type(t_batch) :: batch
+    type(t_batch_config) :: config
     character(:), allocatable :: argument, input
     logical :: resume
     integer :: rank, ranks, i, chunk, computed, skipped, next
@@ -63,57 +65,62 @@ program vdsolverf_batch
         end select
     end do
     if (.not. allocated(input)) call batch_fail('Usage: vdsolverf-batch [--no-resume] batch.nml')
-    ! Every rank reads and constructs its simulator once, including the dispatcher.
-    call open_batch(input, batch)
-    computed = 0
-    skipped = 0
-    if (rank == 0) then
-        call prepare_work(batch, resume, work, computed, skipped)
-    end if
-#ifdef VDSOLVERF_MPI
-    call MPI_Barrier(MPI_COMM_WORLD, ierr)
-    if (ranks > 1) then
-        if (rank == 0) then
-            ! Rank zero never enters the costly octree: respond promptly to all workers.
-            next = 1
-            workers = ranks-1
-            do while (workers > 0)
-                call MPI_Recv(request, 1, MPI_INTEGER, MPI_ANY_SOURCE, 1, MPI_COMM_WORLD, recv_status, ierr)
-                source = recv_status(MPI_SOURCE)
-                chunk = -1
-                if (next <= computed) then
-                    chunk = work(next)
-                    next = next + 1
-                else
-                    workers = workers-1
-                end if
-                call MPI_Send(chunk, 1, MPI_INTEGER, source, 2, MPI_COMM_WORLD, ierr)
-            end do
-        else
-            do
-                request = 0
-                call MPI_Send(request, 1, MPI_INTEGER, 0, 1, MPI_COMM_WORLD, ierr)
-                call MPI_Recv(chunk, 1, MPI_INTEGER, 0, 2, MPI_COMM_WORLD, recv_status, ierr)
-                if (chunk < 0) exit
-                call compute_chunk(batch, chunk)
-            end do
-        end if
+    call read_batch_config(input, config)
+    if (config%mode == 'velocity_range') then
+        if (rank == 0) call run_range_batch(input, config, resume, ranks)
     else
-#endif
-        do next = 1, computed
-            call compute_chunk(batch, work(next))
-        end do
+        ! Every rank reads and constructs its simulator once, including the dispatcher.
+        call open_batch(input, batch)
+        computed = 0
+        skipped = 0
+        if (rank == 0) then
+            call prepare_work(batch, resume, work, computed, skipped)
+        end if
 #ifdef VDSOLVERF_MPI
-    end if
-    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        if (ranks > 1) then
+            if (rank == 0) then
+                ! Rank zero never enters the costly octree: respond promptly to all workers.
+                next = 1
+                workers = ranks-1
+                do while (workers > 0)
+                    call MPI_Recv(request, 1, MPI_INTEGER, MPI_ANY_SOURCE, 1, MPI_COMM_WORLD, recv_status, ierr)
+                    source = recv_status(MPI_SOURCE)
+                    chunk = -1
+                    if (next <= computed) then
+                        chunk = work(next)
+                        next = next + 1
+                    else
+                        workers = workers-1
+                    end if
+                    call MPI_Send(chunk, 1, MPI_INTEGER, source, 2, MPI_COMM_WORLD, ierr)
+                end do
+            else
+                do
+                    request = 0
+                    call MPI_Send(request, 1, MPI_INTEGER, 0, 1, MPI_COMM_WORLD, ierr)
+                    call MPI_Recv(chunk, 1, MPI_INTEGER, 0, 2, MPI_COMM_WORLD, recv_status, ierr)
+                    if (chunk < 0) exit
+                    call compute_chunk(batch, chunk)
+                end do
+            end if
+        else
 #endif
-    if (rank == 0) then
-        call system_clock(end_clock)
-        call write_summary(batch, real(end_clock-start_clock, real64)/real(clock_rate, real64), &
-            ranks, computed, skipped)
-        print '(a,i0,a,i0)', 'vdsolverf-batch: chunks computed=', computed, ', skipped=', skipped
+            do next = 1, computed
+                call compute_chunk(batch, work(next))
+            end do
+#ifdef VDSOLVERF_MPI
+        end if
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+#endif
+        if (rank == 0) then
+            call system_clock(end_clock)
+            call write_summary(batch, real(end_clock-start_clock, real64)/real(clock_rate, real64), &
+                ranks, computed, skipped)
+            print '(a,i0,a,i0)', 'vdsolverf-batch: chunks computed=', computed, ', skipped=', skipped
+        end if
+        call close_batch(batch)
     end if
-    call close_batch(batch)
 #ifdef VDSOLVERF_MPI
     call MPI_Finalize(ierr)
 #endif

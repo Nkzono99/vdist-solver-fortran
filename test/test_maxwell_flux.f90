@@ -28,6 +28,7 @@ contains
     end subroutine
 
     subroutine test_density_at_zero_drift()
+        !! This utility intentionally uses width=sqrt(2)*sigma, not EMSES sigma.
         !! j = n * I, so n = j * 2 * sqrt(pi) / vth at v0 = 0.
         double precision :: n, expected
 

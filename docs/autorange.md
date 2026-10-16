@@ -12,6 +12,80 @@ support 粒子を生成し、Fortran 側で forward trace して、空間セル�
 使います。軌道の線分は周期境界で折り返す前の終点まで補間し、記録する各点を
 周期領域へ写像します。複数軸や 1 step 内の複数回 crossing にも適用します。
 
+## Field bundle と tier-2 batch
+
+`estimate_velocity_range_map(..., field_bundle=...)` と
+`validate_and_expand_velocity_range_map(..., field_bundle=...)` は、
+[`get_dust_currents`](dust_currents.md) と同様に bundle のディレクトリまたは
+`FieldBundle` を受け付けます。EMSES 出力を開かずに relocation 済みの場と
+trimmed namelist を再利用します。`directory`、`istep`、species、
+`use_electric_field` / `use_magnetic_field` は bundle と一致する必要があります。
+同じ設定・thread 数なら通常入力と同じ範囲を返し、validation の粗い確率評価も
+bundle を使います。
+
+```python
+from vdsolverf.io import write_field_bundle, write_range_batch, read_range_batch_results
+from vdsolverf.emses import estimate_velocity_range_map, validate_and_expand_velocity_range_map
+
+bundle = write_field_bundle("my-run", -1, [0, 1], "my-run/field_bundle")
+range_map = estimate_velocity_range_map(
+    "my-run", 0, -1, dt=0.25, max_step=30_000,
+    n_threads=8, field_bundle=bundle,
+)
+range_map = validate_and_expand_velocity_range_map(
+    range_map, "my-run", 0, -1, dt=0.1, max_step=30_000,
+    n_threads=8, field_bundle=bundle,
+)
+
+# Python で準備した後は、Fortran 実行ファイルだけで計算できる。
+batch_nml = write_range_batch(
+    "range-batch", bundle, 0, dt=0.25, max_step=30_000,
+    use_adaptive_dt=True, coverage_mode="relative_density", eps_rel=1e-6,
+    safety_factor=1.25, source_samples_per_cell=1, minimum_count=4,
+    accumulator_cache_size=20_000, n_threads=8,
+)
+```
+
+```bash
+# KUDPC ではビルド・実行とも計算ノードへ。-t は H:MM:SS で指定する。
+tssrun -p gr20001b -t 0:40:00 --rsc p=1:t=8:c=8 make batch
+tssrun -p gr20001b -t 0:40:00 --rsc p=1:t=8:c=8 \
+  build/batch-serial/bin/vdsolverf-batch range-batch/batch.nml
+```
+
+```python
+range_map = read_range_batch_results("range-batch")
+range_map.save()  # 元の directory、species、istep を保持している。
+# 各セルの 6 成分の範囲を write_batch の電流積分入力へ渡す。
+```
+
+`&vdsolverf_batch mode='velocity_range'` は `batch.nml` だけを必要とし、
+`targets.npy` / `psi.npy` は読みません。既定モードは `dust_currents` のままです。
+range 用キーは `bundle_dir`、0 始まりの `ispec`、`dt`、`max_step`、
+`use_adaptive_dt`、`coverage_sigma`、`safety_factor`、`source_samples_per_cell`、
+`minimum_count`、`accumulator_cache_size`、`n_threads`、`output_dir`、および任意の
+`max_probability_types` です。writer が `coverage_mode` / `eps_rel` を
+`coverage_sigma` へ変換します。既定は Python の range API と同じ
+`dt=0.25`、`max_step=1000` です。本計算では軌道長を明示してください。
+`n_threads` を省略すると実行時の `OMP_NUM_THREADS` を使います。field flags は
+bundle から継承します。1 つの OpenMP 計算を行い、MPI ビルドでも rank 0
+だけが計算し、他 rank は正常終了します。
+
+`output_dir/velocity_range/`（既定 `out/velocity_range/`）に
+`vx_min/vx_max/vy_min/vy_max/vz_min/vz_max/weight_sum/confidence.npy`（float64）、
+`count.npy` / `status.npy`（int32）を書きます。すべて C order、shape は
+`(nz, ny, nx)` です。同じディレクトリの `summary.json` は status 件数、設定、
+wall time、入力 fingerprint を含み、完了マーカーとして最後に atomic に配置します。
+moment 診断は省略し、reader は NaN view を返します。
+
+既定（`--resume` も同じ）では、入力が変わらない完了済みジョブは出力に触れず
+スキップします。`batch.nml`、`bundle.json`、trimmed namelist、選択 species の
+field npy 全体をストリームで読んだ CRC64 と、実効 thread 数で照合します。
+スキップ時も場ファイル全体の読み込みが必要です。入力の 1 byte でも変化するか
+出力が欠けると再計算し、`--no-resume` では常に再計算します。実行中は入力を
+変更しないでください。ビルド・MPI 投入・後段の電流積分は
+[dust-current batch](dust_currents.md#standalone-batch) を参照してください。
+
 ## 再現性
 
 support 粒子と軌道は決定論的です。各 worker の cache は独立で、全体の
@@ -287,10 +361,11 @@ source envelope はまだ自動生成対象ではありません。そのよう�
 ## 性能メモ
 
 範囲推定本体は Fortran 側で実行され、source patch 単位で OpenMP 並列化されます。
-deposit は `atomic` ではなく thread-local accumulator に書き込み、最後に
-merge します。このため atomic 競合は避けられますが、メモリ使用量は概ね
-`セル数 * thread数` に比例します。`collect_moments=True` はさらに moment 用の
-thread-local 配列を持つため、まずは `False` で使うのが安全です。
+deposit は thread ごとの bounded sparse cache に書き込み、cell lock を使って
+flush します。deposit ごとの atomic は使いません。メモリは dense map に加えて
+`n_threads * accumulator_cache_size` 件の cache に比例します。
+`collect_moments=True` は global moment 配列と cache 内の moment 領域を追加するため、
+まずは `False` で使ってください。
 
 付属の簡易ベンチマークは次のように実行できます。
 
