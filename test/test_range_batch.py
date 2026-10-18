@@ -15,6 +15,11 @@ from vdsolverf.core import VelocityRangeMap
 from vdsolverf.emses import wrapper
 from vdsolverf.io import write_range_batch, read_range_batch_results
 
+# Use the installed shared library when the source tree has none (sdist CI).
+from test_native_regressions import LIBRARY_PATH
+from vdsolverf.emses import wrapper as _wrapper
+_wrapper._DEFAULT_LIBRARY_PATHS["linux"] = LIBRARY_PATH
+
 
 FIELDS = ("vx_min", "vx_max", "vy_min", "vy_max", "vz_min", "vz_max",
           "weight_sum", "confidence", "count", "status")

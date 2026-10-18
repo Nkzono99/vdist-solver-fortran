@@ -13,6 +13,11 @@ from vdsolverf.core import DustCurrentResult
 from vdsolverf.emses import get_dust_currents, get_probabilities_octree, wrapper
 from vdsolverf.io import FieldBundle, read_field_bundle, write_field_bundle
 
+# Use the installed shared library when the source tree has none (sdist CI).
+from test_native_regressions import LIBRARY_PATH
+from vdsolverf.emses import wrapper as _wrapper
+_wrapper._DEFAULT_LIBRARY_PATHS["linux"] = LIBRARY_PATH
+
 
 @contextmanager
 def maxwellian_input():
