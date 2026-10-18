@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-19
+
 ### Added
 
 - Added field-bundle support for velocity-range estimation and validation, plus
@@ -29,6 +31,11 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- Fixed nondeterministic OpenMP results with Intel `ifx`: shared descriptor scratch in
+  derived-type copies (notably the per-collision probability wrapper) changed threaded
+  probabilities and dust-current fluxes by up to about 1%. Probability objects are now
+  evaluated in place and solver construction is serialised; an 8-thread bit-identity
+  regression test was added.
 - Fixed emission-patch density normalisation: use the erf helper's argument
   order, width `sqrt(2)*sigma`, and drift projected along signed `nemd`.
   Emission-surface probabilities change scale; at zero drift with the same
@@ -147,6 +154,7 @@ All notable changes to this project are documented in this file.
 - Fixed temporary-input and dust-charging issues before dust code removal.
 - Fixed photoelectron density initialization and `curfs` handling.
 
+[1.8.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.5.0...v1.6.0

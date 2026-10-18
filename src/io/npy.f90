@@ -89,7 +89,7 @@ contains
         if (ios /= 0) call batch_fail('truncated npy header length '//path)
         headerlength = 0
         do i = 1, lengthbytes
-            headerlength = headerlength + shiftl(int(iachar(bytes(i:i)), int64), 8*(i-1))
+            headerlength = headerlength + ishft(int(iachar(bytes(i:i)), int64), 8*(i-1))
         end do
         if (headerlength < 1 .or. headerlength > 1048576) call batch_fail('invalid npy header length '//path)
         allocate(character(int(headerlength)) :: header)

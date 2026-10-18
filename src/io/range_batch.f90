@@ -30,9 +30,9 @@ contains
                 if (btest(v, 0)) then
                     ! Signed representation of CRC64/XZ polynomial C96C5795D7870F42.
                     ! Decimal avoids GNU 8's BOZ-to-signed conversion range error.
-                    v = ieor(shiftr(v, 1), -3932672073523589310_int64)
+                    v = ieor(ishft(v, -1), -3932672073523589310_int64)
                 else
-                    v = shiftr(v, 1)
+                    v = ishft(v, -1)
                 end if
             end do
             table(i) = v
@@ -65,7 +65,7 @@ contains
             if (ios /= 0) call batch_fail('cannot fingerprint bytes of '//path)
             do i = 1, n
                 index_byte = int(iand(ieor(crc, int(buffer(i), int64)), 255_int64))
-                crc = ieor(shiftr(crc, 8), table(index_byte))
+                crc = ieor(ishft(crc, -8), table(index_byte))
             end do
             position = position+n
         end do
