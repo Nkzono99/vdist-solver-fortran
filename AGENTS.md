@@ -70,6 +70,10 @@
   へコピーする。
 - `setup.py` の custom build は `make` を実行するため、Python パッケージ
   のビルドにも Fortran ツールチェーンが必要。
+- `Makefile` と `install.sh` は fpm を `scripts/fpm-stale-guard.sh` 経由で呼ぶ。
+  失敗・中断した fpm 実行の後、その実行で更新された `*.digest` を消して依存先まで
+  再コンパイルさせる。直接 `fpm test` を実行した場合は対象外なので、型や module
+  interface を変えた後に無関係な箇所で落ちたら古い object を疑う。
 
 ## 変更時のルール
 

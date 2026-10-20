@@ -145,7 +145,7 @@ if ! command -v "${FPM_FC}" >/dev/null 2>&1; then
   exit 1
 fi
 
-fpm install --profile "${PROFILE}" --compiler "${FPM_FC}" --flag "${FPM_FFLAGS}" --prefix "${PREFIX}"
+"${ROOT_DIR}/scripts/fpm-stale-guard.sh" fpm install --profile "${PROFILE}" --compiler "${FPM_FC}" --flag "${FPM_FFLAGS}" --prefix "${PREFIX}"
 
 suffix="$(shared_suffix)"
 link_shared_library "${suffix}"

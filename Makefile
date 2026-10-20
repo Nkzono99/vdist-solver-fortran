@@ -7,6 +7,8 @@ PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo $(CURDIR)/.venv/bin/pyth
 	elif command -v python3.11 >/dev/null 2>&1; then echo python3.11; \
 	else echo python3; fi)
 FPM ?= fpm
+# Recovers fpm's incremental state after a failed or interrupted run.
+FPM_GUARD ?= $(CURDIR)/scripts/fpm-stale-guard.sh
 PROFILE ?= release
 INSTALL_PROFILE ?= auto
 PREFIX ?= $(PWD)
@@ -39,18 +41,18 @@ install-camphor:
 	BUILD_PROFILE=camphor PREFIX=$(PREFIX) ./install.sh
 
 build:
-	$(FPM) build --profile $(PROFILE) --flag "-fPIC -fopenmp"
+	$(FPM_GUARD) $(FPM) build --profile $(PROFILE) --flag "-fPIC -fopenmp"
 
 test:
-	$(FPM) test --profile debug --flag "-fopenmp"
+	$(FPM_GUARD) $(FPM) test --profile debug --flag "-fopenmp"
 
 # Separate prefixes keep the serial executable available after an MPI build.
 # These targets do not replace the Python shared library or change `all`.
 batch:
-	$(FPM) install --profile $(PROFILE) --compiler $(BATCH_FC) --flag "$(BATCH_FLAGS)" --prefix "$(BATCH_PREFIX)"
+	$(FPM_GUARD) $(FPM) install --profile $(PROFILE) --compiler $(BATCH_FC) --flag "$(BATCH_FLAGS)" --prefix "$(BATCH_PREFIX)"
 
 batch-mpi:
-	$(FPM) install --profile $(PROFILE) --compiler $(MPI_FC) --flag "$(MPI_FLAGS) -DVDSOLVERF_MPI" --prefix "$(MPI_PREFIX)"
+	$(FPM_GUARD) $(FPM) install --profile $(PROFILE) --compiler $(MPI_FC) --flag "$(MPI_FLAGS) -DVDSOLVERF_MPI" --prefix "$(MPI_PREFIX)"
 
 package-sdist:
 	$(PYTHON) -m pip install --upgrade build
