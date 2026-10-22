@@ -8,7 +8,7 @@ PYTHON ?= $(shell if [ -x .venv/bin/python ]; then echo $(CURDIR)/.venv/bin/pyth
 	else echo python3; fi)
 FPM ?= fpm
 # Recovers fpm's incremental state after a failed or interrupted run.
-FPM_GUARD ?= $(CURDIR)/scripts/fpm-stale-guard.sh
+FPM_GUARD ?= bash $(CURDIR)/scripts/fpm-stale-guard.sh
 PROFILE ?= release
 INSTALL_PROFILE ?= auto
 PREFIX ?= $(PWD)

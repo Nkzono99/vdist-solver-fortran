@@ -16,6 +16,7 @@ recursive-include test *.f90
 recursive-include vdsolverf *.py
 recursive-include docs *.md
 recursive-include env *.env *.md
+recursive-include scripts *.sh
 recursive-include sample *.py
 
 exclude vdsolverf/libvdist-solver-fortran.*
