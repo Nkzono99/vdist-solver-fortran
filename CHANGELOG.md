@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-10-22
+
+### Fixed
+
+- `make build/test/batch/batch-mpi` and `install.sh` (used by `pip install`) now run fpm through
+  `scripts/fpm-stale-guard.sh`. After a failed or interrupted fpm run, fpm 0.12 kept stale
+  `.mod` interfaces in unchanged dependents and later builds crashed in unrelated code; the guard
+  forces those targets to recompile. The script is included in the source distribution.
+- Dust-current and range-batch Python tests use the installed shared library when the source
+  tree has none, so they run against source-distribution installs.
+
 ## [1.8.0] - 2026-10-19
 
 ### Added
@@ -154,6 +165,7 @@ All notable changes to this project are documented in this file.
 - Fixed temporary-input and dust-charging issues before dust code removal.
 - Fixed photoelectron density initialization and `curfs` handling.
 
+[1.8.1]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Nkzono99/vdist-solver-fortran/compare/v1.6.0...v1.7.0
