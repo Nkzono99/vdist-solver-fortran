@@ -388,10 +388,15 @@ contains
                 block
                     double precision :: vmean(3)
                     double precision :: vthermal(3)
+                    double precision :: normal(3)
                     double precision :: density, flux
 
                     vmean = emission_vdri_vector(ispec, iepl)
                     vthermal = emission_vth_vector(ispec, iepl)
+
+                    ! Signed emission normal from nemd (sign = side, |nemd| = axis).
+                    normal = 0d0
+                    normal(abs(nemd(iepl))) = sign(1d0, dble(nemd(iepl)))
 
                     flux = curf(ispec)
                     if (curfs(iepl) >= 0d0) then
@@ -408,8 +413,11 @@ contains
                               vth=sqrt(2d0)*vthermal(abs(nemd(iepl))), &
                               v0=sign(1d0, dble(nemd(iepl)))*vmean(abs(nemd(iepl))))
 
+                    ! The density is normalised to the one-sided flux leaving
+                    ! the patch, so only velocities in that half-space are
+                    ! emitted; the rear side of the patch sees no source.
                     allocate (probability_functions(n_probability_functions + 1)%ref, &
-                              source=new_MaxwellianProbability(vmean, vthermal, density))
+                              source=new_HalfSpaceMaxwellianProbability(vmean, vthermal, normal, density))
                     n_probability_functions = n_probability_functions + 1
                     tag_vdist = n_probability_functions
                 end block

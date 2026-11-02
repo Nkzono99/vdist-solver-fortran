@@ -63,12 +63,15 @@ contains
         b = mod(a, 3) + 1
         c = mod(a + 1, 3) + 1
         select type (p => simulator%probability_functions(tag)%ref)
-        type is (t_MaxwellianProbability)
+        class is (t_MaxwellianProbability)
             call assert_close('normal sigma is path', p%scales(a), 1.3d0)
             call assert_close('tangential sigma is peth', p%scales(b), 0.7d0)
             ! Numerically integrate each separable factor of the actual built
             ! 3D distribution. No analytical flux helper is used in this oracle.
+            ! The source only emits into its half-space, so sample the
+            ! separable tangential profile at a velocity leaving the surface.
             velocity = p%locs
+            velocity(a) = sign(1d0, dble(normal))*(abs(p%locs(a)) + 1.3d0)
             peak = p%at([1d0, 1d0, 1d0], velocity)
             ds = (abs(drift) + 12d0*1.3d0)/20000
             normal_integral = 0d0
@@ -78,6 +81,7 @@ contains
                 normal_integral = normal_integral + vn*p%at([1d0, 1d0, 1d0], velocity)*ds
             end do
             velocity = p%locs
+            velocity(a) = sign(1d0, dble(normal))*(abs(p%locs(a)) + 1.3d0)
             dtan = 24d0*0.7d0/2000
             tangent_integral = 0d0
             do i = 1, 2000

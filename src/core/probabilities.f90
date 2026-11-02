@@ -50,6 +50,17 @@ module m_probabilities
             !! Get the probability at a given position and velocity
     end type
 
+    type, extends(t_MaxwellianProbability) :: t_HalfSpaceMaxwellianProbability
+        !! A Maxwellian source that only emits into the half-space ahead of
+        !! `normal`: velocities with v . normal <= 0 cannot have left the
+        !! emitting surface, so their density is zero.
+        double precision :: normal(3) = [0d0, 0d0, 1d0]
+            !! Emission direction (from the surface into the plasma)
+    contains
+        procedure :: at => halfSpaceMaxwellianProbability_at
+            !! Maxwellian density for emitted velocities, zero otherwise
+    end type
+
     type, extends(t_Probability) :: tp_Probability
         !! A probability distribution that references another distribution
         class(t_Probability), pointer :: ref => null()
@@ -65,6 +76,8 @@ module m_probabilities
     public new_ZeroProbability
     public t_MaxwellianProbability
     public new_MaxwellianProbability
+    public t_HalfSpaceMaxwellianProbability
+    public new_HalfSpaceMaxwellianProbability
     public tp_Probability
 
 contains
@@ -152,6 +165,48 @@ contains
                 ret = ret*maxwell_pdf(centered_velocity(i), 0d0, self%scales(i))
             end do
         end block
+    end function
+
+    function new_HalfSpaceMaxwellianProbability(locs, scales, normal, coefficient, basis) result(obj)
+        !! Create a Maxwellian source restricted to velocities leaving a
+        !! surface along `normal`.
+
+        double precision, intent(in) :: locs(3)
+            !! Locations (means) of the distribution
+        double precision, intent(in) :: scales(3)
+            !! Scales (standard deviations) of the distribution
+        double precision, intent(in) :: normal(3)
+            !! Emission direction; only v . normal > 0 is emitted
+        double precision, optional, intent(in) :: coefficient
+            !! Coefficient for the probability distribution
+        double precision, optional, intent(in) :: basis(3, 3)
+            !! Orthonormal principal axes; defaults to Cartesian axes.
+        type(t_HalfSpaceMaxwellianProbability) :: obj
+            !! A new half-space Maxwellian probability distribution object
+
+        obj%t_MaxwellianProbability = new_MaxwellianProbability(locs, scales, coefficient, basis)
+        obj%normal = normal
+    end function
+
+    function halfSpaceMaxwellianProbability_at(self, position, velocity) result(ret)
+        !! Maxwellian density when `velocity` points away from the surface
+        !! along `normal`, zero otherwise.
+
+        class(t_HalfSpaceMaxwellianProbability), intent(in) :: self
+            !! Instance of the half-space Maxwellian probability distribution
+        double precision, intent(in) :: position(3)
+            !! Position in 3D space
+        double precision, intent(in) :: velocity(3)
+            !! Velocity in 3D space
+        double precision :: ret
+            !! Probability at the given position and velocity
+
+        if (dot_product(velocity, self%normal) <= 0d0) then
+            ret = 0d0
+            return
+        end if
+
+        ret = maxwellianProbability_at(self, position, velocity)
     end function
 
     function p_Probability_at(self, position, velocity) result(ret)
