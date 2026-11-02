@@ -42,7 +42,8 @@ def synthetic_input(dimensions=(2, 1, 1), theta=0.0, emission=False):
             "xmine=7.8, xmaxe=8, ymine=0.4, ymaxe=0.4, zmine=7.8, zmaxe=8"
             if emission else "nflag_emit=10*0, nepl=10*0"
         )
-        spa, spe, speth = (0.1, np.sqrt(2.0), -np.pi / 4) if emission else (0, 0, 0)
+        # speth is in degrees (EMSES convention): 45 deg splits spe equally over both tangents.
+        spa, spe, speth = (0.1, np.sqrt(2.0), 45.0) if emission else (0, 0, 0)
         input_path.write_text(
             f"&esorem emflag=0 /\n"
             f"&plasma wp=10*0, wc=0, phiz={theta}, phixy={0 if emission else 31} /\n"

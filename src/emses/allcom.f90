@@ -187,8 +187,8 @@ module m_allcom
         !! Enable raycast-based photoelectron probability for species with nflag_emit == 2
     double precision :: ray_zenith_angle_deg(max_nspec) = 9999d0
         !! Sentinel value 9999d0 means "fall back to vdthz(ispec)". Otherwise the
-        !! ray direction follows the same rotation convention as `vdri_vector`
-        !! (zenith from +z with sign -ray_zenith_angle_deg around y).
+        !! ray direction follows the same convention as `vdri`/`vdthz`/`vdthxy`
+        !! (zenith angle from +z, azimuth from +x; see `direction_from_angles`).
     double precision :: ray_azimuth_angle_deg(max_nspec) = 9999d0
         !! Sentinel value 9999d0 means "fall back to vdthxy(ispec)".
 
@@ -295,27 +295,60 @@ contains
         ray_azimuth_angle_deg = 9999d0
     end subroutine
 
+    ! Coordinate conventions follow EMSES (initialization_simulation_setup.F90):
+    !   * The background field B0 points along
+    !       (sin(phiz)cos(phixy), sin(phiz)sin(phixy), cos(phiz)),
+    !     which is also what the Python wrapper packs into the field arrays.
+    !   * `spa`, `spe`, `speth` are a drift in that magnetic frame:
+    !       spe*cos(speth)*e1 + spe*sin(speth)*e2 + spa*B0hat,
+    !     with e1, e2 the perpendicular axes of `thermal_basis` and speth in degrees.
+    !   * `vdri`, `vdthz`, `vdthxy` are a drift with zenith angle vdthz from +z
+    !     and azimuth vdthxy from +x.
+    ! Issue #42: the previous futils-based rotations used the opposite sign, so
+    ! the "parallel" source axis was not parallel to the packed B.
+
+    function direction_from_angles(zenith_deg, azimuth_deg) result(ret)
+        !! Unit vector with zenith angle `zenith_deg` from +z and azimuth
+        !! `azimuth_deg` from +x (EMSES `vdthz`/`vdthxy` convention).
+
+        double precision, intent(in) :: zenith_deg
+            !! Zenith angle in degrees
+        double precision, intent(in) :: azimuth_deg
+            !! Azimuth angle in degrees
+        double precision :: ret(3)
+            !! Unit direction vector
+
+        double precision :: zenith, azimuth
+
+        zenith = zenith_deg*DEG2RAD
+        azimuth = azimuth_deg*DEG2RAD
+        ret = [sin(zenith)*cos(azimuth), sin(zenith)*sin(azimuth), cos(zenith)]
+    end function
+
+    function magnetic_frame_drift(ispec) result(ret)
+        !! Drift from `spe`, `speth`, `spa` expressed in the magnetic frame
+        !! (perpendicular 1, perpendicular 2, parallel), `speth` in degrees.
+
+        integer, intent(in) :: ispec
+            !! Species index
+        double precision :: ret(3)
+            !! Drift in the magnetic frame
+
+        ret = [spe(ispec)*cos(speth(ispec)*DEG2RAD), &
+               spe(ispec)*sin(speth(ispec)*DEG2RAD), &
+               spa(ispec)]
+    end function
+
     function vdri_vector(ispec) result(ret)
-        !! Calculate the drift velocity vector.
+        !! Calculate the drift velocity vector in Cartesian coordinates.
 
         integer, intent(in) :: ispec
             !! Species index
         double precision :: ret(3)
             !! Resulting drift velocity vector
 
-        double precision :: vdri_from_spa(3)
-        double precision :: vdri_from_vdri(3)
-
-        vdri_from_spa(:) = [spe(ispec), 0d0, spa(ispec)]
-        vdri_from_spa(:) = rot3d_z(vdri_from_spa, speth(ispec))
-        vdri_from_spa(:) = rot3d_y(vdri_from_spa, phiz*DEG2RAD)
-        vdri_from_spa(:) = rot3d_z(vdri_from_spa, phixy*DEG2RAD)
-
-        vdri_from_vdri(:) = [0d0, 0d0, vdri(ispec)]
-        vdri_from_vdri(:) = rot3d_y(vdri_from_vdri, -vdthz(ispec)*DEG2RAD)
-        vdri_from_vdri(:) = rot3d_z(vdri_from_vdri, vdthxy(ispec)*DEG2RAD)
-
-        ret(:) = vdri_from_spa + vdri_from_vdri
+        ret(:) = matmul(thermal_basis(), magnetic_frame_drift(ispec)) &
+                 + vdri(ispec)*direction_from_angles(vdthz(ispec), vdthxy(ispec))
     end function
 
     function vth_vector(ispec) result(ret)
@@ -335,16 +368,20 @@ contains
     end function
 
     function thermal_basis() result(ret)
-        !! Principal thermal axes, using the same rotation as the drift.
-        double precision :: ret(3, 3), axis(3)
-        integer :: i
+        !! Principal thermal axes as columns: two perpendicular axes and the
+        !! background-field direction, identical to the EMSES frame matrix
+        !! (t11..t33) so that column 3 is parallel to the packed B0.
+        double precision :: ret(3, 3)
+        double precision :: csz, snz, csxy, snxy
 
-        do i = 1, 3
-            axis = 0d0
-            axis(i) = 1d0
-            axis = rot3d_y(axis, phiz*DEG2RAD)
-            ret(:, i) = rot3d_z(axis, phixy*DEG2RAD)
-        end do
+        csz = cos(phiz*DEG2RAD)
+        snz = sin(phiz*DEG2RAD)
+        csxy = cos(phixy*DEG2RAD)
+        snxy = sin(phixy*DEG2RAD)
+
+        ret(:, 1) = [csz*csxy, csz*snxy, -snz]
+        ret(:, 2) = [-snxy, csxy, 0d0]
+        ret(:, 3) = [snz*csxy, snz*snxy, csz]
     end function
 
     function emission_vdri_vector(ispec, iepl) result(ret)
@@ -358,14 +395,12 @@ contains
             !! Resulting drift velocity vector
 
         double precision :: vdri_from_spa(3)
-        double precision :: vdri_from_vdri(3)
 
         integer :: axis0, axis1, axis2
 
-        vdri_from_spa(:) = [spe(ispec), 0d0, spa(ispec)]
-        vdri_from_spa(:) = rot3d_z(vdri_from_spa, speth(ispec))
-        vdri_from_spa(:) = rot3d_y(vdri_from_spa, phiz*DEG2RAD)
-        vdri_from_spa(:) = rot3d_z(vdri_from_spa, phixy*DEG2RAD)
+        ! Emission-frame drift: parallel component along the patch normal,
+        ! perpendicular components along the two tangents.
+        vdri_from_spa(:) = magnetic_frame_drift(ispec)
 
         axis0 = abs(nemd(iepl))
         axis1 = mod(axis0, 3) + 1

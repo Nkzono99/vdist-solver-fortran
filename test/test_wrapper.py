@@ -221,6 +221,14 @@ class _SingleRankComm:
 
 
 class FieldOptionsTest(unittest.TestCase):
+    def test_background_field_follows_emses_angle_convention(self):
+        # B0hat = (sin(phiz)cos(phixy), sin(phiz)sin(phixy), cos(phiz)), the same frame the
+        # Fortran source distributions use for spa/path (issue #42).
+        for phiz, phixy in ((0.0, 0.0), (30.0, 0.0), (45.0, 31.0), (60.0, 120.0)):
+            theta, phi = np.deg2rad(phiz), np.deg2rad(phixy)
+            expected = np.array([np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)])
+            np.testing.assert_allclose(wrapper.rotate(np.array([0.0, 0.0, 1.0]), phiz, phixy), expected, atol=1e-15)
+
     def test_default_fields_include_background_b_and_accumulated_e(self):
         fields = wrapper.create_relocated_ebvalues(_FieldData(), 0, ispec=0)
 

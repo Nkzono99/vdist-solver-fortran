@@ -3,12 +3,13 @@ program test_emses_thermal
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use m_emses_simulator_builder, only: create_simulator, destroy_simulator
     use m_simulator, only: t_ESSimulator
-    use m_allcom, only: vth_vector
+    use m_allcom, only: vth_vector, thermal_basis, vdri_vector, spa, spe, speth, vdri, vdthz, vdthxy
     use m_test_helpers, only: assert_close, assert_close_vec, assert_true
 
     implicit none
     double precision, parameter :: pi = acos(-1d0)
 
+    call test_magnetic_frame_matches_emses_background_field()
     call test_isotropic_boundary_is_rotation_invariant()
     call test_oblique_anisotropic_boundary_pdf_and_moments()
     call test_photoelectron_uses_rotated_thermal_distribution()
@@ -54,6 +55,69 @@ contains
         close(unit, status='delete')
     end function
 
+    subroutine test_magnetic_frame_matches_emses_background_field()
+        !! Issue #42: the parallel axis of the native source frame must be the
+        !! background field direction that EMSES and the Python wrapper use,
+        !! B0hat = (sin(phiz)cos(phixy), sin(phiz)sin(phixy), cos(phiz)).
+        type(t_ESSimulator) :: simulator
+        double precision :: angles(4, 2), b(3), basis(3, 3), drift(3), theta, phi
+        integer :: i, j, k
+
+        angles(:, 1) = [0d0, 30d0, 45d0, 60d0]
+        angles(:, 2) = [0d0, 31d0, 0d0, 120d0]
+        do i = 1, size(angles, 1)
+            theta = angles(i, 1)*pi/180d0
+            phi = angles(i, 2)*pi/180d0
+            b = [sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)]
+            simulator = build_source(angles(i, 1), angles(i, 2), 1d0, 1d0)
+            basis = thermal_basis()
+            call assert_close_vec("parallel axis equals the EMSES background field direction", basis(:, 3), b)
+            do j = 1, 3
+                do k = 1, 3
+                    call assert_close("thermal basis is orthonormal", dot_product(basis(:, j), basis(:, k)), &
+                                      merge(1d0, 0d0, j == k))
+                end do
+            end do
+            call assert_close("thermal basis is right-handed", &
+                              dot_product(basis(:, 3), cross3(basis(:, 1), basis(:, 2))), 1d0)
+
+            ! spa is a drift along B0; spe/speth lie in the perpendicular plane (speth in degrees).
+            spa(1) = 3d0
+            spe(1) = 0d0
+            speth(1) = 0d0
+            drift = vdri_vector(1)
+            call assert_close_vec("spa drifts along the packed background field", drift, 3d0*b)
+            spa(1) = 0d0
+            spe(1) = 2d0
+            speth(1) = 90d0
+            drift = vdri_vector(1)
+            call assert_close("spe drift is perpendicular to B0", dot_product(drift, b), 0d0)
+            call assert_close_vec("speth=90 deg selects the second perpendicular axis", drift, 2d0*basis(:, 2))
+            spe(1) = 0d0
+            speth(1) = 0d0
+
+            ! vdri uses zenith vdthz from +z and azimuth vdthxy from +x.
+            vdri(1) = 1.5d0
+            vdthz(1) = 90d0
+            vdthxy(1) = 90d0
+            call assert_close_vec("vdri with zenith 90 and azimuth 90 points along +y", vdri_vector(1), &
+                                  [0d0, 1.5d0, 0d0])
+            vdthz(1) = angles(i, 1)
+            vdthxy(1) = angles(i, 2)
+            call assert_close_vec("vdri at the field angles is parallel to B0", vdri_vector(1), 1.5d0*b)
+            vdri(1) = 0d0
+            vdthz(1) = 0d0
+            vdthxy(1) = 0d0
+            call destroy_simulator(simulator)
+        end do
+    end subroutine
+
+    pure function cross3(a, b) result(c)
+        double precision, intent(in) :: a(3), b(3)
+        double precision :: c(3)
+        c = [a(2)*b(3) - a(3)*b(2), a(3)*b(1) - a(1)*b(3), a(1)*b(2) - a(2)*b(1)]
+    end function
+
     subroutine test_isotropic_boundary_is_rotation_invariant()
         type(t_ESSimulator) :: simulator
         double precision :: angles(4), velocity(3), expected, actual
@@ -81,7 +145,8 @@ contains
 
         perpendicular = 0.5d0
         parallel = 1.4d0
-        b = [-sin(pi/4d0)*cos(31d0*pi/180d0), sin(pi/4d0)*sin(31d0*pi/180d0), cos(pi/4d0)]
+        ! EMSES background-field direction for phiz=45, phixy=31.
+        b = [sin(pi/4d0)*cos(31d0*pi/180d0), sin(pi/4d0)*sin(31d0*pi/180d0), cos(pi/4d0)]
         simulator = build_source(45d0, 31d0, perpendicular, parallel)
         velocity = [0.7d0, -0.2d0, 0.4d0]
         expected = exp(-0.5d0*(sum(velocity**2)/perpendicular**2 &

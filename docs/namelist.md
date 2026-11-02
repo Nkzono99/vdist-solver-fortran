@@ -21,6 +21,11 @@
 | `/tmgrid/` | 時間刻み `dt`、グリッドサイズ `nx`、`ny`、`nz` |
 | `/system/` | 粒子種数 `nspec`、境界コード `npbnd(3, nspec)` |
 | `/intp/` | 粒子種ごとの運動パラメータ (`qm`、`path`、`peth`、`vdri`、`vdthz`、`vdthxy`、`spa`、`spe`、`speth`) |
+
+角度 (`phiz`、`phixy`、`vdthz`、`vdthxy`、`speth`) はすべて度単位で、EMSES の規約に
+従います。背景磁場は `(sin(phiz)cos(phixy), sin(phiz)sin(phixy), cos(phiz))` 方向、
+`spa`/`path` はそれに平行、`spe` は垂直面内で角度 `speth` の方向、`vdri` は +z からの
+天頂角 `vdthz`、+x からの方位角 `vdthxy` です ([Physics](physics.md) 参照)。
 | `/ptcond/` | 内部境界の形状・反射特性 |
 | `/emissn/` | 放出面設定と raycast 光電子設定 |
 

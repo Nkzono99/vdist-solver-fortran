@@ -70,7 +70,14 @@ $\mathbf u = R^T(\mathbf v-\boldsymbol\mu)$ として、速度を分布の基準
 
 EMSES の外部源と raycast 光電子では、`locs = vdri_vector(ispec)`、
 `scales = [peth(ispec), peth(ispec), path(ispec)]` を使います。
-`thermal_basis()` はドリフトと同じ `phiz`、`phixy` 回転を主軸へ適用します。
+`thermal_basis()` は EMSES の背景磁場フレームを列として返します。
+2 本の垂直軸と
+$\hat{\mathbf B}_0 = (\sin\phi_z\cos\phi_{xy},\ \sin\phi_z\sin\phi_{xy},\ \cos\phi_z)$
+で、Python ラッパーが背景磁場として詰める向きと同一です。したがって
+`path`/`spa` は追跡に実際に使う磁場に平行になります。ドリフトは
+$\mathbf\mu = spe\cos(speth)\,\mathbf e_1 + spe\sin(speth)\,\mathbf e_2 + spa\,\hat{\mathbf B}_0
++ vdri\,(\sin\vartheta\cos\varphi,\ \sin\vartheta\sin\varphi,\ \cos\vartheta)$
+($\vartheta$ = `vdthz`、$\varphi$ = `vdthxy`) で、これらの角度はすべて度単位です。
 共分散は $R\,\mathrm{diag}(\sigma_i^2)R^T$ で、斜めの異方分布の相関を保持し、
 等方分布は回転で変化しません。`vth_vector(ispec)` はこの共分散の対角成分の
 平方根（Cartesian 各成分の標準偏差）を返し、autorange の support に使います。
@@ -143,9 +150,10 @@ $\boldsymbol\mu$ = `vdri_vector(ispec)`, $\boldsymbol\sigma$ =
 
 1. `ray_zenith_angle_deg(ispec) < 9000d0` ならそれを、そうでなければ
    `vdthz(ispec)` を使用。方位角も同様。
-2. $[0, 0, 1]$ から開始し、$y$ 軸まわりに $-\zeta$、$z$ 軸まわりに
-   $\phi$ だけ回転。
-3. 得られた単位ベクトルの符号を反転して返す (放出面から太陽への向き;
+2. $+z$ からの天頂角 $\zeta$、$+x$ からの方位角 $\phi$ の単位ベクトル
+   $(\sin\zeta\cos\phi,\ \sin\zeta\sin\phi,\ \cos\zeta)$ を作る
+   (`vdri` ドリフトと同じ規約)。
+3. その単位ベクトルの符号を反転して返す (放出面から太陽への向き;
    ユーザ指定の慣習)。
 
 ## 座標と単位の規約

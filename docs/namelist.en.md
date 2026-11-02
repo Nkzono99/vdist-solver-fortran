@@ -20,6 +20,12 @@ Unsupported keys are silently ignored. Adding a new key requires editing both
 | `/tmgrid/` | time step `dt`, grid sizes `nx`, `ny`, `nz` |
 | `/system/` | species count `nspec`, boundary codes `npbnd(3, nspec)` |
 | `/intp/` | per-species kinetics (`qm`, `path`, `peth`, `vdri`, `vdthz`, `vdthxy`, `spa`, `spe`, `speth`) |
+
+All angles (`phiz`, `phixy`, `vdthz`, `vdthxy`, `speth`) are in degrees and follow
+the EMSES conventions: the background field points along
+`(sin(phiz)cos(phixy), sin(phiz)sin(phixy), cos(phiz))`, `spa`/`path` are parallel
+to it, `spe` lies in the perpendicular plane at angle `speth`, and `vdri` has zenith
+angle `vdthz` from +z and azimuth `vdthxy` from +x (see [Physics](physics.en.md)).
 | `/ptcond/` | inner-boundary geometry and reflection properties |
 | `/emissn/` | emission-surface and raycast photoelectron settings |
 

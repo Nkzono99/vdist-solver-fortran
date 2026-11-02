@@ -76,8 +76,14 @@ a multiplicative weight. Evaluation uses $\mathbf u = R^T(\mathbf v-\boldsymbol\
 The optional `basis` ($R$) defaults to the identity matrix.
 
 EMSES external sources and raycast photoelectrons use `locs = vdri_vector(ispec)`
-and `scales = [peth(ispec), peth(ispec), path(ispec)]`. `thermal_basis()` applies
-the same `phiz`, `phixy` rotation as the drift to the principal axes. The
+and `scales = [peth(ispec), peth(ispec), path(ispec)]`. `thermal_basis()` returns
+the EMSES background-field frame as columns: two perpendicular axes and
+$\hat{\mathbf B}_0 = (\sin\phi_z\cos\phi_{xy},\ \sin\phi_z\sin\phi_{xy},\ \cos\phi_z)$,
+the same direction the Python wrapper packs as the background field, so
+`path`/`spa` are parallel to the field actually used for tracing. The drift is
+$\mathbf\mu = spe\cos(speth)\,\mathbf e_1 + spe\sin(speth)\,\mathbf e_2 + spa\,\hat{\mathbf B}_0
++ vdri\,(\sin\vartheta\cos\varphi,\ \sin\vartheta\sin\varphi,\ \cos\vartheta)$ with
+$\vartheta$ = `vdthz`, $\varphi$ = `vdthxy`; all of these angles are in degrees. The
 covariance $R\,\mathrm{diag}(\sigma_i^2)R^T$ retains correlations in oblique
 anisotropic distributions and leaves isotropic distributions invariant.
 `vth_vector(ispec)` returns the square roots of its diagonal entries, the
@@ -156,10 +162,11 @@ The sun direction is resolved by `resolve_sun_direction(ispec)` in
 
 1. If `ray_zenith_angle_deg(ispec) < 9000d0`, use it; otherwise fall back
    to `vdthz(ispec)`. Same for azimuth / `vdthxy`.
-2. Start from $[0, 0, 1]$, rotate by $-\zeta$ around the $y$-axis, then
-   $\phi$ around $z$.
-3. Return the negation of the resulting unit vector (pointing from the
-   emission surface toward the sun, per the user-requested convention).
+2. Form the unit vector with zenith angle $\zeta$ from $+z$ and azimuth
+   $\phi$ from $+x$, $(\sin\zeta\cos\phi,\ \sin\zeta\sin\phi,\ \cos\zeta)$,
+   the same convention as the `vdri` drift.
+3. Return the negation of that unit vector (pointing from the emission
+   surface toward the sun, per the user-requested convention).
 
 ## Coordinate and unit conventions
 

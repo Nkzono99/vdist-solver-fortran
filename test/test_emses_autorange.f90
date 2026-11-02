@@ -38,7 +38,7 @@ contains
             peth(1) = 0d0
             spa(1) = 0.1d0
             spe(1) = -dble(direction)
-            speth(1) = acos(-1d0)/2d0
+            speth(1) = -90d0
             nemd(1) = 2
             ymine(1) = 0.4d0
             ymaxe(1) = 0.4d0
@@ -97,7 +97,7 @@ contains
                     peth(1) = 0d0
                     spa(1) = 0.1d0
                     spe(1) = dble(direction)*sqrt(2d0)
-                    speth(1) = -acos(-1d0)/4d0
+                    speth(1) = 45d0
                     nemd(1) = 2
                     ymine(1) = 0.4d0
                     ymaxe(1) = 0.4d0

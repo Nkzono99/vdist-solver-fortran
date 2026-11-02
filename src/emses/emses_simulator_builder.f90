@@ -178,8 +178,9 @@ contains
         !! Uses `ray_zenith_angle_deg(ispec)` and `ray_azimuth_angle_deg(ispec)`
         !! when those are set (sentinel: 9999d0 means "unset"). Otherwise falls
         !! back to `vdthz(ispec)` / `vdthxy(ispec)`. The returned vector is the
-        !! negation of the vdri-style rotation of +z, normalized — i.e. the
-        !! opposite of the drift vector per the user-requested convention.
+        !! negation of the unit vector at that zenith/azimuth (the same
+        !! convention as the `vdri` drift), i.e. the opposite of the drift
+        !! direction per the user-requested convention.
         integer, intent(in) :: ispec
         double precision :: ret(3)
 
@@ -199,9 +200,7 @@ contains
             azimuth_deg = vdthxy(ispec)
         end if
 
-        drift_unit = [0d0, 0d0, 1d0]
-        drift_unit = rot3d_y(drift_unit, -zenith_deg*DEG2RAD)
-        drift_unit = rot3d_z(drift_unit, azimuth_deg*DEG2RAD)
+        drift_unit = direction_from_angles(zenith_deg, azimuth_deg)
 
         if (norm2(drift_unit) > 0d0) then
             ret = -drift_unit/norm2(drift_unit)
