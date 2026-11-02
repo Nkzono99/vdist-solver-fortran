@@ -37,6 +37,8 @@ module m_simulator
             !! Perform a backward step for a particle
         procedure :: apply_boundary_condition => esSimulator_apply_boundary_condition
             !! Apply boundary conditions to a particle
+        procedure :: adaptive_dt => esSimulator_adaptive_dt
+            !! Time step that advances a particle by about |dt| grid units
     end type
 
 contains
@@ -192,6 +194,52 @@ contains
         ret%q_m = particle%q_m
         ret%position = position_new
         ret%velocity = velocity_new
+    end function
+
+    function esSimulator_adaptive_dt(self, particle, dt) result(step)
+        !! Time step that moves `particle` by about |dt| grid units.
+        !!
+        !! `dt/|v|` alone diverges at zero velocity and near turning points,
+        !! where a finite electric field still moves the particle. Solving
+        !! 0.5*a*s**2 + |v|*s = |dt| for s with the local acceleration a keeps
+        !! the step finite there and reduces to `dt/|v|` when a is negligible.
+        !! When neither velocity nor acceleration can move the particle the
+        !! nominal step is returned. The sign of `dt` is preserved.
+
+        class(t_ESSimulator), intent(in) :: self
+            !! Instance of the ES simulator
+        type(t_Particle), intent(in) :: particle
+            !! Particle at the start of the step
+        double precision, intent(in) :: dt
+            !! Nominal step; |dt| is the target displacement in grid units
+        double precision :: step
+            !! Signed time step
+
+        double precision :: ds, speed, accel, eb(6)
+        type(t_Particle) :: probe
+
+        ds = abs(dt)
+        speed = norm2(particle%velocity)
+
+        probe%t = particle%t
+        probe%q_m = particle%q_m
+        probe%position = particle%position
+        probe%velocity = particle%velocity
+        call self%apply_boundary_condition(probe)
+        eb = self%eb%at(probe%position)
+        accel = abs(particle%q_m)*norm2(eb(1:3))
+
+        if (accel*ds > 0d0) then
+            ! Positive root of 0.5*a*s**2 + |v|*s - ds = 0, written without
+            ! cancellation so that |v| -> 0 gives sqrt(2*ds/a).
+            step = 2d0*ds/(speed + sqrt(speed*speed + 2d0*accel*ds))
+        else if (speed > 0d0) then
+            step = ds/speed
+        else
+            step = ds
+        end if
+
+        step = sign(step, dt)
     end function
 
     subroutine esSimulator_apply_boundary_condition(self, particle)

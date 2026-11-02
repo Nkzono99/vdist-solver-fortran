@@ -16,6 +16,7 @@ program test_solver_probability
     use finbound, only: t_BoundaryList, new_BoundaryList, &
                         t_Boundary, t_PlaneXYZ, new_PlaneX, t_CollisionRecord
 
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use m_test_helpers, only: assert_close, assert_close_vec, assert_true
 
     implicit none
@@ -26,10 +27,83 @@ program test_solver_probability
     call test_backtrace_without_collision_returns_invalid_probability()
     call test_probability_without_collision_returns_final_particle()
     call test_collision_time_uses_signed_step_duration()
+    call test_adaptive_step_accounts_for_acceleration()
+    call test_adaptive_trace_through_turning_point()
 
     print *, "test_solver_probability: all tests passed."
 
 contains
+
+    subroutine test_adaptive_step_accounts_for_acceleration()
+        !! Regression for issue #43: dt/|v| is infinite at v = 0 and explodes
+        !! at turning points. The step must stay finite and keep its sign.
+        type(t_ESSimulator) :: simulator
+        type(t_Particle) :: pcl
+
+        simulator = build_simulator_with_maxwell_plane_at_x2(sigma=1d0)
+        pcl = new_Particle(1d0, [1d0, 0.5d0, 0.5d0], [0d0, 0d0, 0d0])
+        call assert_close("zero velocity without field falls back to the nominal step", &
+                          simulator%adaptive_dt(pcl, 0.01d0), 0.01d0)
+        pcl%velocity = [-2d0, 0d0, 0d0]
+        call assert_close("field-free step is dt/|v|", simulator%adaptive_dt(pcl, 0.01d0), 0.005d0)
+        call assert_close("negative dt keeps its sign", simulator%adaptive_dt(pcl, -0.01d0), -0.005d0)
+
+        simulator = build_simulator_with_maxwell_plane_at_x2(sigma=1d0, ex=1d0)
+        pcl%velocity = [0d0, 0d0, 0d0]
+        call assert_close("zero velocity in a field uses sqrt(2*ds/a)", &
+                          simulator%adaptive_dt(pcl, 0.01d0), sqrt(0.02d0))
+        pcl%velocity = [0.1d0, 0d0, 0d0]
+        call assert_close("small velocity in a field solves 0.5*a*s**2 + v*s = ds", &
+                          simulator%adaptive_dt(pcl, 0.01d0), 2d-2/(0.1d0 + sqrt(0.01d0 + 0.02d0)))
+        pcl%velocity = [-3d0, 0d0, 0d0]
+        call assert_true("fast particle step is below dt/|v|", &
+                         simulator%adaptive_dt(pcl, 0.01d0) < 0.01d0/3d0)
+    end subroutine
+
+    subroutine test_adaptive_trace_through_turning_point()
+        !! Issue #43 setup: constant Ex=1, q/m=1, Maxwellian plane at x=2.
+        !! Energy conservation gives vx = -sqrt(vx0**2 + 2) at the plane for
+        !! every initial vx0, including the zero-velocity grid centre and the
+        !! +vx0 trajectory that reverses under the field.
+        type(t_ESSimulator) :: simulator
+        type(t_Solver) :: solver
+        type(t_Particle) :: pcl
+        type(t_ProbabilityRecord) :: adaptive, refined, fixed
+        double precision :: vx0, expected_vx, expected_pdf
+        integer :: i
+
+        simulator = build_simulator_with_maxwell_plane_at_x2(sigma=1d0, ex=1d0)
+        solver = new_Solver(simulator)
+        do i = -1, 1
+            vx0 = 0.1d0*dble(i)
+            expected_vx = -sqrt(vx0**2 + 2d0)
+            expected_pdf = exp(-0.5d0*(vx0**2 + 2d0))/(2d0*pi)**1.5d0
+            pcl = new_Particle(1d0, [1d0, 0.5d0, 0.5d0], [vx0, 0d0, 0d0])
+
+            adaptive = solver%calculate_probability(pcl, 0.01d0, 2000, .true.)
+            call assert_true("adaptive trace reaches the plane", adaptive%is_valid)
+            call assert_true("adaptive probability is finite", ieee_is_finite(adaptive%probability))
+            call assert_true("adaptive time is finite", ieee_is_finite(adaptive%t))
+            call assert_close("adaptive collision position", adaptive%particle%position(1), 2d0, 1d-9)
+            ! The backward step is first order, so a few percent of
+            ! discretisation error remains at this step; it must shrink with it.
+            call assert_close("adaptive collision velocity from energy conservation", &
+                              adaptive%particle%velocity(1), expected_vx, 3d-2)
+            call assert_close("adaptive probability matches analytic Maxwellian", &
+                              adaptive%probability, expected_pdf, 0.03d0*expected_pdf)
+
+            refined = solver%calculate_probability(pcl, 0.0025d0, 8000, .true.)
+            call assert_true("refined adaptive trace reaches the plane", refined%is_valid)
+            call assert_true("refining the adaptive step converges toward the analytic velocity", &
+                             abs(refined%particle%velocity(1) - expected_vx) &
+                             < 0.5d0*abs(adaptive%particle%velocity(1) - expected_vx))
+
+            fixed = solver%calculate_probability(pcl, 0.005d0, 2000, .false.)
+            call assert_true("fixed trace reaches the plane", fixed%is_valid)
+            call assert_close("adaptive and fixed steps agree", &
+                              adaptive%probability, fixed%probability, 0.03d0*expected_pdf)
+        end do
+    end subroutine
 
     subroutine test_collision_time_uses_signed_step_duration()
         type(t_ESSimulator) :: simulator
@@ -146,8 +220,10 @@ contains
                               record%particle%velocity, [0d0, 1d0, 0d0])
     end subroutine
 
-    function build_simulator_with_maxwell_plane_at_x2(sigma) result(simulator)
+    function build_simulator_with_maxwell_plane_at_x2(sigma, ex) result(simulator)
         double precision, intent(in) :: sigma
+        double precision, intent(in), optional :: ex
+            !! Uniform electric field along x (default 0)
         type(t_ESSimulator) :: simulator
 
         type(t_VectorFieldGrid) :: eb
@@ -162,6 +238,7 @@ contains
         type(t_PlaneXYZ), pointer :: pplane
 
         eb_values = 0d0
+        if (present(ex)) eb_values(1, :, :, :) = ex
         eb = new_VectorFieldGrid(6, 2, 1, 1, eb_values)
 
         allocate (probs(2))

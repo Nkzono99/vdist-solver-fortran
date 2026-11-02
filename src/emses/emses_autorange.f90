@@ -624,7 +624,6 @@ contains
             type(t_Particle) :: pcl_prev
             type(t_CollisionRecord) :: collision
             real(c_double) :: step_dt
-            real(c_double) :: speed
             real(c_double) :: unwrapped_position(3), segment_end(3)
             integer :: istep, axis
 
@@ -635,10 +634,7 @@ contains
                 pcl_prev = pcl
                 step_dt = -abs(trace_dt)
                 if (use_adaptive_dt == 1) then
-                    speed = sqrt(sum(pcl%velocity*pcl%velocity))
-                    if (speed > tiny(1d0)) then
-                        step_dt = -abs(trace_dt)/speed
-                    end if
+                    step_dt = simulator%adaptive_dt(pcl, step_dt)
                 end if
 
                 pcl = simulator%update(pcl, step_dt, collision, unwrapped_position)

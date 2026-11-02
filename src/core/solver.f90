@@ -101,7 +101,7 @@ contains
                 double precision :: tmp_dt
 
                 if (use_adaptive_dt) then
-                    tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
+                    tmp_dt = self%simulator%adaptive_dt(pcl, dt)
                 else
                     tmp_dt = dt
                 end if
@@ -169,7 +169,7 @@ contains
                 double precision :: tmp_dt
 
                 if (use_adaptive_dt) then
-                    tmp_dt = dt/sqrt(sum(pcl%velocity*pcl%velocity))
+                    tmp_dt = self%simulator%adaptive_dt(pcl, dt)
                 else
                     tmp_dt = dt
                 end if
