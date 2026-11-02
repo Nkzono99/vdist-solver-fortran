@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Backtraces that cross a periodic face within one step now test the part of the
+  step after the crossing against internal objects. An absorbing sheet just behind
+  the seam was passed through and the external Maxwellian was returned instead of
+  zero (#39). Collided positions on periodic axes are reported inside the domain.
+- `read_namelist` restores the default of every namelist variable before reading,
+  so an optional key such as `spa` set by one input no longer persists into the
+  next input analysed in the same process (#40).
+- Explicit emission patches (`nepl > 0`) emit only toward the side given by the
+  sign of `nemd`; the rear side of a thin emitting panel no longer recovers the
+  emission distribution (#41).
+- The native source frame now matches the EMSES background field used by the
+  Python wrapper: `thermal_basis` returns the EMSES frame matrix with
+  `(sin(phiz)cos(phixy), sin(phiz)sin(phixy), cos(phiz))` as the parallel axis,
+  `spa`/`spe`/`speth` and `vdri`/`vdthz`/`vdthxy` follow the EMSES definitions, and
+  the raycast sun direction uses the same zenith/azimuth convention (#42).
+  `speth` is now interpreted in degrees like every other namelist angle; inputs
+  that relied on radians must be converted.
+- Adaptive time steps stay finite at zero velocity and at electric-field turning
+  points. The step solves `0.5*a*s**2 + |v|*s = dt` with the local acceleration
+  instead of `dt/|v|`, in both the probability solver and the autorange tracer (#43).
+
 ## [1.8.1] - 2026-10-22
 
 ### Fixed
