@@ -571,6 +571,16 @@ contains
         integer :: ipcl
         integer :: max_output_steps
 
+        ! Per-particle work variables. They are declared here and listed as
+        ! private instead of inside a `block` in the loop body: ifort 2023.2
+        ! with -O2 or higher mislaid the shared-variable pointers of the
+        ! outlined parallel region when the block held a derived type with
+        ! allocatable components, so `bar` was read from garbage (issue #44).
+        type(t_BacktraceRecord) :: record
+        type(t_Particle) :: particle
+        type(t_Particle) :: trace
+        integer :: istep
+
         max_output_steps = (max_step - 1)/output_interval + 2
 
         simulator = create_simulator(inppath, length, &
@@ -599,7 +609,7 @@ contains
         !     This imbalance means parallelization does not improve speedup.
         !
         !     Therefore, this process samples every chunk size (= 1) from the particle list.
-        !$omp parallel do schedule(dynamic, 1)
+        !$omp parallel do schedule(dynamic, 1) private(record, particle, trace, istep)
         do ipcl = 1, npcls
 !$          if (omp_get_thread_num() == 0) then
                 ! When you print a progress bar to 100%, the opening is printed.
@@ -607,37 +617,29 @@ contains
                 call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
 !$          end if
 
-            block
-                type(t_BacktraceRecord) :: record
-                type(t_Particle) :: particle
+            particle = new_Particle(qm(ispec), positions(:, ipcl), velocities(:, ipcl))
+            record = solver%backtrace(particle, &
+                                      dt, &
+                                      max_step, &
+                                      output_interval, &
+                                      use_adaptive_dt == 1)
 
-                type(t_Particle) :: trace
-                integer :: istep
-
-                particle = new_Particle(qm(ispec), positions(:, ipcl), velocities(:, ipcl))
-                record = solver%backtrace(particle, &
-                                          dt, &
-                                          max_step, &
-                                          output_interval, &
-                                          use_adaptive_dt == 1)
-
-                do istep = 1, record%last_step
-                    trace = record%traces(istep)
-
-                    return_ts(istep, ipcl) = trace%t
-                    return_positions(:, istep, ipcl) = trace%position(:)
-                    return_velocities(:, istep, ipcl) = trace%velocity(:)
-                end do
-
-                istep = max_output_steps
+            do istep = 1, record%last_step
                 trace = record%traces(istep)
+
                 return_ts(istep, ipcl) = trace%t
                 return_positions(:, istep, ipcl) = trace%position(:)
                 return_velocities(:, istep, ipcl) = trace%velocity(:)
+            end do
 
-                return_last_steps(ipcl) = record%last_step
-                return_probabilities(ipcl) = record%probability
-            end block
+            istep = max_output_steps
+            trace = record%traces(istep)
+            return_ts(istep, ipcl) = trace%t
+            return_positions(:, istep, ipcl) = trace%position(:)
+            return_velocities(:, istep, ipcl) = trace%velocity(:)
+
+            return_last_steps(ipcl) = record%last_step
+            return_probabilities(ipcl) = record%probability
         end do
         !$omp end parallel do
 
@@ -708,6 +710,10 @@ contains
 
         type(bar_object) :: bar
         integer :: ipcl
+        ! Per-particle work variables, private to each thread (same layout as
+        ! get_backtraces; see issue #44).
+        type(t_ProbabilityRecord) :: record
+        type(t_Particle) :: particle
 
         simulator = create_simulator(inppath, length, &
                                      lx, ly, lz, &
@@ -726,32 +732,27 @@ contains
 !$          call omp_set_num_threads(n_threads)
 !$      end if
 
-        !$omp parallel do schedule(dynamic, 1)
+        !$omp parallel do schedule(dynamic, 1) private(record, particle)
         do ipcl = 1, npcls
 !$          if (omp_get_thread_num() == 0) then
                 call bar%update(current=min(0.99d0, dble(ipcl)/dble(npcls)))
 !$          end if
 
-            block
-                type(t_ProbabilityRecord) :: record
-                type(t_Particle) :: particle
+            particle = new_Particle(qm(ispec), positions(:, ipcl), velocities(:, ipcl))
+            record = solver%calculate_probability(particle, &
+                                                  dt, &
+                                                  max_step, &
+                                                  use_adaptive_dt == 1)
 
-                particle = new_Particle(qm(ispec), positions(:, ipcl), velocities(:, ipcl))
-                record = solver%calculate_probability(particle, &
-                                                      dt, &
-                                                      max_step, &
-                                                      use_adaptive_dt == 1)
-
-                if (record%is_valid) then
-                    return_probabilities(ipcl) = record%probability
-                    return_positions(:, ipcl) = record%particle%position(:)
-                    return_velocities(:, ipcl) = record%particle%velocity(:)
-                else
-                    return_probabilities(ipcl) = -1.0d0
-                    return_positions(:, ipcl) = record%particle%position(:)
-                    return_velocities(:, ipcl) = record%particle%velocity(:)
-                end if
-            end block
+            if (record%is_valid) then
+                return_probabilities(ipcl) = record%probability
+                return_positions(:, ipcl) = record%particle%position(:)
+                return_velocities(:, ipcl) = record%particle%velocity(:)
+            else
+                return_probabilities(ipcl) = -1.0d0
+                return_positions(:, ipcl) = record%particle%position(:)
+                return_velocities(:, ipcl) = record%particle%velocity(:)
+            end if
         end do
         !$omp end parallel do
 

@@ -23,6 +23,13 @@ All notable changes to this project are documented in this file.
   the raycast sun direction uses the same zenith/azimuth convention (#42).
   `speth` is now interpreted in degrees like every other namelist angle; inputs
   that relied on radians must be converted.
+- `get_backtraces` no longer declares its per-particle work variables in a `block`
+  inside the OpenMP loop. ifort 2023.2 at `-O2` and above (the camphor profile)
+  mislaid the shared-variable pointers of the outlined region for a block holding a
+  derived type with allocatable components, so the progress bar was read from
+  garbage and every Python `get_backtrace` call crashed (#44). The variables are
+  now procedure-scope `private` loop variables; `get_probabilities` follows the same
+  layout. A direct Fortran test of the C entry point was added.
 - Adaptive time steps stay finite at zero velocity and at electric-field turning
   points. The step solves `0.5*a*s**2 + |v|*s = dt` with the local acceleration
   instead of `dt/|v|`, in both the probability solver and the autorange tracer (#43).
