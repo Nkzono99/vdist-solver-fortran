@@ -68,6 +68,10 @@ contains
         integer :: iostat
             !! I/O status variable
 
+        ! Namelist reads leave omitted keys untouched; start from the defaults
+        ! so one input cannot inherit values from a previous one (issue #40).
+        call reset_input_parameters()
+
         open (10, file=trim(inppath), status='old', iostat=iostat)
 
         rewind (10); read (10, nml=esorem, IOSTAT=iostat)
