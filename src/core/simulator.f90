@@ -39,6 +39,9 @@ module m_simulator
             !! Apply boundary conditions to a particle
         procedure :: adaptive_dt => esSimulator_adaptive_dt
             !! Time step that advances a particle by about |dt| grid units
+        procedure :: check_collision => esSimulator_check_collision
+            !! Collision test that follows the segment through periodic faces
+        procedure, private :: domain_length => esSimulator_domain_length
     end type
 
 contains
@@ -103,20 +106,29 @@ contains
 
         pcl_new = self%backward(pcl, dt)
 
-        record = self%boundaries%check_collision(pcl%position, pcl_new%position)
+        record = self%check_collision(pcl%position, pcl_new%position)
 
         if (record%is_collided) then
             block
                 double precision :: r
+                integer :: i
 
                 r = record%t
                 pcl_new%q_m = pcl%q_m
                 pcl_new%position = pcl%position*(1d0 - r) + pcl_new%position*r
                 pcl_new%velocity = pcl%velocity*(1d0 - r) + pcl_new%velocity*r
                 pcl_new%t = pcl%t + r*dt
-            end block
 
-            if (present(unwrapped_position)) unwrapped_position = pcl_new%position
+                if (present(unwrapped_position)) unwrapped_position = pcl_new%position
+
+                ! A collision found after a periodic crossing lies outside the
+                ! fundamental cell; report it at the same physical point inside.
+                do i = 1, 3
+                    if (self%boundary_conditions(i) == 0) then
+                        pcl_new%position(i) = modulo(pcl_new%position(i), self%domain_length(i))
+                    end if
+                end do
+            end block
             return
         end if
 
@@ -194,6 +206,135 @@ contains
         ret%q_m = particle%q_m
         ret%position = position_new
         ret%velocity = velocity_new
+    end function
+
+    pure function esSimulator_domain_length(self, axis) result(length)
+        !! Domain length along `axis` in grid units.
+        class(t_ESSimulator), intent(in) :: self
+        integer, intent(in) :: axis
+        double precision :: length
+
+        select case (axis)
+        case (1)
+            length = self%nx
+        case (2)
+            length = self%ny
+        case default
+            length = self%nz
+        end select
+    end function
+
+    function esSimulator_check_collision(self, p1, p2) result(record)
+        !! First collision of the straight segment p1 -> p2 with the boundaries.
+        !!
+        !! `p2` is the unwrapped endpoint. Where the segment leaves the
+        !! fundamental cell through a periodic face, the remaining part is
+        !! physically inside the cell again, so each piece between crossings is
+        !! shifted back by whole periods before it is tested. Without this the
+        !! part after the crossing was never tested and internal objects there
+        !! were passed through (issue #39). `record%t` is the fraction of the
+        !! whole segment, and `record%position` lies inside the cell.
+
+        class(t_ESSimulator), intent(in) :: self
+            !! Instance of the ES simulator
+        double precision, intent(in) :: p1(3)
+            !! Segment start (inside the fundamental cell on periodic axes)
+        double precision, intent(in) :: p2(3)
+            !! Unwrapped segment end
+        type(t_CollisionRecord) :: record
+            !! First collision along the segment
+
+        double precision :: d(3), length
+        double precision, allocatable :: fractions(:)
+        integer :: axis, ncross, i, j, k, kfirst, klast, kstep
+
+        d = p2 - p1
+
+        ! Count the periodic planes k*L crossed strictly between p1 and p2.
+        ncross = 0
+        do axis = 1, 3
+            if (self%boundary_conditions(axis) /= 0 .or. d(axis) == 0d0) cycle
+            length = self%domain_length(axis)
+            call crossing_planes(p1(axis), p2(axis), length, kfirst, klast, kstep)
+            ncross = ncross + max(0, (klast - kfirst)/kstep + 1)
+        end do
+
+        if (ncross == 0) then
+            record = self%boundaries%check_collision(p1, p2)
+            return
+        end if
+
+        allocate (fractions(0:ncross + 1))
+        fractions(0) = 0d0
+        fractions(ncross + 1) = 1d0
+        i = 0
+        do axis = 1, 3
+            if (self%boundary_conditions(axis) /= 0 .or. d(axis) == 0d0) cycle
+            length = self%domain_length(axis)
+            call crossing_planes(p1(axis), p2(axis), length, kfirst, klast, kstep)
+            do k = kfirst, klast, kstep
+                i = i + 1
+                fractions(i) = (dble(k)*length - p1(axis))/d(axis)
+            end do
+        end do
+
+        ! Insertion sort: crossings are few.
+        do i = 2, ncross
+            do j = i, 2, -1
+                if (fractions(j - 1) <= fractions(j)) exit
+                length = fractions(j - 1)
+                fractions(j - 1) = fractions(j)
+                fractions(j) = length
+            end do
+        end do
+
+        do i = 0, ncross
+            block
+                double precision :: a, b, mid(3), shift(3), q1(3), q2(3)
+
+                a = fractions(i)
+                b = fractions(i + 1)
+                if (b <= a) cycle
+
+                ! Shift this piece back into the fundamental cell.
+                mid = p1 + 0.5d0*(a + b)*d
+                shift = 0d0
+                do axis = 1, 3
+                    if (self%boundary_conditions(axis) /= 0) cycle
+                    length = self%domain_length(axis)
+                    shift(axis) = -floor(mid(axis)/length)*length
+                end do
+                q1 = p1 + a*d + shift
+                q2 = p1 + b*d + shift
+
+                record = self%boundaries%check_collision(q1, q2)
+                if (record%is_collided) then
+                    record%t = a + record%t*(b - a)
+                    return
+                end if
+            end block
+        end do
+
+        record%is_collided = .false.
+
+    contains
+
+        pure subroutine crossing_planes(x1, x2, period, first, last, step)
+            !! Integer multiples k of `period` with k*period strictly between x1 and x2,
+            !! ordered from x1 toward x2 (empty when first and last straddle step).
+            double precision, intent(in) :: x1, x2, period
+            integer, intent(out) :: first, last, step
+
+            if (x2 > x1) then
+                first = floor(x1/period) + 1
+                last = ceiling(x2/period) - 1
+                step = 1
+            else
+                first = ceiling(x1/period) - 1
+                last = floor(x2/period) + 1
+                step = -1
+            end if
+        end subroutine
     end function
 
     function esSimulator_adaptive_dt(self, particle, dt) result(step)
