@@ -45,8 +45,9 @@ contains
         a = v0/vth
         expa = exp(-a*a)
 
-        ! Analytical formula using erf
-        I = 0.5_dp*v0*(1.0_dp + erf(a)) &
+        ! 1 + erf(a) = erfc(-a); erfc keeps relative accuracy when the drift
+        ! points away from the surface (a << -1), where 1 + erf cancels.
+        I = 0.5_dp*v0*erfc(-a) &
             + 0.5_dp*vth/sqrt(pi)*expa
     end function flux_integral_halfspace_erf
 

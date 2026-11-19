@@ -73,6 +73,8 @@ module m_allcom
         !! Drift velocity perpendicular to the background magnetic field for each species
     double precision :: speth(max_nspec) = 0d0
         !! The angle of drift velocity perpendicular to the background magnetic field for each species
+    double precision :: vdx(max_nspec) = 0d0, vdy(max_nspec) = 0d0, vdz(max_nspec) = 0d0
+        !! Cartesian drift added to the boundary-source drift (EMSES `vdx`, `vdy`, `vdz`)
 
     ! /ptcond/
     real(kind=8) :: zssurf = -9999.0d0
@@ -109,6 +111,8 @@ module m_allcom
         !! Else if rcurv == 0.5d0 then r_min == 0.5d0 * r_max
     double precision :: rectangle_shape(6, nboundary_types) = 0.0d0
         !! Shapes of rectangle boundaries
+    double precision :: rectangle_corners(3, 4, nboundary_types) = 0.0d0
+        !! Corner points of oriented rectangles (`rectangle-corners`)
     double precision :: sphere_origin(3, nboundary_types) = 0.0d0
         !! Origins of sphere boundaries
     double precision :: sphere_radius(nboundary_types) = 0.0d0
@@ -170,6 +174,8 @@ module m_allcom
         !! Number of emission surfaces for each species
     double precision :: curf(max_nspec) = 0d0
         !! Current from emission surfaces
+    double precision :: abvdem(max_nspec) = 0d0
+        !! Extra normal drift of surface-emitted particles (EMSES `abvdem`)
     integer :: nemd(max_nepl) = 0
         !! Emission directions
     double precision :: curfs(max_nepl) = -9999d0
@@ -180,17 +186,19 @@ module m_allcom
         !! Minimum and maximum Y-coordinates for each emission surface
     double precision :: zmine(max_nepl) = 0d0, zmaxe(max_nepl) = 0d0
         !! Minimum and maximum Z-coordinates for each emission surface
-    double precision :: thetaz(max_nepl) = 0d0, thetaxy(max_nepl) = 0d0
-        !! Emission angles in the Z direction and XY plane for each emission surface
+    double precision :: thetaz = 0d0, thetaxy = 0d0
+        !! Incidence direction [deg] of explicit photoelectron patches (EMSES scalars)
+    logical :: decrease_current_according_to_incident_angle = .true.
+        !! Scale explicit photoelectron patch currents by the incidence cosine
 
     logical :: use_raycast = .false.
         !! Enable raycast-based photoelectron probability for species with nflag_emit == 2
     double precision :: ray_zenith_angle_deg(max_nspec) = 9999d0
-        !! Sentinel value 9999d0 means "fall back to vdthz(ispec)". Otherwise the
-        !! ray direction follows the same convention as `vdri`/`vdthz`/`vdthxy`
-        !! (zenith angle from +z, azimuth from +x; see `direction_from_angles`).
+        !! EMSES raycast camera zenith angle [deg]. The sentinel 9999d0 falls back
+        !! to `vdthz(1)` (species 1, as in EMSES raycast_surface_emitter.F90).
     double precision :: ray_azimuth_angle_deg(max_nspec) = 9999d0
-        !! Sentinel value 9999d0 means "fall back to vdthxy(ispec)".
+        !! EMSES raycast camera azimuth angle [deg]. The sentinel 9999d0 falls
+        !! back to `vdthxy(1) - 180`.
 
 contains
 
@@ -230,6 +238,9 @@ contains
         spa = 0d0
         spe = 0d0
         speth = 0d0
+        vdx = 0d0
+        vdy = 0d0
+        vdz = 0d0
 
         ! /ptcond/
         zssurf = -9999.0d0
@@ -247,6 +258,7 @@ contains
         cylinder_height = 0.0d0
         rcurv = 1.0d0
         rectangle_shape = 0.0d0
+        rectangle_corners = 0.0d0
         sphere_origin = 0.0d0
         sphere_radius = 0.0d0
         circle_origin = 0.0d0
@@ -280,6 +292,7 @@ contains
         nflag_emit = 0
         nepl = 0
         curf = 0d0
+        abvdem = 0d0
         nemd = 0
         curfs = -9999d0
         xmine = 0d0
@@ -290,6 +303,7 @@ contains
         zmaxe = 0d0
         thetaz = 0d0
         thetaxy = 0d0
+        decrease_current_according_to_incident_angle = .true.
         use_raycast = .false.
         ray_zenith_angle_deg = 9999d0
         ray_azimuth_angle_deg = 9999d0
@@ -303,7 +317,14 @@ contains
     !       spe*cos(speth)*e1 + spe*sin(speth)*e2 + spa*B0hat,
     !     with e1, e2 the perpendicular axes of `thermal_basis` and speth in degrees.
     !   * `vdri`, `vdthz`, `vdthxy` are a drift with zenith angle vdthz from +z
-    !     and azimuth vdthxy from +x.
+    !     and azimuth vdthxy from +x, and `vdx`, `vdy`, `vdz` a Cartesian drift.
+    !     Their sum is EMSES `vdtx/vdty/vdtz` (calculate_drift_velocities).
+    !   * The outer boundary injects the same field-frame thermal spread as the
+    !     initial loading: peth across and path along B0 (domain_boundary_source.F90
+    !     with m_thermal_frame.F90, EMSES 4.23.0 and later).
+    !   * Surface sources (patches and raycast) sample the outward normal with
+    !     mean spa+abvdem and sigma path, and both tangents independently with
+    !     mean spe and sigma peth; speth is not used (surface_emission_source.F90).
     ! Issue #42: the previous futils-based rotations used the opposite sign, so
     ! the "parallel" source axis was not parallel to the packed B.
 
@@ -347,12 +368,15 @@ contains
         double precision :: ret(3)
             !! Resulting drift velocity vector
 
-        ret(:) = matmul(thermal_basis(), magnetic_frame_drift(ispec)) &
+        ret(:) = [vdx(ispec), vdy(ispec), vdz(ispec)] &
+                 + matmul(thermal_basis(), magnetic_frame_drift(ispec)) &
                  + vdri(ispec)*direction_from_angles(vdthz(ispec), vdthxy(ispec))
     end function
 
     function vth_vector(ispec) result(ret)
         !! Cartesian marginal standard deviations for envelope support.
+        !!
+        !! These are also the widths of the EMSES outer-boundary tables.
 
         integer, intent(in) :: ispec
             !! Species index
@@ -394,26 +418,14 @@ contains
         double precision :: ret(3)
             !! Resulting drift velocity vector
 
-        double precision :: vdri_from_spa(3)
+        integer :: axis
 
-        integer :: axis0, axis1, axis2
-
-        ! Emission-frame drift: parallel component along the patch normal,
-        ! perpendicular components along the two tangents.
-        vdri_from_spa(:) = magnetic_frame_drift(ispec)
-
-        axis0 = abs(nemd(iepl))
-        axis1 = mod(axis0, 3) + 1
-        axis2 = mod(axis0 + 1, 3) + 1
-
-        if (nemd(iepl) > 0) then
-            ret(axis0) = vdri_from_spa(3)
-        else
-            ret(axis0) = -vdri_from_spa(3)
-        end if
-
-        ret(axis1) = vdri_from_spa(1)
-        ret(axis2) = vdri_from_spa(2)
+        ! EMSES samples the outward normal from a flux table with mean
+        ! spa+abvdem and both tangents from one Gaussian table with mean spe.
+        ! The tangents keep their sign for either side of the patch.
+        axis = abs(nemd(iepl))
+        ret(:) = spe(ispec)
+        ret(axis) = sign(1d0, dble(nemd(iepl)))*(spa(ispec) + abvdem(ispec))
 
     end function
 
@@ -433,6 +445,22 @@ contains
         ret(:) = peth(ispec)
         ret(abs(nemd(iepl))) = path(ispec)
     end function
+
+    subroutine surface_source_parameters(ispec, mean, sigma)
+        !! Local surface-frame source used by EMSES patches and raycast emission.
+        !!
+        !! Components are (outward normal, tangent 1, tangent 2).
+
+        integer, intent(in) :: ispec
+            !! Species index
+        double precision, intent(out) :: mean(3)
+            !! Mean velocity in the surface frame
+        double precision, intent(out) :: sigma(3)
+            !! Standard deviations in the surface frame
+
+        mean = [spa(ispec) + abvdem(ispec), spe(ispec), spe(ispec)]
+        sigma = [path(ispec), peth(ispec), peth(ispec)]
+    end subroutine
 
     subroutine nemd2angle(iepl, thz, thxy)
         !! Convert emission direction to angle

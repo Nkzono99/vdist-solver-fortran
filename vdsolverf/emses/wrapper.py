@@ -56,6 +56,21 @@ def _load_dll(
     return CDLL(str(resolved_path))
 
 
+def _validate_native_input(dll, path, ispec, regular_pdf=True):
+    """Check inputs before entering legacy void C routines that cannot return errors."""
+    # Older user-supplied DLLs keep the pre-existing unchecked ABI. Newly built
+    # libraries always expose this additive validation entry point.
+    if not hasattr(dll, "validate_emses_input"):
+        return
+    validate = dll.validate_emses_input
+    validate.argtypes = [c_char_p, c_int, c_int, c_int, POINTER(c_char), c_int]
+    validate.restype = c_int
+    encoded = str(path).encode()
+    message = create_string_buffer(512)
+    if validate(encoded, len(encoded), ispec + 1, int(regular_pdf), message, len(message)):
+        raise ValueError(message.value.decode(errors="replace"))
+
+
 def get_backtrace(
     directory: PathLike,
     ispec: int,
@@ -231,6 +246,7 @@ def get_backtraces_dll(
         inppath = tmpinp.tmppath
         inppath_str = str(inppath.resolve())
 
+        _validate_native_input(dll, inppath_str, ispec)
         _inppath = create_string_buffer(inppath_str.encode())
         _length = c_int(len(inppath_str))
         _nx = c_int(data.inp.nx)
@@ -507,6 +523,7 @@ def get_probabilities_octree_dll(
                                 field_bundle, tmp_input_suffix) as (data, ebvalues, inppath):
         inppath_str = str(inppath.resolve())
 
+        _validate_native_input(dll, inppath_str, ispec)
         _inppath = create_string_buffer(inppath_str.encode())
         _length = c_int(len(inppath_str.encode()))
         _nx = c_int(data.inp.nx)
@@ -670,6 +687,7 @@ def get_probabilities_dll(
         velocities = np.array([particle.vel for particle in particles], dtype=np.float64)
         inppath_str = str(inppath.resolve())
 
+        _validate_native_input(dll, inppath_str, ispec)
         _inppath = create_string_buffer(inppath_str.encode())
         _length = c_int(len(inppath_str))
         _nx = c_int(data.inp.nx)
@@ -1022,6 +1040,7 @@ def estimate_velocity_range_map_dll(
 
         inppath_str = str(inppath.resolve())
 
+        _validate_native_input(dll, inppath_str, ispec, regular_pdf=False)
         _inppath = create_string_buffer(inppath_str.encode())
         _length = c_int(len(inppath_str))
         _nx = c_int(nx)
@@ -1565,6 +1584,9 @@ def _prepared_octree_fields(directory, istep, ispec, use_electric_field, use_mag
             raise ValueError("field flags do not match field bundle")
         data = SimpleNamespace(directory=Path(meta["directory"]),
                                inp=SimpleNamespace(**{k: meta[k] for k in ("nx", "ny", "nz")}))
+        import f90nml
+        from .source_support import validate_source_support
+        validate_source_support(f90nml.read(bundle.namelist_path))
         values = bundle.get_ebvalues(ispec)
         yield data, values, bundle.namelist_path
     else:
@@ -1640,6 +1662,7 @@ def get_dust_currents(
         nspec = getattr(data.inp, "nspec", None)
         if nspec is not None and ispec >= nspec:
             raise ValueError("ispec is outside the namelist species range")
+        _validate_native_input(dll, path.resolve(), ispec)
         encoded = str(path.resolve()).encode()
         evaluate(encoded, len(encoded), data.inp.nx, data.inp.ny, data.inp.nz,
                  fields, ispec + 1, nspatial, spatial, bounds, npsi, psi, dt, max_step,

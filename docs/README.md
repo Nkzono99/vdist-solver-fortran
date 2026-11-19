@@ -15,6 +15,7 @@
 | [ダスト帯電電流モーメント](dust_currents.md) | Fortran OML 積分、terminal box、field bundle、ctypes API |
 | [Namelist リファレンス](namelist.md) | サポートする EMSES `plasma.inp` グループ (`/ptcond/`, `/emissn/`) と raycast 光電子用パラメータ |
 | [物理モデル](physics.md) | リウビル定理、Maxwellian 表面放出、raycast 光電子モデル |
+| [EMSES との同期](emses_sync.md) | EMSES から写している形状コード、再実装している粒子源、追従の手順 |
 | [アーキテクチャ](architecture.md) | リポジトリ構成、Fortran/Python の境界、モジュールの責務 |
 | [開発ガイド](development.md) | ビルド、テスト、拡張方法 (`fpm`、`.venv`、確率関数の追加、CI チェックリスト) |
 

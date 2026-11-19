@@ -51,9 +51,10 @@ contains
         write (unit, *) '&tmgrid nx=8, ny=8, nz=4, dt=0.2 /'
         write (unit, *) '&system nspec=2, npbnd=0,0,2,27*2 /'
         write (unit, *) '&intp qm=10*-1, peth=10*4, path=10*4, vdri=10*1, vdthz=10*30, vdthxy=10*60,', &
-            ' spa=10*3, spe=10*2, speth=10*90 /'
+            ' spa=10*3, spe=10*2, speth=10*90, vdx=10*0.5, vdy=10*0.5, vdz=10*0.5 /'
         write (unit, *) "&ptcond boundary_type='complex', zssurf=1.5, boundary_types='rectangle',9*'none',", &
             ' rectangle_shape(:,1)=0.5,0.5,2,6,0,4, boundary_conductor_id=10*1, rcurv=0.5,', &
+            ' rectangle_corners(:,:,1)=12*1,', &
             ' cylinder_origin=30*1, cylinder_radius=10*1, cylinder_height=10*1,', &
             ' sphere_origin=30*1, sphere_radius=10*1, circle_origin=30*1, circle_radius=10*1,', &
             ' cuboid_shape=60*1, disk_origin=30*1, disk_height=10*1, disk_radius=10*1,', &
@@ -67,9 +68,9 @@ contains
             ' enable_secondary_electron_emission=100*.true., boundary_se_model_type=100*2,', &
             ' boundary_se_const_yield=100*0.5, boundary_se_yield_max=100*0.5, boundary_se_energy_max=100*5,', &
             ' boundary_se_species_id=100*2 /'
-        write (unit, *) '&emissn nflag_emit=10*1, nepl=1,9*0, nemd=15*-3, curf=10*1, curfs=15*2,', &
+        write (unit, *) '&emissn nflag_emit=10*1, nepl=1,9*0, nemd=15*-3, curf=10*1, curfs=15*2, abvdem=10*0.3,', &
             ' xmine=15*1, xmaxe=15*3, ymine=15*1, ymaxe=15*3, zmine=15*2, zmaxe=15*2,', &
-            ' thetaz=15*10, thetaxy=15*20, use_raycast=.true.,', &
+            ' thetaz=10, thetaxy=20, decrease_current_according_to_incident_angle=.false., use_raycast=.true.,', &
             ' ray_zenith_angle_deg=10*180, ray_azimuth_angle_deg=10*90 /'
         close (unit)
     end subroutine
@@ -83,8 +84,16 @@ contains
     end subroutine
 
     subroutine test_omitted_values_return_to_defaults()
-        call read_namelist(full_file)
+        integer :: status
+
+        call read_namelist(full_file, status)
+        call assert_equal_int("full input is read without errors", status, 0)
         call assert_close("full input sets spa", spa(1), 3d0)
+        call assert_close("full input sets vdz", vdz(2), 0.5d0)
+        call assert_close("full input sets abvdem", abvdem(1), 0.3d0)
+        call assert_close("full input sets rectangle_corners", rectangle_corners(3, 4, 1), 1d0)
+        call assert_close("full input sets thetaz", thetaz, 10d0)
+        call assert_true("full input clears the incidence scaling", .not. decrease_current_according_to_incident_angle)
         call assert_true("full input sets raycast", use_raycast)
         call assert_equal_int("full input sets nepl", nepl(1), 1)
 
@@ -94,6 +103,10 @@ contains
         call assert_equal_int("nspec returns to the minimal input", nspec, 1)
         call assert_equal_int("omitted second-species npbnd returns to default", npbnd(1, 2), 0)
         call assert_close("omitted spa returns to default", spa(1), 0d0)
+        call assert_close("omitted Cartesian drift returns to default", maxval(abs([vdx, vdy, vdz])), 0d0)
+        call assert_close("omitted abvdem returns to default", maxval(abs(abvdem)), 0d0)
+        call assert_close("omitted rectangle_corners return to default", maxval(abs(rectangle_corners)), 0d0)
+        call assert_true("omitted incidence scaling returns to default", decrease_current_according_to_incident_angle)
         call assert_close("omitted spe returns to default", spe(1), 0d0)
         call assert_close("omitted speth returns to default", speth(1), 0d0)
         call assert_close("omitted vdri is read from the minimal input", vdri(1), 0d0)

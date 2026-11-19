@@ -37,7 +37,7 @@ contains
             path(1) = 0d0
             peth(1) = 0d0
             spa(1) = 0.1d0
-            spe(1) = -dble(direction)
+            spe(1) = dble(direction)
             speth(1) = -90d0
             nemd(1) = 2
             ymine(1) = 0.4d0
@@ -52,7 +52,7 @@ contains
             x0 = 0.5d0*(xmine(1) + xmaxe(1))
             values = 0d0
             boundaries = new_BoundaryList()
-            simulator = new_ESSimulator(lx, ly, lz, [0, 2, 2], &
+            simulator = new_ESSimulator(lx, ly, lz, [0, 2, 0], &
                 new_VectorFieldGrid(6, lx, ly, lz, values), boundaries, probabilities)
             call estimate_velocity_range_map_impl(simulator, 1, lx, ly, lz, &
                 trace_dt=16.2d0, coverage_sigma=1d0, safety_factor=1d0, max_step=1, &
@@ -96,7 +96,7 @@ contains
                     path(1) = 0d0
                     peth(1) = 0d0
                     spa(1) = 0.1d0
-                    spe(1) = dble(direction)*sqrt(2d0)
+                    spe(1) = dble(direction)
                     speth(1) = 45d0
                     nemd(1) = 2
                     ymine(1) = 0.4d0

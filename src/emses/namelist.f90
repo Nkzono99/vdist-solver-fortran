@@ -18,14 +18,14 @@ module m_namelist
     namelist /system/ nspec, npbnd
 
     namelist /intp/ qm, path, peth, vdri, vdthz, vdthxy, &
-        spa, spe, speth
+        spa, spe, speth, vdx, vdy, vdz
 
     namelist /ptcond/ boundary_type, boundary_types, &
         zssurf, &
         xlrechole, ylrechole, zlrechole, xurechole, yurechole, zurechole, &
         boundary_conductor_id, &
         cylinder_origin, cylinder_radius, cylinder_height, rcurv, &
-        rectangle_shape, &
+        rectangle_shape, rectangle_corners, &
         sphere_origin, sphere_radius, &
         circle_origin, circle_radius, &
         cuboid_shape, &
@@ -51,65 +51,70 @@ module m_namelist
         boundary_se_species_id
 
     namelist /emissn/ nflag_emit, &
-        nepl, curf, nemd, curfs, &
+        nepl, curf, nemd, curfs, abvdem, &
         xmaxe, xmine, ymaxe, ymine, zmaxe, zmine, &
-        thetaz, thetaxy, &
+        thetaz, thetaxy, decrease_current_according_to_incident_angle, &
         use_raycast, &
         ray_zenith_angle_deg, ray_azimuth_angle_deg
 
 contains
 
-    subroutine read_namelist(inppath)
+    subroutine read_namelist(inppath, status)
         !! Read namelists from a specified input file path.
+        !!
+        !! Without `status`, an unreadable file or a malformed group is skipped
+        !! as before. With `status`, the first such error is returned (nonzero)
+        !! and reading stops; a missing group is still only a warning.
 
         character(len=*), intent(in) :: inppath
             !! Path to the input file
+        integer, intent(out), optional :: status
+            !! 0 on success, otherwise the failing iostat
 
-        integer :: iostat
-            !! I/O status variable
+        integer :: unit, iostat
 
         ! Namelist reads leave omitted keys untouched; start from the defaults
         ! so one input cannot inherit values from a previous one (issue #40).
         call reset_input_parameters()
+        if (present(status)) status = 0
 
-        open (10, file=trim(inppath), status='old', iostat=iostat)
-
-        rewind (10); read (10, nml=esorem, IOSTAT=iostat)
-        if (iostat .eq. -1) then
-            print *, "Warning.Input: nml=esorem not found"
+        open (newunit=unit, file=trim(inppath), status='old', iostat=iostat)
+        if (iostat /= 0) then
+            if (present(status)) status = iostat
+            return
         end if
 
-        rewind (10); read (10, nml=plasma, IOSTAT=iostat)
-        if (iostat .eq. -1) then
-            print *, "Warning.Input: nml=plasma not found"
-        end if
+        rewind (unit); read (unit, nml=esorem, iostat=iostat)
+        if (stop_reading('esorem')) return
+        rewind (unit); read (unit, nml=plasma, iostat=iostat)
+        if (stop_reading('plasma')) return
+        rewind (unit); read (unit, nml=tmgrid, iostat=iostat)
+        if (stop_reading('tmgrid')) return
+        rewind (unit); read (unit, nml=system, iostat=iostat)
+        if (stop_reading('system')) return
+        rewind (unit); read (unit, nml=intp, iostat=iostat)
+        if (stop_reading('intp')) return
+        rewind (unit); read (unit, nml=ptcond, iostat=iostat)
+        if (stop_reading('ptcond')) return
+        rewind (unit); read (unit, nml=emissn, iostat=iostat)
+        if (stop_reading('emissn')) return
 
-        rewind (10); read (10, nml=tmgrid, IOSTAT=iostat)
-        if (iostat .eq. -1) then
-            print *, "Warning.Input: nml=tmgrid not found"
-        end if
+        close (unit)
 
-        rewind (10); read (10, nml=system, IOSTAT=iostat)
-        if (iostat .eq. -1) then
-            print *, "Warning.Input: nml=system not found"
-        end if
+    contains
 
-        rewind (10); read (10, nml=intp, IOSTAT=iostat)
-        if (iostat .eq. -1) then
-            print *, "Warning.Input: nml=intp not found"
-        end if
+        logical function stop_reading(group)
+            character(len=*), intent(in) :: group
 
-        rewind (10); read (10, nml=ptcond, IOSTAT=iostat)
-        if (iostat .eq. -1) then
-            print *, "Warning.Input: nml=ptcond not found"
-        end if
-
-        rewind (10); read (10, nml=emissn, IOSTAT=iostat)
-        if (iostat .eq. -1) then
-            print *, "Warning.Input: nml=emissn not found"
-        end if
-
-        close (10)
+            stop_reading = .false.
+            if (iostat == -1) then
+                print *, "Warning.Input: nml=", group, " not found"
+            else if (iostat > 0 .and. present(status)) then
+                status = iostat
+                close (unit)
+                stop_reading = .true.
+            end if
+        end function
     end subroutine
 
 end module

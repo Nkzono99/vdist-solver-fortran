@@ -68,93 +68,100 @@ $\boldsymbol\mu$ = `locs` はドリフト速度、$\boldsymbol\sigma$ = `scales`
 $\mathbf u = R^T(\mathbf v-\boldsymbol\mu)$ として、速度を分布の基準座標へ
 戻して評価します。省略時の `basis` ($R$) は単位行列です。
 
-EMSES の外部源と raycast 光電子では、`locs = vdri_vector(ispec)`、
-`scales = [peth(ispec), peth(ispec), path(ispec)]` を使います。
-`thermal_basis()` は EMSES の背景磁場フレームを列として返します。
-2 本の垂直軸と
+以下の EMSES 源は MPIEMSES3D が実際に粒子を生成する式に合わせています。
+対応する EMSES のソースと追従手順は [EMSES との同期](emses_sync.md) にまとめています。
+
+**外側境界からの注入**（`npbnd = 2`、`nflag_emit = 0`）は
+`locs = vdri_vector(ispec)`、`scales = [peth, peth, path]`、`basis = thermal_basis()` です。
+EMSES の初期配置と外側境界の注入（4.23.0 以降、`m_thermal_frame.F90`）と同じく、
+熱分布は磁場座標で定義され、共分散は $R\,\mathrm{diag}(peth^2, peth^2, path^2)R^T$ です。
+斜めの異方分布では Cartesian 成分の相関を保ち、等方分布は回転で変化しません。
+ドリフトは EMSES の `vdtx/vdty/vdtz` と同じく
+
+$$
+\boldsymbol\mu = (vdx, vdy, vdz) + R\,(spe\cos(speth),\ spe\sin(speth),\ spa)
++ vdri\,(\sin\vartheta\cos\varphi,\ \sin\vartheta\sin\varphi,\ \cos\vartheta)
+$$
+
+です（$\vartheta$ = `vdthz`、$\varphi$ = `vdthxy`、角度はすべて度単位）。
+$R$ = `thermal_basis()` は EMSES の背景磁場フレーム（`t11`..`t33`）を列とし、
+第 3 列が Python ラッパーの詰める背景磁場
 $\hat{\mathbf B}_0 = (\sin\phi_z\cos\phi_{xy},\ \sin\phi_z\sin\phi_{xy},\ \cos\phi_z)$
-で、Python ラッパーが背景磁場として詰める向きと同一です。したがって
-`path`/`spa` は追跡に実際に使う磁場に平行になります。ドリフトは
-$\mathbf\mu = spe\cos(speth)\,\mathbf e_1 + spe\sin(speth)\,\mathbf e_2 + spa\,\hat{\mathbf B}_0
-+ vdri\,(\sin\vartheta\cos\varphi,\ \sin\vartheta\sin\varphi,\ \cos\vartheta)$
-($\vartheta$ = `vdthz`、$\varphi$ = `vdthxy`) で、これらの角度はすべて度単位です。
-共分散は $R\,\mathrm{diag}(\sigma_i^2)R^T$ で、斜めの異方分布の相関を保持し、
-等方分布は回転で変化しません。`vth_vector(ispec)` はこの共分散の対角成分の
-平方根（Cartesian 各成分の標準偏差）を返し、autorange の support に使います。
-放出パッチは `nemd` の符号を含む法線方向に `path`、両接線方向に `peth`
-を標準偏差として使います（標準偏差自体に方向の符号は付きません）。
+に一致します。`vth_vector(ispec)` はこの共分散の対角成分の平方根（Cartesian 各成分の
+標準偏差）で、EMSES の境界テーブルの幅と同じです。autorange の support にも使います。
 
 ### 放出パッチの規格化
 
-放出方向（物質からプラズマへ）のドリフトを
-$u=\mathrm{sign}(nemd)\,\mu_{|nemd|}$、$\sigma=path$ とすると、
-密度 1 の Gaussian の一方向フラックスモーメントは
+表面源（放出パッチと raycast 光電子）は、局所座標（外向き法線、接線 1、接線 2）で
+平均 `[spa + abvdem, spe, spe]`、標準偏差 `[path, peth, peth]` を使います。
+EMSES は法線速度を平均 `spa + abvdem` の flux-weighted 片側 Gaussian の表から、
+両接線を同じ Gaussian（平均 `spe`）の表から独立に取り、`speth` は使いません
+（`surface_emission_source.F90`、`direct_surface_emitter.F90`）。接線の符号は
+パッチの向き（`nemd` の符号）によらず正のままです。
+
+$u = spa + abvdem$、$\sigma = path$ とすると、密度 1 の Gaussian の
+一方向フラックスモーメントは
 
 $$
-I(u,\sigma)=\frac{u}{2}\left[1+\mathrm{erf}\left(\frac{u}{\sqrt{2}\sigma}\right)\right]
+I(u,\sigma)=\frac{u}{2}\,\mathrm{erfc}\left(-\frac{u}{\sqrt{2}\sigma}\right)
 +\frac{\sigma}{\sqrt{2\pi}}\exp\left(-\frac{u^2}{2\sigma^2}\right)
 $$
 
-です。係数は `C = curf/I`（非負の `curfs` があれば優先）とし、分布の
-一方向モーメントが入力値を再現します。MPIEMSES3D は法線速度を
-$v_n f(v_n)$ に比例する flux-weighted half-Gaussian（標準偏差 `path`）、
-接線速度を標準偏差 `peth` の Gaussian から生成します。本ソルバで伝搬する
-位相空間分布は $C f_M$ であり、速度をもう一度掛けることはありません。
-`curf/curfs` は EMSES 単位の電流密度の絶対値です。MPIEMSES3D はこれを
-マクロ粒子電荷の絶対値で割って生成粒子数を求めます。本ソルバの $C$ は
-電荷換算密度（実粒子の電荷絶対値が 1 なら数密度）であり、連続分布に
-マクロ粒子電荷・重みを掛けてはいけません。電荷絶対値が異なる場合の数密度は
-その値で割って求めます。この源は密度 1 の PDF ではありません。
+です。$1+\mathrm{erf}$ の代わりに $\mathrm{erfc}$ を使い、ドリフトが表面に
+向かう場合（$u \ll -\sigma$）の桁落ちを避けています。係数は `C = J/I` とし、
+外向き（$\mathbf v\cdot\hat{\mathbf n} > 0$）の半空間だけで $C f_M$ を返します。
+この分布の外向き一次モーメントが $J$ を再現します。
 
-erf ユーティリティの幅は $\sqrt{2}\sigma$ です。引数逆転と幅を修正すると、
-ゼロドリフトでは $C=curf\sqrt{2\pi}/\sigma$ となります。従来も正だった法線幅が
-同じ場合（例: ±Z パッチ）、放出確率は $\sqrt{2\pi}\simeq2.5066$ 倍です。
-X/Y パッチでは従来の符号付き・入れ替わった熱幅も修正するため、以前ゼロだった
-源が非ゼロになるケースがあり、共通の有限倍率だけでは表せません。
+$J$ は EMSES と同じ順で決めます: `curfs(iepl) > 0` ならその値、そうでなく
+`curf(ispec) > 0` ならその値。どちらも正でない場合、EMSES は `flpf`・`flpfs`
+や `npin` 由来の密度を使いますが、本ソルバはそれらを読まないので入力を拒否します。
+光電子パッチ（`nflag_emit = 2` で `pe_ray_cast = .false.`）では、EMSES と同様に
+`decrease_current_according_to_incident_angle`（既定 `.true.`）のとき
+$J$ に $\mathrm{sign}(nemd)\,\hat d_{|nemd|}$ を掛け、負なら 0 にします。
+$\hat{\mathbf d}$ は `thetaz`・`thetaxy`（スカラー、度単位）から作る入射方向の
+単位ベクトルです。EMSES の `vdri` によるパッチ放出の平行移動は半空間をずらすため
+再現できず、`vdri ≠ 0` のパッチ放出種は拒否します。
+
+`curf/curfs` は EMSES 単位の電流密度です。MPIEMSES3D はこれをマクロ粒子電荷の
+絶対値で割って生成粒子数を求めます。本ソルバの $C$ は電荷換算密度（実粒子の
+電荷絶対値が 1 なら数密度）であり、連続分布にマクロ粒子電荷・重みを掛けては
+いけません。電荷絶対値が異なる場合の数密度はその値で割って求めます。
+この源は密度 1 の PDF ではありません。
 [ダスト電流の単位](dust_currents.md#定義と単位)も参照してください。
 
 ### Raycast 光電子
 
-`use_raycast = .true.` と `nflag_emit(ispec) == 2` の組み合わせで有効化
-されます。解釈: 内部表面に衝突したバックトレース粒子は、その面から放出
-されたばかりの光電子である可能性がある。以下の 2 つの物理条件がゲート
-となります。
+`use_raycast = .true.`（EMSES 入力の `pe_ray_cast`）と `nflag_emit(ispec) == 2`
+の組み合わせで有効化されます。EMSES は太陽方向から平行カメラでレイを撃ち、
+最初に当たった放出面（`material%tag /= -1`）の点から、交差面の法線
+$\hat{\mathbf n}$ と `raycast_sampler.F90` の接線基底で上の表面源の速度を
+1 粒子ずつ生成します。射影面積あたりのレイ数が一定なので、面積あたりの放出流束は
+$|curf|\max(\hat{\mathbf n}\cdot\hat{\mathbf s}, 0)$ です（$\hat{\mathbf s}$ は
+表面から太陽への単位ベクトル）。
 
-**1. 外向き放出の半空間制約**: 光電子は表面から物質の外側へ向かって放出
-されます。外向き法線 $\hat{\mathbf n}$ を太陽方向 (表面から太陽への単位
-ベクトル) で近似すると、粒子速度は $\mathbf{v} \cdot \hat{\mathbf n} > 0$
-を満たす必要があります。満たさなければ密度 0。
-
-**2. 日射の遮蔽チェック**: 光電子が存在するためには、その表面に日射が
-届いている必要があります。衝突点から $\hat{\mathbf n}$ 方向にレイを発射
-し、遮蔽候補となる境界リスト (内部の表面やオブジェクト) と干渉させます。
-$t > 0$ で何かに当たれば日陰となり密度 0。
-
-両条件を満たす場合の確率は
+本ソルバは衝突点から太陽側へ少しずらした点からカメラと同じ向きにレイを戻して
+交差面と法線を求め、
 
 $$
-f_{\rm PE}(\mathbf{v}) = 2 \cdot C \prod_{i=1}^{3}
-  \frac{1}{\sqrt{2\pi}\sigma_i}
-  \exp\!\left(-\frac{u_i^2}{2 \sigma_i^2}\right),
+f_{\rm PE}(\mathbf v) = \frac{|curf|\,\max(\hat{\mathbf n}\cdot\hat{\mathbf s},0)}{I}
+\prod_{i=1}^{3}\frac{1}{\sqrt{2\pi}\sigma_i}\exp\!\left(-\frac{(w_i-\mu_i)^2}{2\sigma_i^2}\right),
+\qquad w_1 = \mathbf v\cdot\hat{\mathbf n} > 0
 $$
 
-$\boldsymbol\mu$ = `vdri_vector(ispec)`, $\boldsymbol\sigma$ =
-`[peth(ispec), peth(ispec), path(ispec)]`、$\mathbf u$ は上と同じ主軸への
-逆回転です。係数 2 は $\mu_\parallel = 0$ のときの半空間正規化
-として厳密です。シフト分布では 1 次近似となり、$|\boldsymbol\mu \cdot
-\hat{\mathbf n}|$ が熱速度に対して支配的でない範囲で十分精確です。
+を返します。$\mathbf w$ は（法線、接線 1、接線 2）成分、$\boldsymbol\mu$ と
+$\boldsymbol\sigma$ は上の表面源の値です。次の場合は 0 です。
 
-太陽方向は
-[`src/emses/emses_simulator_builder.f90`](../src/emses/emses_simulator_builder.f90)
-の `resolve_sun_direction(ispec)` で決定します:
+- 衝突点が放出面上にない、または EMSES の非放出カバー（tag -1）上にある。
+- 速度が表面へ向かう（$w_1 \le 0$）。
+- 太陽方向へのレイが他の境界に当たる（日陰）。
 
-1. `ray_zenith_angle_deg(ispec) < 9000d0` ならそれを、そうでなければ
-   `vdthz(ispec)` を使用。方位角も同様。
-2. $+z$ からの天頂角 $\zeta$、$+x$ からの方位角 $\phi$ の単位ベクトル
-   $(\sin\zeta\cos\phi,\ \sin\zeta\sin\phi,\ \cos\zeta)$ を作る
-   (`vdri` ドリフトと同じ規約)。
-3. その単位ベクトルの符号を反転して返す (放出面から太陽への向き;
-   ユーザ指定の慣習)。
+遮蔽判定の境界リストは EMSES と同じく `cover_all` 付きで作ります。
+太陽方向は EMSES と同じ `new_ParallelCamera_optimized(thz, thxy, domain)` の
+レイ方向の逆です。`ray_zenith_angle_deg(ispec)` が未設定（9999）なら `vdthz(1)`、
+`ray_azimuth_angle_deg(ispec)` が未設定なら `vdthxy(1) - 180` を使います
+（どちらも粒子種 1 の値）。カメラの回転は `direction_from_angles` と符号規約が
+異なるため、カメラそのものから求めます。周期 raycast（`periodic_raycast`）と
+時間変化する放出（`emission_time_mode`）は再現しません。
 
 ## 座標と単位の規約
 

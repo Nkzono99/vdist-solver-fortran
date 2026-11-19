@@ -3,7 +3,8 @@ program test_emses_thermal
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use m_emses_simulator_builder, only: create_simulator, destroy_simulator
     use m_simulator, only: t_ESSimulator
-    use m_allcom, only: vth_vector, thermal_basis, vdri_vector, spa, spe, speth, vdri, vdthz, vdthxy
+    use m_allcom, only: vth_vector, thermal_basis, vdri_vector, spa, spe, speth, vdri, vdthz, vdthxy, &
+                        vdx, vdy, vdz
     use m_test_helpers, only: assert_close, assert_close_vec, assert_true
 
     implicit none
@@ -12,7 +13,7 @@ program test_emses_thermal
     call test_magnetic_frame_matches_emses_background_field()
     call test_isotropic_boundary_is_rotation_invariant()
     call test_oblique_anisotropic_boundary_pdf_and_moments()
-    call test_photoelectron_uses_rotated_thermal_distribution()
+    call test_photoelectron_uses_surface_flux_distribution()
     print *, "test_emses_thermal: all tests passed."
 
 contains
@@ -42,9 +43,14 @@ contains
         write(unit, *) '&system nspec=1, npbnd=30*2 /'
         write(unit, *) '&intp qm=10*1, spa=10*0, spe=10*0, speth=10*0, ', &
                        'vdri=10*0, vdthz=10*0, vdthxy=10*0, peth=', perpendicular, ', path=', parallel, ' /'
-        write(unit, *) "&ptcond boundary_type='none' /"
+        if (raycast) then
+            write(unit, *) "&ptcond boundary_type='flat-surface', zssurf=1 /"
+        else
+            write(unit, *) "&ptcond boundary_type='none' /"
+        end if
+        ! Camera zenith 0 casts rays along -z, so the sun is at +z.
         write(unit, *) '&emissn nepl=10*0, nflag_emit=', emit, ', use_raycast=', raycast, &
-                       ', ray_zenith_angle_deg=180, ray_azimuth_angle_deg=0 /'
+                       ', curf=1, ray_zenith_angle_deg=0, ray_azimuth_angle_deg=0 /'
         close(unit)
         do i = 1, len(filename)
             cpath(i) = filename(i:i)
@@ -105,6 +111,14 @@ contains
             vdthz(1) = angles(i, 1)
             vdthxy(1) = angles(i, 2)
             call assert_close_vec("vdri at the field angles is parallel to B0", vdri_vector(1), 1.5d0*b)
+            vdx(1) = 0.25d0
+            vdy(1) = -0.5d0
+            vdz(1) = 2d0
+            call assert_close_vec("vdx/vdy/vdz add a Cartesian drift as in EMSES", vdri_vector(1), &
+                                  1.5d0*b + [0.25d0, -0.5d0, 2d0])
+            vdx(1) = 0d0
+            vdy(1) = 0d0
+            vdz(1) = 0d0
             vdri(1) = 0d0
             vdthz(1) = 0d0
             vdthxy(1) = 0d0
@@ -137,6 +151,8 @@ contains
     end subroutine
 
     subroutine test_oblique_anisotropic_boundary_pdf_and_moments()
+        !! The outer boundary carries the field-frame spread of the initial
+        !! loading: peth across and path along B0 (EMSES m_thermal_frame.F90).
         type(t_ESSimulator) :: simulator
         double precision :: b(3), velocity(3), perpendicular, parallel, expected, actual
         double precision :: norm, covariance(3, 3), expected_covariance(3, 3), mean(3), weight
@@ -158,10 +174,10 @@ contains
         norm = 0d0
         mean = 0d0
         covariance = 0d0
-        do iz = 1, 64
-            do iy = 1, 64
-                do ix = 1, 64
-                    velocity = (dble([ix, iy, iz]) - 32.5d0)*spacing
+        do iz = 1, 80
+            do iy = 1, 80
+                do ix = 1, 80
+                    velocity = (dble([ix, iy, iz]) - 40.5d0)*spacing
                     weight = simulator%probability_functions(3)%at([0d0, 1d0, 1d0], velocity)*spacing**3
                     norm = norm + weight
                     mean = mean + weight*velocity
@@ -173,8 +189,8 @@ contains
                 end do
             end do
         end do
-        call assert_close("rotated density integrates to one", norm, 1d0, 1d-8)
-        call assert_close_vec("rotated density has zero mean", mean, [0d0, 0d0, 0d0], 1d-8)
+        call assert_close("boundary density integrates to one", norm, 1d0, 1d-8)
+        call assert_close_vec("boundary density has zero mean", mean, [0d0, 0d0, 0d0], 1d-8)
         do j = 1, 3
             expected_covariance(:, j) = (parallel**2 - perpendicular**2)*b*b(j)
             expected_covariance(j, j) = expected_covariance(j, j) + perpendicular**2
@@ -186,15 +202,20 @@ contains
         call destroy_simulator(simulator)
     end subroutine
 
-    subroutine test_photoelectron_uses_rotated_thermal_distribution()
+    subroutine test_photoelectron_uses_surface_flux_distribution()
+        !! Flat surface at z=1 lit from +z with curf=1: the density is
+        !! curf/rate * G(v_n) G(v_t1) G(v_t2) with rate = 1/sqrt(2 pi) for
+        !! sigma = 1, independent of the magnetic frame.
         type(t_ESSimulator) :: simulator
         double precision :: actual, expected
 
         simulator = build_source(45d0, 31d0, 1d0, 1d0, photoelectron=.true.)
         actual = simulator%probability_functions(1)%at([1d0, 1d0, 1d0], [0d0, 0d0, 1d0])
-        expected = 2d0*exp(-0.5d0)/(2d0*pi)**1.5d0
-        call assert_true("rotated photoelectron density is finite", ieee_is_finite(actual))
-        call assert_close("photoelectron builder preserves isotropic density", actual, expected)
+        expected = exp(-0.5d0)/(2d0*pi)
+        call assert_true("photoelectron density is finite", ieee_is_finite(actual))
+        call assert_close("photoelectron density is normalised by the surface flux", actual, expected)
+        call assert_close("incoming velocity has no photoelectron density", &
+                          simulator%probability_functions(1)%at([1d0, 1d0, 1d0], [0d0, 0d0, -1d0]), 0d0)
         call destroy_simulator(simulator)
     end subroutine
 end program

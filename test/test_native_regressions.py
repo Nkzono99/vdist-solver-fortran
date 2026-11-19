@@ -42,8 +42,8 @@ def synthetic_input(dimensions=(2, 1, 1), theta=0.0, emission=False):
             "xmine=7.8, xmaxe=8, ymine=0.4, ymaxe=0.4, zmine=7.8, zmaxe=8"
             if emission else "nflag_emit=10*0, nepl=10*0"
         )
-        # speth is in degrees (EMSES convention): 45 deg splits spe equally over both tangents.
-        spa, spe, speth = (0.1, np.sqrt(2.0), 45.0) if emission else (0, 0, 0)
+        # EMSES surface sources use spe independently on both patch tangents.
+        spa, spe, speth = (0.1, 1.0, 45.0) if emission else (0, 0, 0)
         input_path.write_text(
             f"&esorem emflag=0 /\n"
             f"&plasma wp=10*0, wc=0, phiz={theta}, phixy={0 if emission else 31} /\n"
@@ -72,6 +72,21 @@ def synthetic_input(dimensions=(2, 1, 1), theta=0.0, emission=False):
 
 @unittest.skipUnless(LIBRARY_PATH.is_file(), "requires a built Linux shared library")
 class NativeRegressionTest(unittest.TestCase):
+    def test_invalid_input_is_recoverable_before_native_execution(self):
+        dll = wrapper._load_dll("linux", LIBRARY_PATH)
+        self.assertTrue(hasattr(dll, "validate_emses_input"))
+        with synthetic_input() as directory:
+            path = directory / "plasma-vdsolverf.inp"
+            valid = path.read_text()
+            for invalid in (valid.replace("boundary_type='none'", "boundary_type='typo'"),
+                            valid.replace("peth=1.0", "peth=0.0"),
+                            valid.replace("nspec=1", "nspec=0"), "&intp bogus=1 /\n"):
+                path.write_text(invalid)
+                with self.assertRaises(ValueError):
+                    wrapper._validate_native_input(dll, path, 0)
+            path.write_text(valid)
+            wrapper._validate_native_input(dll, path, 0)
+
     def test_collision_time_at_nonunit_fixed_and_adaptive_steps(self):
         with synthetic_input() as directory:
             for adaptive in (False, True):

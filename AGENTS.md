@@ -41,6 +41,9 @@
   - EMSES 入力からシミュレータ、境界、確率関数を構築する。
 - `vdsolverf/emses/tmpolary_input.py`
   - `emout` から一時 namelist (`plasma-vdsolverf.inp`) を生成する。
+- `src/emses/collision/`, `docs/emses_sync.md`
+  - 形状コードは MPIEMSES3D の byte 単位の写しなので、ここでは編集せず EMSES で直して写す。
+    粒子源の式も EMSES に合わせる。追従は `scripts/check-emses-sync.sh` で確認する。
 - `vdsolverf/core/particles.py`, `vdsolverf/core/phase_grid.py`
   - Python 側の粒子・位相空間グリッドのデータモデル。
 

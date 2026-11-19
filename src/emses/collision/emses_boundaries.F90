@@ -38,25 +38,14 @@
 !> &
 !>
 module m_emses_boundaries
+    !! Build the EMSES internal collision geometry for vdist.
+    !!
+    !! `m_surfaces` and `m_objects` are verbatim copies of MPIEMSES3D; this
+    !! module only adds the vdist probability tag (docs/emses_sync.md).
     use finbound
-    use m_surfaces
-    use m_objects
-    use m_allcom, only: xlrechole, ylrechole, zlrechole, &
-                      xurechole, yurechole, zurechole, &
-                      zssurf, &
-                      nx, ny, nz, &
-                      boundary_type, nboundary_types, boundary_types, &
-                      cylinder_origin, cylinder_radius, cylinder_height, &
-                      rcurv, &
-                      rectangle_shape, &
-                      sphere_origin, sphere_radius, &
-                      circle_origin, circle_radius, &
-                      cuboid_shape, &
-                      disk_origin, disk_height, disk_radius, disk_inner_radius, &
-                      plane_with_circle_hole_zlower, &
-                      plane_with_circle_hole_height, &
-                      plane_with_circle_hole_radius
-    use m_kinds, only: ip, lp, sp, dp
+    use m_surfaces, only: add_surfaces
+    use m_objects, only: add_objects
+    use m_kinds, only: ip, dp
     implicit none
 
     private
@@ -70,16 +59,7 @@ contains
         integer(kind=ip), intent(in), optional :: tag
         type(t_BoundaryList) :: boundaries
 
-        real(kind=dp) :: xl, yl, zl
-        real(kind=dp) :: xu, yu, zu
-
-        real(kind=dp) :: sdoms(2, 3)
-        integer(kind=ip) :: iboundary, itype
-
-        logical :: is_possible_to_be_covered
-
-        sdoms(1:2, 1:3) = dble(isdoms(1:2, 1:3))
-        is_possible_to_be_covered = .false.
+        integer(kind=ip) :: iboundary
 
         boundaries = new_BoundaryList()
 

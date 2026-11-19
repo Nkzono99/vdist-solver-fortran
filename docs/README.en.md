@@ -15,6 +15,7 @@ and install instructions see the [top-level README](../README.en.md).
 | [Dust charging current moments](dust_currents.en.md) | Fortran OML integration, terminal boxes, field bundles, and ctypes API |
 | [Namelist reference](namelist.en.md) | Supported EMSES `plasma.inp` groups (`/ptcond/`, `/emissn/`), with raycast-photoelectron parameters |
 | [Physics](physics.en.md) | Liouville theorem, Maxwellian surface emission, raycast photoelectron model |
+| [Synchronising with EMSES](emses_sync.en.md) | Geometry copied from EMSES, re-implemented sources, update procedure |
 | [Architecture](architecture.en.md) | Repository layout, Fortran/Python boundary, module responsibilities |
 | [Development](development.en.md) | Build, test, and extension guide (`fpm`, `.venv`, adding probabilities, CI checklist) |
 

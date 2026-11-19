@@ -4,7 +4,44 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The internal-boundary builders (`src/emses/collision/`) are now byte-identical
+  copies of MPIEMSES3D `src/physics/collision/`, so the geometry follows EMSES
+  exactly. This adds `rectangle-corners` (`rectangle_corners`) and
+  `plane-with-circle-hole`, and fixes the annular-disk end caps, which were built with
+  the inner radius and height instead of the outer and inner radii.
+  `docs/emses_sync.md` and `scripts/check-emses-sync.sh` describe how to follow EMSES.
+- Inputs whose EMSES behaviour the static replay cannot reproduce now raise
+  `ValueError` before entering the native solver instead of being ignored: secondary
+  electron emission, surface reflection, loss-cone/ring distributions, periodic
+  raycasts, `omniemit`, two-component emission (`mainprop < 1`), patches without a
+  positive `curf`/`curfs`, and patch-emitting species with `vdri ≠ 0`. Invalid
+  geometry is reported the same way instead of stopping the Python process. The new
+  C entry `validate_emses_input` performs the native checks; libraries without it
+  keep the previous unchecked behaviour.
+
 ### Fixed
+
+- Source distributions now follow what MPIEMSES3D actually injects:
+  - The outer-boundary drift includes `vdx`, `vdy`, `vdz`, as in EMSES.
+  - Emission patches use the mean `spa + abvdem` along the outward normal and `spe`
+    on both tangents (`speth` is not used), as EMSES samples them. The current is
+    `curfs` if positive, otherwise `curf` if positive. Photoelectron patches
+    (`nflag_emit = 2` without raycast) are scaled by the incidence cosine from
+    `thetaz`/`thetaxy` when `decrease_current_according_to_incident_angle` is set
+    (default). `thetaz` and `thetaxy` are scalars as in EMSES.
+  - Raycast photoelectrons use the normal of the surface actually hit, the EMSES
+    tangent basis and the projected flux `|curf| max(n·sun, 0)`, normalised by the
+    one-sided flux moment. The former sun-aligned normal and factor-2 approximation
+    are removed. The sun direction comes from the EMSES camera, falling back to
+    `vdthz(1)` and `vdthxy(1) - 180` like EMSES, and the occlusion test includes the
+    EMSES non-emitting cover. The Python wrapper converts the EMSES key `pe_ray_cast`
+    to `use_raycast`, so raycasts are enabled for EMSES inputs.
+  - The one-sided flux moment uses `erfc`, which stays accurate when the drift points
+    into the surface.
+- Grid interpolation on an axis with a single node no longer reads index -1; the
+  axis is constant. Nodal grids locate the cell once for all components.
 
 - Backtraces that cross a periodic face within one step now test the part of the
   step after the crossing against internal objects. An absorbing sheet just behind
@@ -18,9 +55,10 @@ All notable changes to this project are documented in this file.
   emission distribution (#41).
 - The native source frame now matches the EMSES background field used by the
   Python wrapper: `thermal_basis` returns the EMSES frame matrix with
-  `(sin(phiz)cos(phixy), sin(phiz)sin(phixy), cos(phiz))` as the parallel axis,
-  `spa`/`spe`/`speth` and `vdri`/`vdthz`/`vdthxy` follow the EMSES definitions, and
-  the raycast sun direction uses the same zenith/azimuth convention (#42).
+  `(sin(phiz)cos(phixy), sin(phiz)sin(phixy), cos(phiz))` as the parallel axis, the
+  outer-boundary Maxwellian uses that frame for its covariance, and `spa`/`spe`/`speth`
+  and `vdri`/`vdthz`/`vdthxy` follow the EMSES definitions (#42). EMSES 4.23.0 injects
+  the same field-frame spread at the outer boundary.
   `speth` is now interpreted in degrees like every other namelist angle; inputs
   that relied on radians must be converted.
 - `get_backtraces` no longer declares its per-particle work variables in a `block`

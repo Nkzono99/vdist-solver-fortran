@@ -75,98 +75,108 @@ where $\boldsymbol\mu$ = `locs` is the drift velocity, $\boldsymbol\sigma$
 a multiplicative weight. Evaluation uses $\mathbf u = R^T(\mathbf v-\boldsymbol\mu)$.
 The optional `basis` ($R$) defaults to the identity matrix.
 
-EMSES external sources and raycast photoelectrons use `locs = vdri_vector(ispec)`
-and `scales = [peth(ispec), peth(ispec), path(ispec)]`. `thermal_basis()` returns
-the EMSES background-field frame as columns: two perpendicular axes and
-$\hat{\mathbf B}_0 = (\sin\phi_z\cos\phi_{xy},\ \sin\phi_z\sin\phi_{xy},\ \cos\phi_z)$,
-the same direction the Python wrapper packs as the background field, so
-`path`/`spa` are parallel to the field actually used for tracing. The drift is
-$\mathbf\mu = spe\cos(speth)\,\mathbf e_1 + spe\sin(speth)\,\mathbf e_2 + spa\,\hat{\mathbf B}_0
-+ vdri\,(\sin\vartheta\cos\varphi,\ \sin\vartheta\sin\varphi,\ \cos\vartheta)$ with
-$\vartheta$ = `vdthz`, $\varphi$ = `vdthxy`; all of these angles are in degrees. The
-covariance $R\,\mathrm{diag}(\sigma_i^2)R^T$ retains correlations in oblique
-anisotropic distributions and leaves isotropic distributions invariant.
-`vth_vector(ispec)` returns the square roots of its diagonal entries, the
-Cartesian marginal standard deviations used for autorange support. Axis-aligned
-emission patches use `path` along the signed `nemd` normal and `peth` along
-both tangents (standard deviations remain positive).
+The EMSES sources below follow the formulas MPIEMSES3D uses to generate particles.
+[Synchronising with EMSES](emses_sync.en.md) lists the corresponding EMSES sources
+and the update procedure.
+
+**Outer-boundary injection** (`npbnd = 2`, `nflag_emit = 0`) uses
+`locs = vdri_vector(ispec)`, `scales = [peth, peth, path]` and `basis = thermal_basis()`.
+As in the EMSES initial loading and outer-boundary injection (4.23.0 and later,
+`m_thermal_frame.F90`), the thermal spread is defined in the field frame with covariance
+$R\,\mathrm{diag}(peth^2, peth^2, path^2)R^T$; oblique anisotropic distributions keep their
+Cartesian correlations and isotropic ones are rotation invariant. The drift equals EMSES
+`vdtx/vdty/vdtz`:
+
+$$
+\boldsymbol\mu = (vdx, vdy, vdz) + R\,(spe\cos(speth),\ spe\sin(speth),\ spa)
++ vdri\,(\sin\vartheta\cos\varphi,\ \sin\vartheta\sin\varphi,\ \cos\vartheta)
+$$
+
+with $\vartheta$ = `vdthz`, $\varphi$ = `vdthxy`; all angles are in degrees.
+$R$ = `thermal_basis()` holds the EMSES background-field frame (`t11`..`t33`) as
+columns; its third column equals the background field packed by the Python wrapper,
+$\hat{\mathbf B}_0 = (\sin\phi_z\cos\phi_{xy},\ \sin\phi_z\sin\phi_{xy},\ \cos\phi_z)$.
+`vth_vector(ispec)` returns the square roots of the covariance diagonal, the Cartesian
+marginal standard deviations that EMSES also uses as boundary-table widths; autorange uses
+them as support widths.
 
 ### Emission-patch normalisation
 
-For an explicit emission patch, let $u=\mathrm{sign}(nemd)\,\mu_{|nemd|}$
-be the drift toward the plasma along the emission direction and let
-$\sigma=path$. The one-sided moment of the unit-density Gaussian is
+Surface sources (emission patches and raycast photoelectrons) use, in local
+coordinates (outward normal, tangent 1, tangent 2), the mean `[spa + abvdem, spe, spe]`
+and the standard deviations `[path, peth, peth]`. EMSES draws the normal velocity from
+a flux-weighted one-sided Gaussian table with mean `spa + abvdem` and both tangents
+independently from one Gaussian table with mean `spe`; `speth` is not used
+(`surface_emission_source.F90`, `direct_surface_emitter.F90`). The tangents keep
+their sign for either patch orientation (sign of `nemd`).
+
+With $u = spa + abvdem$ and $\sigma = path$, the one-sided moment of the
+unit-density Gaussian is
 
 $$
-I(u,\sigma)=\frac{u}{2}\left[1+\mathrm{erf}\left(\frac{u}{\sqrt{2}\sigma}\right)\right]
+I(u,\sigma)=\frac{u}{2}\,\mathrm{erfc}\left(-\frac{u}{\sqrt{2}\sigma}\right)
 +\frac{\sigma}{\sqrt{2\pi}}\exp\left(-\frac{u^2}{2\sigma^2}\right).
 $$
 
-The coefficient is `C = curf/I`, with nonnegative `curfs` overriding `curf`.
-Thus the emitted one-sided moment recovers that input. MPIEMSES3D samples
-the normal emitted velocities from the flux-weighted half-Gaussian $v_n f(v_n)$,
-with Gaussian standard deviation `path`; tangents use `peth`. The transported
-phase-space distribution here is $C f_M$, without another velocity factor.
-`curf/curfs` are current-density magnitudes in EMSES units: MPIEMSES3D divides
-them by the macro-particle charge magnitude to obtain particle injection counts.
-Here $C$ is a charge-equivalent density (number density for unit physical charge
-magnitude); macro-particle charge/weight must not be applied to this continuous
-distribution. For another physical charge magnitude, divide by it to obtain
-number density. This source is not a density-one PDF.
+$\mathrm{erfc}$ replaces $1+\mathrm{erf}$ so that a drift toward the surface
+($u \ll -\sigma$) does not cancel. The coefficient is `C = J/I` and the source
+returns $C f_M$ only in the outward half-space $\mathbf v\cdot\hat{\mathbf n} > 0$,
+so its outward first moment recovers $J$.
 
-The erf utility uses width $\sqrt{2}\sigma$, rather than $\sigma$.
-Correcting the former swapped arguments and width convention gives
-$C=curf\sqrt{2\pi}/\sigma$ at zero drift. For the same previously positive
-normal spread (e.g. +/-Z patches), probabilities rise by
-$\sqrt{2\pi}\simeq2.5066$. X/Y patches additionally correct the former
-signed/permuted thermal spreads; formerly zero sources can become nonzero,
-so a finite common scale factor does not describe those cases.
-See [dust-current units](dust_currents.en.md#definition-and-units).
+$J$ is chosen in the EMSES order: `curfs(iepl)` if positive, otherwise `curf(ispec)`
+if positive. When neither is positive, EMSES falls back to `flpf`, `flpfs` or an
+`npin`-based density, which this solver does not read, so the input is rejected.
+For photoelectron patches (`nflag_emit = 2` with `pe_ray_cast = .false.`) and
+`decrease_current_according_to_incident_angle` (default `.true.`), $J$ is multiplied by
+$\mathrm{sign}(nemd)\,\hat d_{|nemd|}$ and set to zero when negative, as in EMSES;
+$\hat{\mathbf d}$ is the incidence direction from the scalars `thetaz` and `thetaxy`
+(degrees). EMSES shifts patch-emitted velocities by `vdri`, which moves the
+half-space; species with patches and `vdri ≠ 0` are rejected.
+
+`curf/curfs` are current densities in EMSES units: MPIEMSES3D divides them by the
+macro-particle charge magnitude to obtain particle injection counts. Here $C$ is a
+charge-equivalent density (number density for unit physical charge magnitude);
+macro-particle charge/weight must not be applied to this continuous distribution.
+For another physical charge magnitude, divide by it to obtain number density. This
+source is not a density-one PDF. See
+[dust-current units](dust_currents.en.md#definition-and-units).
 
 ### Raycast photoelectron
 
-Activated by `use_raycast = .true.` with `nflag_emit(ispec) == 2`.
-Interpretation: a backtraced particle hitting an internal surface may have
-been a photoelectron freshly emitted from that surface. Two physical
-conditions gate the probability.
+Activated by `use_raycast = .true.` (`pe_ray_cast` in EMSES inputs) with
+`nflag_emit(ispec) == 2`. EMSES casts rays from a parallel camera along the sun
+direction; at the first emitting surface hit (`material%tag /= -1`) it emits one
+particle from the surface source above, using the hit normal $\hat{\mathbf n}$ and
+the tangent basis of `raycast_sampler.F90`. Rays per projected area are fixed, so the
+emitted flux per surface area is $|curf|\max(\hat{\mathbf n}\cdot\hat{\mathbf s}, 0)$,
+with $\hat{\mathbf s}$ the unit vector from the surface toward the sun.
 
-**1. Outward emission half-space.** Photoelectrons are emitted from the
-surface pointing away from the material. Approximating the outward normal
-with the sun direction $\hat{\mathbf n}$ (unit vector from surface toward
-the sun), the particle's velocity must satisfy $\mathbf{v} \cdot
-\hat{\mathbf n} > 0$. Otherwise the density is 0.
-
-**2. Unoccluded illumination.** The photoelectron only exists if sunlight
-reached the surface. A ray from the collision point in direction
-$\hat{\mathbf n}$ is cast into a blocking-boundary list (the same internal
-surfaces/objects that could cast shadows). If the ray hits anything with
-$t > 0$ the surface is shaded and the density is 0.
-
-When both conditions pass, the probability is
+This solver casts a ray back along the camera direction from a point just sunward
+of the collision point to recover the hit face and its normal, and returns
 
 $$
-f_{\rm PE}(\mathbf{v}) = 2 \cdot C \prod_{i=1}^{3}
-  \frac{1}{\sqrt{2\pi}\sigma_i}
-  \exp\!\left(-\frac{u_i^2}{2 \sigma_i^2}\right),
+f_{\rm PE}(\mathbf v) = \frac{|curf|\,\max(\hat{\mathbf n}\cdot\hat{\mathbf s},0)}{I}
+\prod_{i=1}^{3}\frac{1}{\sqrt{2\pi}\sigma_i}\exp\!\left(-\frac{(w_i-\mu_i)^2}{2\sigma_i^2}\right),
+\qquad w_1 = \mathbf v\cdot\hat{\mathbf n} > 0,
 $$
 
-with $\boldsymbol\mu$ = `vdri_vector(ispec)` and $\boldsymbol\sigma$ =
-`[peth(ispec), peth(ispec), path(ispec)]`; $\mathbf u$ uses the same inverse
-rotation into principal axes as above. The factor of 2 is the exact half-space normalization
-when $\mu_\parallel = 0$; for shifted distributions it is a first-order
-approximation that remains accurate as long as $|\boldsymbol\mu \cdot
-\hat{\mathbf n}|$ is not dominated by the thermal spread.
+where $\mathbf w$ holds the (normal, tangent 1, tangent 2) components and
+$\boldsymbol\mu$, $\boldsymbol\sigma$ are the surface-source values above.
+The density is zero when:
 
-The sun direction is resolved by `resolve_sun_direction(ispec)` in
-[`src/emses/emses_simulator_builder.f90`](../src/emses/emses_simulator_builder.f90):
+- the collision point is not on an emitting surface, or lies on the EMSES
+  non-emitting cover (tag -1);
+- the velocity points into the surface ($w_1 \le 0$);
+- the ray toward the sun hits another boundary (shadow).
 
-1. If `ray_zenith_angle_deg(ispec) < 9000d0`, use it; otherwise fall back
-   to `vdthz(ispec)`. Same for azimuth / `vdthxy`.
-2. Form the unit vector with zenith angle $\zeta$ from $+z$ and azimuth
-   $\phi$ from $+x$, $(\sin\zeta\cos\phi,\ \sin\zeta\sin\phi,\ \cos\zeta)$,
-   the same convention as the `vdri` drift.
-3. Return the negation of that unit vector (pointing from the emission
-   surface toward the sun, per the user-requested convention).
+The occlusion list is built with `cover_all`, as in EMSES. The sun direction is the
+reverse of the ray direction of `new_ParallelCamera_optimized(thz, thxy, domain)`,
+the camera EMSES uses. An unset `ray_zenith_angle_deg(ispec)` (9999) falls back to
+`vdthz(1)` and an unset `ray_azimuth_angle_deg(ispec)` to `vdthxy(1) - 180`, both
+from species 1. The camera rotation uses a different sign convention from
+`direction_from_angles`, so the direction is taken from the camera itself.
+Periodic raycasts (`periodic_raycast`) and time-varying emission
+(`emission_time_mode`) are not reproduced.
 
 ## Coordinate and unit conventions
 

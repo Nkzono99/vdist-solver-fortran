@@ -17,8 +17,64 @@ program test_emission_normalization
             end do
         end do
     end do
+    call check_photoelectron_patch_incidence()
     print *, 'test_emission_normalization: all tests passed.'
 contains
+    subroutine check_photoelectron_patch_incidence()
+        !! EMSES scales explicit photoelectron patch currents (nflag_emit=2,
+        !! pe_ray_cast=.false.) by sign(nemd)*cos(angle to thetaz/thetaxy) and
+        !! drops patches facing away (surface_emission_source.F90).
+        double precision :: reference
+
+        ! Incidence (sin 60, 0, cos 60): +z gets 0.5, +x gets sin(60), -z faces away.
+        reference = patch_coefficient(3, 1, '')
+        call assert_close('photoelectron +z patch uses cos(thetaz)', &
+                          patch_coefficient(3, 2, ', thetaz=60, thetaxy=0')/reference, 0.5d0, 1d-12)
+        call assert_close('photoelectron -z patch facing away emits nothing', &
+                          patch_coefficient(-3, 2, ', thetaz=60, thetaxy=0'), 0d0)
+        reference = patch_coefficient(1, 1, '')
+        call assert_close('photoelectron +x patch uses the x direction cosine', &
+                          patch_coefficient(1, 2, ', thetaz=60, thetaxy=0')/reference, sin(acos(-1d0)/3d0), 1d-12)
+        call assert_close('incidence scaling can be disabled', &
+                          patch_coefficient(1, 2, ', thetaz=60, thetaxy=0, ' &
+                          //'decrease_current_according_to_incident_angle=.false.')/reference, 1d0, 1d-12)
+    end subroutine
+
+    function patch_coefficient(normal, emit, extra) result(coefficient)
+        integer, intent(in) :: normal, emit
+        character(len=*), intent(in) :: extra
+        double precision :: coefficient
+        character(len=*), parameter :: filename = 'test-emission-incidence.inp'
+        character(kind=c_char) :: cpath(len(filename))
+        type(t_ESSimulator) :: simulator
+        double precision :: fields(9, 3, 3, 3)
+        integer :: unit, i, tag
+
+        open(newunit=unit, file=filename, status='replace')
+        write(unit, *) '&esorem emflag=0 /'
+        write(unit, *) '&plasma wp=10*0, wc=0, phiz=0, phixy=0 /'
+        write(unit, *) '&tmgrid nx=2, ny=2, nz=2, dt=0.1 /'
+        write(unit, *) '&system nspec=1, npbnd=30*2 /'
+        write(unit, *) '&intp qm=10*1, peth=0.7, path=1.3, spa=0.2, spe=0, speth=0, vdri=10*0 /'
+        write(unit, *) "&ptcond boundary_type='none' /"
+        write(unit, '(a,i0,a,i0,a,a,a)') ' &emissn use_raycast=.false., nflag_emit=', emit, ', nepl=1, nemd=', &
+            normal, ', curf=1.7, xmine=1, xmaxe=1, ymine=1, ymaxe=1, zmine=1, zmaxe=1', extra, ' /'
+        close(unit)
+        do i = 1, len(filename)
+            cpath(i) = filename(i:i)
+        end do
+        fields = 0d0
+        simulator = create_simulator(cpath, len(filename), 2, 2, 2, fields, 1, 10)
+        open(newunit=unit, file=filename, status='old')
+        close(unit, status='delete')
+        tag = 0
+        do i = 1, size(simulator%probability_functions)
+            if (associated(simulator%probability_functions(i)%ref)) tag = i
+        end do
+        coefficient = simulator%probability_functions(tag)%ref%coefficient
+        call destroy_simulator(simulator)
+    end function
+
     subroutine check_flux(normal, drift, override)
         integer, intent(in) :: normal
         double precision, intent(in) :: drift

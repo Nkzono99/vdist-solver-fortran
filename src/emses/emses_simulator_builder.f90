@@ -12,11 +12,13 @@ module m_emses_simulator_builder
                         t_PlaneXYZ, &
                         new_PlaneX, new_PlaneY, new_PlaneZ, &
                         t_RectangleXYZ, &
-                        new_RectangleX, new_RectangleY, new_RectangleZ
+                        new_RectangleX, new_RectangleY, new_RectangleZ, &
+                        t_ParallelCamera, new_ParallelCamera_optimized
 
     use m_vdsolverf_core
     use m_allcom
     use m_namelist, only: read_namelist
+    use m_emses_input_validation, only: check_emses_input
     use m_emses_boundaries, only: create_simple_collision_boundaries
     use m_emses_field, only: t_EMSESFieldGrid, new_EMSESFieldGrid
     use m_photoelectron_raycast, only: new_PhotoelectronRaycastProbability, &
@@ -96,12 +98,24 @@ contains
 
         block
             character(length) :: s
-            integer :: i
+            character(:), allocatable :: message
+            integer :: i, status
 
             do i = 1, length
                 s(i:i) = inppath(i)
             end do
-            call read_namelist(s)
+            call read_namelist(s, status)
+            if (status /= 0) then
+                write (*, '(a,i0)') 'Error.Input: cannot read EMSES namelist, iostat=', status
+                error stop 'Invalid EMSES input'
+            end if
+            ! Python validates before entering the C ABI; this guards direct
+            ! Fortran callers (batch executables) with the same rules.
+            call check_emses_input(ispec, .false., message)
+            if (len(message) > 0) then
+                write (*, '(a,a)') 'Error.Input: ', message
+                error stop 'Invalid EMSES input'
+            end if
         end block
 
         block
@@ -157,15 +171,18 @@ contains
         n_probability_functions = n_probability_functions + 1
 
         if (use_raycast .and. nflag_emit(ispec) == 2) then
-            blocking_boundaries = create_simple_collision_boundaries(isdoms)
+            ! EMSES raycasts against the same geometry plus the non-emitting
+            ! bottom cover (raycast_surface_emitter.F90).
+            blocking_boundaries = create_simple_collision_boundaries(isdoms, cover_all=.true.)
 
-            vmean = vdri_vector(ispec)
-            vthermal = [peth(ispec), peth(ispec), path(ispec)]
+            call surface_source_parameters(ispec, vmean, vthermal)
             sun_direction = resolve_sun_direction(ispec)
 
+            ! EMSES draws |curf/q| rays per projected area; vdist keeps the
+            ! charge-equivalent normalisation used for patches.
             allocate (probability_functions(n_probability_functions)%ref, &
                       source=new_PhotoelectronRaycastProbability( &
-                      vmean, vthermal, sun_direction, blocking_boundaries, basis=thermal_basis()))
+                      vmean, vthermal, abs(curf(ispec)), sun_direction, blocking_boundaries))
         else
             allocate (probability_functions(n_probability_functions)%ref, &
                       source=new_ZeroProbability())
@@ -173,40 +190,34 @@ contains
     end subroutine
 
     function resolve_sun_direction(ispec) result(ret)
-        !! Direction from the collision point toward the sun.
+        !! Direction from the surface toward the sun, from the EMSES camera.
         !!
-        !! Uses `ray_zenith_angle_deg(ispec)` and `ray_azimuth_angle_deg(ispec)`
-        !! when those are set (sentinel: 9999d0 means "unset"). Otherwise falls
-        !! back to `vdthz(ispec)` / `vdthxy(ispec)`. The returned vector is the
-        !! negation of the unit vector at that zenith/azimuth (the same
-        !! convention as the `vdri` drift), i.e. the opposite of the drift
-        !! direction per the user-requested convention.
+        !! EMSES builds `new_ParallelCamera_optimized(thz, thxy, domain)` and
+        !! casts rays along `camera%n`; unset angles fall back to species 1
+        !! (`vdthz(1)`, `vdthxy(1) - 180`) as in raycast_surface_emitter.F90.
+        !! The camera rotation convention differs from `direction_from_angles`,
+        !! so the camera itself is used here.
         integer, intent(in) :: ispec
         double precision :: ret(3)
 
-        double precision :: zenith_deg, azimuth_deg
-        double precision :: drift_unit(3)
-        double precision, parameter :: SENTINEL = 9000d0
+        type(t_ParallelCamera) :: camera
+        double precision :: thz, thxy
 
-        if (ray_zenith_angle_deg(ispec) < SENTINEL) then
-            zenith_deg = ray_zenith_angle_deg(ispec)
+        if (ray_zenith_angle_deg(ispec) /= 9999d0) then
+            thz = ray_zenith_angle_deg(ispec)
         else
-            zenith_deg = vdthz(ispec)
+            thz = vdthz(1)
         end if
 
-        if (ray_azimuth_angle_deg(ispec) < SENTINEL) then
-            azimuth_deg = ray_azimuth_angle_deg(ispec)
+        if (ray_azimuth_angle_deg(ispec) /= 9999d0) then
+            thxy = ray_azimuth_angle_deg(ispec)
         else
-            azimuth_deg = vdthxy(ispec)
+            thxy = vdthxy(1) - 180d0
         end if
 
-        drift_unit = direction_from_angles(zenith_deg, azimuth_deg)
-
-        if (norm2(drift_unit) > 0d0) then
-            ret = -drift_unit/norm2(drift_unit)
-        else
-            ret = [0d0, 0d0, -1d0]
-        end if
+        camera = new_ParallelCamera_optimized(thz/180d0*pi, thxy/180d0*pi, &
+                                              reshape([[0, nx], [0, ny], [0, nz]], [2, 3]))
+        ret = -camera%n
     end function
 
     subroutine add_probability_boundaries(boundaries, &
@@ -242,6 +253,7 @@ contains
             integer :: tag_vdist
                 !! Tag for maxwellian velocity distribution boundary
 
+            ! Field-frame widths; the basis rotates them into Cartesian axes.
             vmean(:) = vdri_vector(ispec)
             vthermal(:) = [peth(ispec), peth(ispec), path(ispec)]
 
@@ -397,10 +409,7 @@ contains
                     normal = 0d0
                     normal(abs(nemd(iepl))) = sign(1d0, dble(nemd(iepl)))
 
-                    flux = curf(ispec)
-                    if (curfs(iepl) >= 0d0) then
-                        flux = curfs(iepl)
-                    end if
+                    flux = patch_flux(ispec, iepl)
 
                     ! curf/curfs are current-density magnitudes in EMSES units.
                     ! The continuous source carries that charge-equivalent density
@@ -448,5 +457,39 @@ contains
         end subroutine
 
     end subroutine
+
+    function patch_flux(ispec, iepl) result(flux)
+        !! Emitted current density of one explicit patch, as in EMSES
+        !! surface_emission_source.F90.
+        !!
+        !! `curfs > 0` takes precedence over `curf > 0`. For photoelectron
+        !! patches (`nflag_emit == 2`) EMSES scales the current by the cosine
+        !! between the patch normal and the incidence direction thetaz/thetaxy
+        !! when `decrease_current_according_to_incident_angle` is set, and
+        !! drops patches facing away. Other flux sources (flpf, npin) are
+        !! rejected by `check_emses_input`.
+        integer, intent(in) :: ispec
+        integer, intent(in) :: iepl
+        double precision :: flux
+
+        double precision :: tz, txy, incidence(3)
+        integer :: axis
+
+        flux = 0d0
+        if (curfs(iepl) > 0d0) then
+            flux = curfs(iepl)
+        else if (curf(ispec) > 0d0) then
+            flux = curf(ispec)
+        end if
+
+        if (nflag_emit(ispec) == 2 .and. decrease_current_according_to_incident_angle) then
+            tz = 180d0 - abs(mod(abs(thetaz), 360d0) - 180d0)
+            txy = mod(thetaxy + 360d0, 360d0)
+            incidence = direction_from_angles(tz, txy)
+            axis = abs(nemd(iepl))
+            flux = sign(1d0, dble(nemd(iepl)))*flux*incidence(axis)
+        end if
+        flux = max(flux, 0d0)
+    end function
 
 end module

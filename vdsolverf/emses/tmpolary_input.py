@@ -4,6 +4,7 @@ from typing import Union
 import emout
 import f90nml
 
+from .source_support import validate_source_support
 from .geotype import (
     create_cylinder_boundary,
     create_rectangular_boundary,
@@ -15,7 +16,7 @@ TMP_INP_KEYS = {
     "plasma": ["wp", "wc", "phixy", "phiz"],
     "tmgrid": ["dt", "nx", "ny", "nz"],
     "system": ["nspec", "npbnd"],
-    "intp": ["qm", "path", "peth", "vdri", "vdthz", "vdthxy", "spa", "spe", "speth"],
+    "intp": ["qm", "path", "peth", "vdri", "vdthz", "vdthxy", "spa", "spe", "speth", "vdx", "vdy", "vdz"],
     "ptcond": [
         "zssurf",
         "xlrechole",
@@ -32,6 +33,7 @@ TMP_INP_KEYS = {
         "cylinder_height",
         "rcurv",
         "rectangle_shape",
+        "rectangle_corners",
         "sphere_origin",
         "sphere_radius",
         "circle_origin",
@@ -65,6 +67,7 @@ TMP_INP_KEYS = {
         "nflag_emit",
         "nepl",
         "curf",
+        "abvdem",
         "nemd",
         "curfs",
         "xmine",
@@ -75,6 +78,7 @@ TMP_INP_KEYS = {
         "zmaxe",
         "thetaz",
         "thetaxy",
+        "decrease_current_according_to_incident_angle",
         "use_raycast",
         "ray_zenith_angle_deg",
         "ray_azimuth_angle_deg",
@@ -95,6 +99,7 @@ class TempolaryInput(object):
         self.__tmppath: Path = data.directory / filename
 
     def __enter__(self) -> "TempolaryInput":
+        validate_source_support(self.__data.inp.nml)
         inp = f90nml.Namelist()
 
         for group, keys in TMP_INP_KEYS.items():
@@ -102,6 +107,10 @@ class TempolaryInput(object):
             if group_namelist:
                 inp[group] = group_namelist
 
+        # EMSES names the raycast switch pe_ray_cast; vdist reads use_raycast.
+        original = self.__data.inp.nml.get("emissn", {})
+        if "pe_ray_cast" in original and "use_raycast" not in original:
+            inp.setdefault("emissn", f90nml.Namelist())["use_raycast"] = original["pe_ray_cast"]
         self.convert_from_geotype(inp)
 
         inp.write(str(self.__tmppath.resolve()), force=True)
