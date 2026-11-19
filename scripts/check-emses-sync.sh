@@ -13,7 +13,7 @@
 # This file is the single record of the last reviewed EMSES commit.
 set -euo pipefail
 
-SYNCED_COMMIT=9af4aa598ccb0d369d7a8f7de2822e525326679f
+SYNCED_COMMIT=2a9a44a5fd2838f96bc8b9910dc4e2a99f070d53  # MPIEMSES3D v4.23.0
 
 # vdist path : EMSES path (byte-identical copies)
 MIRRORED=(
