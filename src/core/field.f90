@@ -41,6 +41,8 @@ module m_field
             !! Values of the vector field at the grid points
         double precision, allocatable :: offsets(:, :)
             !! Per-element interpolation offsets in x, y, z.
+        logical :: nodal = .true.
+            !! All offsets vanish, so every element shares one stencil.
     contains
         procedure :: at => vectorFieldGrid_at
             !! Get the vector field value at a given position
@@ -78,10 +80,16 @@ contains
         else
             obj%offsets(:, :) = 0d0
         end if
+        obj%nodal = all(abs(obj%offsets) <= epsilon(1d0))
     end function
 
     function vectorFieldGrid_at(self, position) result(ret)
         !! Get the vector field value at a given position using linear interpolation.
+        !!
+        !! Positions outside the grid are linearly extrapolated from the edge
+        !! cell; an axis with a single node is constant. The nodal cell is
+        !! located once; an element locates again only along its offset axes
+        !! (for example one axis per component of a staggered field).
 
         class(t_VectorFieldGrid), intent(in) :: self
             !! Instance of the vector field grid
@@ -90,97 +98,77 @@ contains
         double precision :: ret(self%n_elements)
             !! Vector field value at the given position
 
-        double precision :: p(3)
-        integer :: ip(3), ip1(3)
-        double precision :: rp(3), rp1(3)
-        double precision :: u00(self%n_elements), u01(self%n_elements)
-        double precision :: u10(self%n_elements), u11(self%n_elements)
-        double precision :: u0(self%n_elements), u1(self%n_elements)
+        integer :: nodes(3), node_cell(3), node_next(3), cell(3), next(3), i, axis
+        double precision :: node_fraction(3), fraction(3)
 
-        integer :: i
+        nodes = [self%nx, self%ny, self%nz]
+        do axis = 1, 3
+            call locate_axis(nodes(axis), position(axis), node_cell(axis), node_next(axis), node_fraction(axis))
+        end do
 
-        if (any(abs(self%offsets) > epsilon(1d0))) then
+        if (self%nodal) then
             do i = 1, self%n_elements
-                ret(i) = vectorFieldGrid_component_at(self, i, position - self%offsets(:, i))
+                ret(i) = interpolate_element(self, i, node_cell, node_next, node_fraction)
             end do
             return
         end if
 
-        ! Linear interpolation
-        p(:) = position(:)
-        do i = 1, 3
-            ! ip(i) を [0 … n_dim–1] の範囲に制限する
-            ! もし position(i) < 0    → 0 に丸め込む
-            !    position(i) ≥ n_dim → n_dim–1 に丸め込む
-            ip(i) = int(p(i))
-            if (ip(i) < 0)         ip(i) = 0
-            if (ip(i) > self%nx-1 .and. i == 1) ip(i) = self%nx - 1
-            if (ip(i) > self%ny-1 .and. i == 2) ip(i) = self%ny - 1
-            if (ip(i) > self%nz-1 .and. i == 3) ip(i) = self%nz - 1
-
-            ip1(i) = ip(i) + 1
+        do i = 1, self%n_elements
+            cell = node_cell
+            next = node_next
+            fraction = node_fraction
+            do axis = 1, 3
+                if (self%offsets(axis, i) /= 0d0) then
+                    call locate_axis(nodes(axis), position(axis) - self%offsets(axis, i), &
+                                     cell(axis), next(axis), fraction(axis))
+                end if
+            end do
+            ret(i) = interpolate_element(self, i, cell, next, fraction)
         end do
-
-        rp(:) = p(:) - ip(:)
-        rp1(:) = 1 - rp(:)
-
-        u00 = rp(1)*self%values(:, ip1(1), ip(2), ip(3)) &
-              + rp1(1)*self%values(:, ip(1), ip(2), ip(3))
-        u01 = rp(1)*self%values(:, ip1(1), ip1(2), ip(3)) &
-              + rp1(1)*self%values(:, ip(1), ip1(2), ip(3))
-        u10 = rp(1)*self%values(:, ip1(1), ip(2), ip1(3)) &
-              + rp1(1)*self%values(:, ip(1), ip(2), ip1(3))
-        u11 = rp(1)*self%values(:, ip1(1), ip1(2), ip1(3)) &
-              + rp1(1)*self%values(:, ip(1), ip1(2), ip1(3))
-
-        u0 = rp(2)*u01 + rp1(2)*u00
-        u1 = rp(2)*u11 + rp1(2)*u10
-
-        ret(:) = rp(3)*u1 + rp1(3)*u0
     end function
 
-    function vectorFieldGrid_component_at(self, element_index, position) result(ret)
-        !! Get one vector-field element at a shifted position.
+    pure subroutine locate_axis(nodes, position, cell, next, fraction)
+        !! Lower and upper node index and fractional position along one axis.
+        !! The lower node is clamped to [0, nodes-1] so outer points extrapolate;
+        !! a single-node axis (nodes = 0) is constant.
+        integer, intent(in) :: nodes
+        double precision, intent(in) :: position
+        integer, intent(out) :: cell, next
+        double precision, intent(out) :: fraction
 
+        if (nodes == 0) then
+            cell = 0
+            next = 0
+            fraction = 0d0
+        else
+            cell = max(0, min(int(position), nodes - 1))
+            next = cell + 1
+            fraction = position - cell
+        end if
+    end subroutine
+
+    pure function interpolate_element(self, element_index, cell, next, fraction) result(ret)
+        !! Trilinear interpolation of one element on a located cell.
         class(t_VectorFieldGrid), intent(in) :: self
-            !! Instance of the vector field grid
         integer, intent(in) :: element_index
-            !! Element index to interpolate
-        double precision, intent(in) :: position(3)
-            !! Position in 3D space
+        integer, intent(in) :: cell(3), next(3)
+        double precision, intent(in) :: fraction(3)
         double precision :: ret
-            !! Vector field element value at the given position
 
-        double precision :: p(3)
-        integer :: ip(3), ip1(3)
         double precision :: rp(3), rp1(3)
-        double precision :: u00, u01, u10, u11
-        double precision :: u0, u1
+        double precision :: u00, u01, u10, u11, u0, u1
 
-        integer :: i
+        rp = fraction
+        rp1 = 1 - rp
 
-        p(:) = position(:)
-        do i = 1, 3
-            ip(i) = int(p(i))
-            if (ip(i) < 0) ip(i) = 0
-            if (ip(i) > self%nx - 1 .and. i == 1) ip(i) = self%nx - 1
-            if (ip(i) > self%ny - 1 .and. i == 2) ip(i) = self%ny - 1
-            if (ip(i) > self%nz - 1 .and. i == 3) ip(i) = self%nz - 1
-
-            ip1(i) = ip(i) + 1
-        end do
-
-        rp(:) = p(:) - ip(:)
-        rp1(:) = 1 - rp(:)
-
-        u00 = rp(1)*self%values(element_index, ip1(1), ip(2), ip(3)) &
-              + rp1(1)*self%values(element_index, ip(1), ip(2), ip(3))
-        u01 = rp(1)*self%values(element_index, ip1(1), ip1(2), ip(3)) &
-              + rp1(1)*self%values(element_index, ip(1), ip1(2), ip(3))
-        u10 = rp(1)*self%values(element_index, ip1(1), ip(2), ip1(3)) &
-              + rp1(1)*self%values(element_index, ip(1), ip(2), ip1(3))
-        u11 = rp(1)*self%values(element_index, ip1(1), ip1(2), ip1(3)) &
-              + rp1(1)*self%values(element_index, ip(1), ip1(2), ip1(3))
+        u00 = rp(1)*self%values(element_index, next(1), cell(2), cell(3)) &
+              + rp1(1)*self%values(element_index, cell(1), cell(2), cell(3))
+        u01 = rp(1)*self%values(element_index, next(1), next(2), cell(3)) &
+              + rp1(1)*self%values(element_index, cell(1), next(2), cell(3))
+        u10 = rp(1)*self%values(element_index, next(1), cell(2), next(3)) &
+              + rp1(1)*self%values(element_index, cell(1), cell(2), next(3))
+        u11 = rp(1)*self%values(element_index, next(1), next(2), next(3)) &
+              + rp1(1)*self%values(element_index, cell(1), next(2), next(3))
 
         u0 = rp(2)*u01 + rp1(2)*u00
         u1 = rp(2)*u11 + rp1(2)*u10
